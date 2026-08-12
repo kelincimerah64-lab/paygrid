@@ -45,7 +45,8 @@ Artisan::command('gateway:sync-balances {--merchant=}', function (\App\Services\
     $query = Merchant::query()
         ->where('approval_status', 'approved')
         ->where('gateway', 'hilogate')
-        ->whereNotNull('merchant_id');
+        ->whereNotNull('merchant_id')
+        ->whereNotNull('merchant_key');
 
     if ($this->option('merchant')) {
         $query->where(fn ($scope) => $scope
@@ -77,7 +78,8 @@ Artisan::command('gateway:sync-settlements {--merchant=} {--status=} {--page-siz
     $query = Merchant::query()
         ->where('approval_status', 'approved')
         ->where('gateway', 'hilogate')
-        ->whereNotNull('merchant_id');
+        ->whereNotNull('merchant_id')
+        ->whereNotNull('merchant_key');
 
     if ($this->option('merchant')) {
         $query->where(fn ($scope) => $scope
