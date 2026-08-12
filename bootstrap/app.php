@@ -13,7 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->command('gateway:sync-transactions')
-            ->everyTenSeconds()
+            ->everyMinute()
             ->withoutOverlapping(1)
             ->runInBackground();
 
