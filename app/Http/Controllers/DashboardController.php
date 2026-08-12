@@ -60,13 +60,22 @@ class DashboardController extends Controller
     public function agent(MenuBuilder $menus, MetricsService $metrics): View
     {
         $agent = $this->currentAgent();
+        $filters = [
+            'q' => trim((string) request('q', '')),
+            'from' => (string) request('from', ''),
+            'to' => (string) request('to', ''),
+        ];
+        $merchants = $metrics->agentMerchants($agent, $filters['from'] ?: null, $filters['to'] ?: null)
+            ->when($filters['q'] !== '', fn ($items) => $items->filter(fn (Merchant $merchant) => str_contains(strtolower($merchant->name.' '.$merchant->merchant_id.' '.$merchant->slug), strtolower($filters['q']))))
+            ->values();
 
         return view('paygrid.agent-overview', [
             'roleLabel' => $agent->name,
             'menus' => $menus->agent(),
             'active' => 'overview',
             'agent' => $agent,
-            'merchants' => $metrics->agentMerchants($agent),
+            'merchants' => $merchants,
+            'reportFilters' => $filters,
         ]);
     }
 
