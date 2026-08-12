@@ -14,7 +14,9 @@ Artisan::command('inspire', function () {
 Artisan::command('gateway:sync-transactions {--merchant=} {--from=} {--to=}', function () {
     $query = Merchant::query()
         ->where('approval_status', 'approved')
-        ->whereNotNull('merchant_id');
+        ->where('gateway', 'hilogate')
+        ->whereNotNull('merchant_id')
+        ->whereNotNull('merchant_key');
 
     if ($this->option('merchant')) {
         $query->where(fn ($scope) => $scope
