@@ -1,0 +1,89 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\SupportTicket;
+use App\Services\AuditLogService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\View\View;
+
+class CenterSupportController extends Controller
+{
+    public const STATUSES = [
+        'not_started' => 'Not Started',
+        'checking' => 'Checking',
+        'issue_bank' => 'Issue Bank',
+        'success' => 'Success',
+        'issue_switching' => 'Issue Switching',
+    ];
+
+    public function index(Request $request): View
+    {
+        $search = trim((string) $request->query('q', ''));
+        $status = (string) $request->query('status', 'all');
+        $delivery = (string) $request->query('delivery', 'all');
+
+        $tickets = SupportTicket::query()
+            ->with(['merchant', 'topupRequest', 'centerUpdatedBy'])
+            ->whereNotNull('submitted_to_center_at')
+            ->when($status !== 'all', fn ($query) => $query->where('center_status', $status))
+            ->when($delivery === 'sent', fn ($query) => $query->whereNotNull('center_updated_at'))
+            ->when($delivery === 'pending', fn ($query) => $query->whereNull('center_updated_at'))
+            ->when($search !== '', fn ($query) => $query->where(function ($nested) use ($search) {
+                $nested->where('ticket_no', 'like', "{$search}%")
+                    ->orWhere('reference', 'like', "{$search}%")
+                    ->orWhere('client_reference', 'like', "{$search}%")
+                    ->orWhereRelation('merchant', 'name', 'like', "{$search}%")
+                    ->orWhereRelation('topupRequest', 'payment_id', 'like', "{$search}%")
+                    ->orWhereRelation('topupRequest', 'rrn', 'like', "{$search}%");
+            }))
+            ->oldest('submitted_to_center_at')
+            ->simplePaginate(config('paygrid.reports.default_page_size', 50))
+            ->withQueryString();
+
+        return view('paygrid.center-support', [
+            'roleLabel' => 'CS Pusat',
+            'menus' => [['key' => 'tickets', 'label' => 'Tickets', 'url' => route('center-support.tickets')]],
+            'active' => 'tickets',
+            'tickets' => $tickets,
+            'statuses' => self::STATUSES,
+            'search' => $search,
+            'status' => $status,
+            'delivery' => $delivery,
+        ]);
+    }
+
+    public function update(Request $request, SupportTicket $ticket, AuditLogService $audit): RedirectResponse
+    {
+        abort_unless($ticket->submitted_to_center_at, 404);
+        if ($ticket->center_updated_at) {
+            return back()->with('status', 'Tiket sudah terkirim dari CS pusat dan tidak bisa dikirim ulang.');
+        }
+
+        $data = $request->validate([
+            'center_status' => ['required', 'in:'.implode(',', array_keys(self::STATUSES))],
+            'center_note' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $before = $ticket->only(['center_status', 'center_note', 'center_updated_by_user_id', 'center_updated_at', 'status', 'closed_at']);
+        $ticket->forceFill([
+            'center_status' => $data['center_status'],
+            'center_note' => $data['center_note'] ?? null,
+            'center_updated_by_user_id' => $request->user()->id,
+            'center_updated_at' => now(),
+            'status' => $data['center_status'] === 'success' ? 'done' : 'in_progress',
+            'closed_at' => $data['center_status'] === 'success' ? now() : null,
+        ])->save();
+        $audit->record('center_ticket.updated', $ticket, $before, $ticket->only(array_keys($before)));
+
+        return back()->with('status', 'Status tiket berhasil disimpan dan tersambung ke tiket toko.');
+    }
+
+    public static function evidenceUrl(SupportTicket $ticket): ?string
+    {
+        $first = ($ticket->attachments ?? [])[0]['path'] ?? null;
+
+        return $first ? Storage::disk('public')->url($first) : null;
+    }
+}

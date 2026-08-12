@@ -1,0 +1,129 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Merchant;
+use App\Models\MerchantRegistration;
+use App\Models\Agent;
+use App\Notifications\MerchantRegistrationSubmittedToMa;
+use App\Jobs\ProvisionMerchantOnGateway;
+use App\Services\AuditLogService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+
+class MerchantRegistrationWorkflowController extends Controller
+{
+    public function submit(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse
+    {
+        if ($request->user()?->role === 'agent') {
+            $agent = Agent::query()
+                ->where('code', $request->user()->username)
+                ->orWhere('email', $request->user()->email)
+                ->firstOrFail();
+            abort_unless((int) $registration->agent_id === (int) $agent->id, 403);
+        }
+        abort_unless(in_array($registration->status, ['draft', 'pending_agent'], true), 422);
+        $before = $registration->only(['status', 'submitted_to_ma_at']);
+        $registration->update(['status' => 'pending_ma', 'submitted_to_ma_at' => now()]);
+        $ma = $registration->agent?->ma;
+        if ($ma) {
+            $ma->notify(new MerchantRegistrationSubmittedToMa($registration->fresh(['agent'])));
+        }
+        $audit->record('merchant_registration.submitted_to_ma', $registration, $before, $registration->only(array_keys($before)));
+
+        return back()->with('status', 'Request toko berhasil dikirim ke MA.');
+    }
+
+    public function approve(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse
+    {
+        abort_unless(in_array($registration->status, ['pending_ma', 'pending_agent'], true), 422);
+        $data = $request->validate([
+            'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
+            'merchant_type' => ['nullable', 'in:cm,script'],
+            'merchant_mdr_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'base_mdr_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'payin_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'settlement_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'ma_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'agent_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ]);
+
+        $payload = (array) ($registration->payload ?? []);
+        $merchantMdr = (float) ($data['merchant_mdr_percent'] ?? $payload['merchant_mdr_percent'] ?? 0);
+        $base = (float) ($data['base_mdr_percent'] ?? $payload['base_mdr_percent'] ?? 0);
+        $payin = (float) ($data['payin_fee_percent'] ?? $payload['payin_fee_percent'] ?? 0);
+        $settlement = (float) ($data['settlement_fee_percent'] ?? $payload['settlement_fee_percent'] ?? $payload['withdrawal_fee_percentage'] ?? 0);
+        $ma = (float) ($data['ma_fee_percent'] ?? $payload['ma_fee_percent'] ?? 0);
+        $agentFee = (float) ($data['agent_fee_percent'] ?? $payload['agent_fee_percent'] ?? 0);
+
+        abort_if($merchantMdr < $base + $payin + $settlement + $ma + $agentFee, 422, 'Merchant MDR tidak boleh di bawah total cost fee.');
+
+        $slug = Str::slug($registration->store_name);
+        if (Merchant::query()->where('slug', $slug)->where('id', '<>', $registration->merchant_id)->exists()) {
+            $slug .= '-'.Str::lower(Str::random(6));
+        }
+
+        $merchant = $registration->merchant_id
+            ? Merchant::query()->findOrFail($registration->merchant_id)
+            : new Merchant;
+        $type = $data['merchant_type'] ?? $registration->merchant_type;
+        $ownerAgent = $registration->agent_id ? Agent::query()->find($registration->agent_id) : null;
+        $merchant->fill([
+            'agent_id' => $registration->agent_id,
+            'slug' => $slug,
+            'name' => $registration->store_name,
+            'merchant_id' => $payload['merchant_id'] ?? $payload['hg_merchant_id'] ?? $merchant->merchant_id,
+            'merchant_key' => $payload['merchant_key'] ?? $payload['hg_merchant_key'] ?? $merchant->merchant_key,
+            'merchant_group_name' => $payload['merchant_group_name'] ?? $ownerAgent?->name ?? $merchant->merchant_group_name,
+            'merchant_group_id' => $payload['merchant_group_id'] ?? $payload['hg_group_id'] ?? $ownerAgent?->hg_group_id ?? $merchant->merchant_group_id,
+            'merchant_type' => $type,
+            'gateway' => $data['gateway'] ?? $registration->gateway,
+            'approval_status' => 'approved',
+            'topup_enabled' => $type === 'cm',
+            'topup_url' => $type === 'cm' ? route('topup', ['merchant' => $slug]) : null,
+            'minimum_topup_amount' => $payload['minimum_topup_amount'] ?? $merchant->minimum_topup_amount,
+            'transaction_callback_url' => $payload['transaction_callback_url'] ?? url('/api/callbacks/hilogate/transaction'),
+            'withdrawal_callback_url' => $payload['withdrawal_callback_url'] ?? $merchant->withdrawal_callback_url,
+            'pic_email' => $payload['pic_email'] ?? $merchant->pic_email,
+            'pic_telegram' => $payload['pic_telegram'] ?? $merchant->pic_telegram,
+            'finance_email' => $payload['finance_email'] ?? $merchant->finance_email,
+            'finance_telegram' => $payload['finance_telegram'] ?? $merchant->finance_telegram,
+            'cs_email' => $payload['cs_email'] ?? $merchant->cs_email,
+            'cs_telegram' => $payload['cs_telegram'] ?? $merchant->cs_telegram,
+            'merchant_mdr_percent' => $merchantMdr,
+            'base_mdr_percent' => $base,
+            'connection_fee_percent' => (float) ($payload['connection_fee_percent'] ?? 0),
+            'settlement_method' => $registration->settlement_method ?? $payload['settlement_method'] ?? $merchant->settlement_method,
+            'settlement_fee_percent' => $settlement,
+            'payin_fee_percent' => $payin,
+            'ma_fee_percent' => $ma,
+            'agent_fee_percent' => $agentFee,
+            'toko_fee_percent' => (float) ($payload['toko_fee_percent'] ?? 0),
+            'disbursement_fee_fixed' => (int) ($payload['disbursement_fee_fixed'] ?? $payload['withdrawal_fee'] ?? 0),
+            'onboarding_payload' => $payload,
+            'approved_at' => now(),
+        ]);
+        $merchant->save();
+
+        $before = $registration->only(['status', 'merchant_id', 'approved_at']);
+        $registration->update(['merchant_id' => $merchant->id, 'status' => 'approved', 'approved_at' => now()]);
+        $audit->record('merchant_registration.approved', $registration, $before, $registration->only(array_keys($before)));
+        $audit->record('merchant.created_from_registration', $merchant, null, $merchant->only(['agent_id', 'slug', 'name', 'gateway', 'merchant_type', 'approval_status']));
+        if ($merchant->gateway === 'hilogate' && config('paygrid.gateway.hilogate.onboarding_email') && config('paygrid.gateway.hilogate.onboarding_password')) {
+            ProvisionMerchantOnGateway::dispatch($merchant->id);
+        }
+
+        return back()->with('status', 'Merchant berhasil diapprove di PayGrid.');
+    }
+
+    public function reject(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse
+    {
+        abort_unless(in_array($registration->status, ['pending_ma', 'pending_agent'], true), 422);
+        $before = $registration->only(['status', 'approved_at']);
+        $registration->update(['status' => 'rejected', 'approved_at' => null]);
+        $audit->record('merchant_registration.rejected', $registration, $before, $registration->only(array_keys($before)));
+
+        return back()->with('status', 'Request merchant ditolak.');
+    }
+}
