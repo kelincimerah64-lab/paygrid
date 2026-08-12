@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('slug')->unique();
             $table->string('name');
             $table->string('merchant_id')->nullable()->index();
-            $table->string('merchant_key')->nullable();
+            $table->text('merchant_key')->nullable();
             $table->string('merchant_group_name')->nullable();
             $table->string('merchant_group_id')->nullable();
             $table->enum('merchant_type', ['cm', 'script'])->default('cm');

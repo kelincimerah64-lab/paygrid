@@ -62,6 +62,10 @@ class MerchantRegistrationController extends Controller
 
     public function tokenStore(Request $request, AgentOnboardingLink $link, AuditLogService $audit): RedirectResponse
     {
+        if ($link->status === 'active' && $link->expires_at?->isPast()) {
+            $link->update(['status' => 'expired']);
+        }
+
         abort_unless($link->isUsable(), 410, 'Link onboarding sudah expired atau sudah pernah dipakai.');
         $data = $request->validate([
             'store_name' => ['required', 'string', 'max:120'],
