@@ -312,7 +312,7 @@ class MaController extends Controller
 
     private function merchants(array $filters)
     {
-        return Merchant::query()->with(['agent', 'topupRequests'])
+        return Merchant::query()->with('agent')
             ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('agent', 'ma_user_id', $maId))
             ->when($filters['q'] !== '', fn ($query) => $query->where(fn ($nested) => $nested->where('name', 'like', $filters['q'].'%')->orWhere('slug', 'like', $filters['q'].'%')->orWhere('merchant_id', 'like', $filters['q'].'%')->orWhereRelation('agent', 'name', 'like', $filters['q'].'%')))
             ->when($filters['status'] !== 'all', fn ($query) => $query->where('approval_status', $filters['status']))
@@ -346,13 +346,13 @@ class MaController extends Controller
     {
         return TopupRequest::query()->with('merchant.agent')
             ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->when($filters['q'] !== '', fn ($query) => $query->where(fn ($nested) => $nested->where('payment_id', 'like', $filters['q'].'%')->orWhere('rrn', 'like', $filters['q'].'%')->orWhere('customer_reference', 'like', $filters['q'].'%')->orWhereRelation('merchant', 'name', 'like', $filters['q'].'%')))
-            ->when($filters['status'] !== 'all', fn ($query) => $query->where('status', $filters['status']))
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->when($filters['q'] !== '', fn ($query) => $query->where(fn ($nested) => $nested->where('topup_requests.payment_id', 'like', $filters['q'].'%')->orWhere('topup_requests.rrn', 'like', $filters['q'].'%')->orWhere('topup_requests.customer_reference', 'like', $filters['q'].'%')->orWhereRelation('merchant', 'name', 'like', $filters['q'].'%')))
+            ->when($filters['status'] !== 'all', fn ($query) => $query->where('topup_requests.status', $filters['status']))
             ->when($filters['agent_id'] !== 'all', fn ($query) => $query->whereRelation('merchant', 'agent_id', $filters['agent_id']))
-            ->when($filters['store_id'] !== 'all', fn ($query) => $query->where('merchant_id', $filters['store_id']))
-            ->latest('submitted_at');
+            ->when($filters['store_id'] !== 'all', fn ($query) => $query->where('topup_requests.merchant_id', $filters['store_id']))
+            ->latest('topup_requests.submitted_at');
     }
 
     private function selectedAgent(array $filters): ?Agent
@@ -392,24 +392,29 @@ class MaController extends Controller
 
     private function summary(array $filters): array
     {
-        $transactions = $this->transactions($filters)->get();
-        $successVolume = (int) $transactions->where('status', 'success')->sum('amount');
-        $successNet = (int) $transactions->where('status', 'success')->sum('net_amount');
-        $merchants = $this->merchants($filters)->get();
-        $fee = $this->feeTotals($transactions);
+        $totals = (clone $this->transactions($filters))
+            ->reorder()
+            ->selectRaw('COUNT(*) as trx_total')
+            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as volume_success")
+            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.net_amount ELSE 0 END), 0) as total_settlement")
+            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'pending' THEN topup_requests.amount ELSE 0 END), 0) as pending_settlement")
+            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
+            ->selectRaw("SUM(CASE WHEN topup_requests.status IN ('expired', 'failed', 'rejected') THEN 1 ELSE 0 END) as trx_expired")
+            ->first();
+        $fee = $this->feeTotalsForFilters($filters);
 
         return [
-            'volume_success' => $successVolume,
-            'pending_settlement' => (int) $transactions->where('status', 'pending')->sum('amount'),
-            'total_settlement' => $successNet,
-            'trx_total' => $transactions->count(),
-            'trx_pending' => $transactions->where('status', 'pending')->count(),
-            'trx_expired' => $transactions->whereIn('status', ['expired', 'failed', 'rejected'])->count(),
+            'volume_success' => (int) ($totals->volume_success ?? 0),
+            'pending_settlement' => (int) ($totals->pending_settlement ?? 0),
+            'total_settlement' => (int) ($totals->total_settlement ?? 0),
+            'trx_total' => (int) ($totals->trx_total ?? 0),
+            'trx_pending' => (int) ($totals->trx_pending ?? 0),
+            'trx_expired' => (int) ($totals->trx_expired ?? 0),
             'issue_total' => $this->ticketQuery($filters)->count(),
             'issue_solved' => $this->ticketQuery($filters)->where('status', 'done')->count(),
             'agent_total' => $this->agents($filters)->count(),
-            'merchant_total' => $merchants->count(),
-            'unassigned' => $merchants->whereNull('agent_id')->count(),
+            'merchant_total' => $this->merchants($filters)->count(),
+            'unassigned' => $this->merchants($filters)->whereNull('agent_id')->count(),
             'fee_ma' => $fee['ma'],
             'fee_agent' => $fee['agent'],
             'fee_merchant' => $fee['merchant'],
@@ -418,22 +423,23 @@ class MaController extends Controller
 
     private function overviewDetails(array $filters): array
     {
-        $transactions = $this->transactions($filters)->get();
-        $merchants = $this->merchants($filters)->get();
+        $latestTransactions = $this->transactions($filters)->limit(200)->get();
+        $successTransactions = $this->transactions(array_merge($filters, ['status' => 'success']))->limit(200)->get();
+        $pendingTransactions = $this->transactions(array_merge($filters, ['status' => 'pending']))->limit(200)->get();
+        $expiredTransactions = $this->transactions(array_merge($filters, ['status' => 'all']))->whereIn('topup_requests.status', ['expired', 'failed', 'rejected'])->limit(200)->get();
+        $merchants = $this->merchants($filters)->limit(200)->get();
         $agents = $this->agents($filters)->withCount('merchants')->get();
         $tickets = $this->ticketQuery($filters)->with(['merchant.agent', 'topupRequest'])
             ->latest()
             ->limit(200)
             ->get();
-        $successTransactions = $transactions->where('status', 'success');
-
         return [
             'volume_success' => ['title' => 'Volume Sukses', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions)],
-            'pending_settlement' => ['title' => 'Pending Settlement', 'type' => 'transaction', 'items' => $this->transactionItems($transactions->where('status', 'pending'))],
+            'pending_settlement' => ['title' => 'Pending Settlement', 'type' => 'transaction', 'items' => $this->transactionItems($pendingTransactions)],
             'total_settlement' => ['title' => 'Total Settlement', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions)],
-            'trx_total' => ['title' => 'Total Transaksi', 'type' => 'transaction', 'items' => $this->transactionItems($transactions)],
-            'trx_pending' => ['title' => 'Transaksi Pending', 'type' => 'transaction', 'items' => $this->transactionItems($transactions->where('status', 'pending'))],
-            'trx_expired' => ['title' => 'Transaksi Expired', 'type' => 'transaction', 'items' => $this->transactionItems($transactions->whereIn('status', ['expired', 'failed', 'rejected']))],
+            'trx_total' => ['title' => 'Total Transaksi', 'type' => 'transaction', 'items' => $this->transactionItems($latestTransactions)],
+            'trx_pending' => ['title' => 'Transaksi Pending', 'type' => 'transaction', 'items' => $this->transactionItems($pendingTransactions)],
+            'trx_expired' => ['title' => 'Transaksi Expired', 'type' => 'transaction', 'items' => $this->transactionItems($expiredTransactions)],
             'issue_total' => ['title' => 'Total Issue', 'type' => 'ticket', 'items' => $this->ticketItems($tickets)],
             'issue_solved' => ['title' => 'Issue Solved', 'type' => 'ticket', 'items' => $this->ticketItems($tickets->where('status', 'done'))],
             'agent_total' => ['title' => 'List Agen', 'type' => 'agent', 'items' => $this->agentItems($agents)],
@@ -486,6 +492,23 @@ class MaController extends Controller
 
             return $carry;
         }, ['ma' => 0, 'agent' => 0, 'merchant' => 0]);
+    }
+
+    private function feeTotalsForFilters(array $filters): array
+    {
+        $row = (clone $this->transactions(array_merge($filters, ['status' => 'success'])))
+            ->reorder()
+            ->join('merchants as fee_merchants', 'fee_merchants.id', '=', 'topup_requests.merchant_id')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * fee_merchants.ma_fee_percent / 100), 0) as ma')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * fee_merchants.agent_fee_percent / 100), 0) as agent')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * fee_merchants.merchant_mdr_percent / 100), 0) as merchant')
+            ->first();
+
+        return [
+            'ma' => (int) round((float) ($row->ma ?? 0)),
+            'agent' => (int) round((float) ($row->agent ?? 0)),
+            'merchant' => (int) round((float) ($row->merchant ?? 0)),
+        ];
     }
 
     private function transactionItems($transactions): array
