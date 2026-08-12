@@ -163,6 +163,7 @@
         </div>
     </section>
 @elseif($active === 'status-request')
+    @php($hasBulkSelectable = $registrations->contains(fn ($registration) => in_array($registration->status, ['draft', 'pending_agent'], true)))
     <section class="card agent-filter-card">
         <form class="agent-filter-grid" method="get">
             <label class="agent-filter-search"><span>Pencarian</span><input class="search" name="q" value="{{ $requestFilters['q'] ?? '' }}" placeholder="Cari toko, merchant ID, atau token request"></label>
@@ -172,7 +173,9 @@
             <div class="agent-filter-actions"><button class="btn primary">Terapkan Filter</button><a class="btn" href="{{ route('agent.requests') }}">Reset</a><a class="btn ghost" href="{{ route('agent.export') }}">Export CSV</a></div>
         </form>
         <form method="post" action="{{ route('agent.requests.bulk') }}">@csrf
-        <div class="agent-bulk-bar"><div><strong>Bulk Action</strong><span>Pilih request pending, lalu kirim ke MA untuk proses approval.</span></div><div class="actions"><input type="hidden" name="action" value="submit"><button class="btn primary">Submit Selected ke MA</button></div></div>
+        @if($hasBulkSelectable)
+            <div class="agent-bulk-bar"><div><strong>Bulk Action</strong><span>Pilih request pending, lalu kirim ke MA untuk proses approval.</span></div><div class="actions"><input type="hidden" name="action" value="submit"><button class="btn primary">Submit Selected ke MA</button></div></div>
+        @endif
         <table class="table agent-request-table">
             <thead><tr><th>Nama Toko</th><th>Merchant ID</th><th>Tanggal Request</th><th>User Finance</th><th>User CS</th><th>Status Approval</th><th>Action</th></tr></thead>
             <tbody>
