@@ -230,7 +230,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const detailsEl = document.getElementById('ma-overview-details');
     let panel = document.querySelector('[data-ma-detail-panel]');
     const details = detailsEl ? JSON.parse(detailsEl.textContent || '{}') : {};
-    const renderItems = (detail) => {
+    const detailState = { page: 1, perPage: 10 };
+    const renderItems = (detail, page = 1) => {
         if (!detail) return;
         if (!panel) {
             const metrics = document.querySelector('.history-metrics');
@@ -240,14 +241,23 @@ document.addEventListener('DOMContentLoaded', () => {
             metrics?.insertAdjacentElement('afterend', panel);
         }
         const items = detail.items || [];
-        panel.innerHTML = `<h2>${detail.title}</h2>` + (items.length ? `<div class="ma-detail-list">${items.map((item) => `<div class="ma-detail-row"><div><b>${item.title || '-'}</b><span>${item.subtitle || item.date || '-'}</span></div><span class="badge ${badgeClass(item.status)}">${item.status || '-'}</span><strong>${item.amount === null || item.amount === undefined ? (item.meta || '-') : money(item.amount)}</strong></div>`).join('')}</div>` : '<p class="muted">Belum ada data.</p>');
+        const totalPages = Math.max(1, Math.ceil(items.length / detailState.perPage));
+        detailState.page = Math.min(Math.max(1, page), totalPages);
+        const start = (detailState.page - 1) * detailState.perPage;
+        const visibleItems = items.slice(start, start + detailState.perPage);
+        const rows = visibleItems.map((item) => `<div class="ma-detail-row"><div><b>${item.title || '-'}</b><span>${item.subtitle || item.date || '-'}</span></div><span class="badge ${badgeClass(item.status)}">${item.status || '-'}</span><strong>${item.amount === null || item.amount === undefined ? (item.meta || '-') : money(item.amount)}</strong></div>`).join('');
+        const pager = items.length > detailState.perPage ? `<div class="qris-pagination" style="padding-top:14px"><div class="pager-summary">Showing ${start + 1} to ${Math.min(start + detailState.perPage, items.length)} of ${items.length}</div><div class="pager-links"><button class="pager" type="button" data-ma-detail-page="prev" ${detailState.page === 1 ? 'disabled' : ''}>Prev</button><button class="pager" type="button" data-ma-detail-page="next" ${detailState.page === totalPages ? 'disabled' : ''}>Next</button></div></div>` : '';
+        panel.innerHTML = `<div class="qris-toolbar"><h2>${detail.title}</h2><span class="muted">${items.length} item | ${detailState.perPage} per halaman</span></div>` + (items.length ? `<div class="ma-detail-list">${rows}</div>${pager}` : '<p class="muted">Belum ada data.</p>');
+        panel.querySelectorAll('[data-ma-detail-page]').forEach((button) => {
+            button.addEventListener('click', () => renderItems(detail, detailState.page + (button.dataset.maDetailPage === 'next' ? 1 : -1)));
+        });
         panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
     document.querySelectorAll('[data-ma-detail]').forEach((card) => {
         card.addEventListener('click', () => {
             document.querySelectorAll('[data-ma-detail]').forEach((item) => item.classList.remove('active'));
             card.classList.add('active');
-            renderItems(details[card.dataset.maDetail]);
+            renderItems(details[card.dataset.maDetail], 1);
         });
     });
     document.querySelectorAll('[data-ma-tab]').forEach((button) => {
