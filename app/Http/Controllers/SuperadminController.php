@@ -159,7 +159,7 @@ class SuperadminController extends Controller
         ]);
         $data['code'] = ($data['code'] ?? null) ?: $this->uniqueAgentCode($data['name']);
         $data['hg_group_id'] = null;
-        $password = 'Rahasia123';
+        $password = config('paygrid.demo_password');
         $agent = Agent::query()->create($data);
         $agentUser = User::query()->updateOrCreate(
             ['username' => $agent->code],

@@ -103,7 +103,7 @@
             $initial = strtoupper(substr($r->store_name ?: 'T', 0, 1));
             $adminEmail = $payload['admin_email'] ?? $payload['email_admin'] ?? $payload['email_pic'] ?? '-';
             $adminName = $payload['admin_name'] ?? $payload['username'] ?? ($adminEmail !== '-' ? str($adminEmail)->before('@')->replace(['.', '_', '-'], ' ')->title()->toString() : '-');
-            $adminPassword = $payload['admin_password'] ?? $payload['password'] ?? 'Rahasia123';
+            $adminPassword = $payload['admin_password'] ?? $payload['password'] ?? config('paygrid.demo_password');
             $merchantMdr = $merchant?->merchant_mdr_percent ?? ($payload['merchant_mdr_percent'] ?? 0);
             $baseMdr = $merchant?->base_mdr_percent ?? ($payload['base_mdr_percent'] ?? 0);
             $payinFee = $merchant?->payin_fee_percent ?? ($payload['payin_fee_percent'] ?? $payload['engine_service_fee_percent'] ?? 0);
@@ -214,7 +214,7 @@
 @endif
 
 @if($active === 'agents')
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Agen</h2></div><table class="table qris-table super-create-table"><thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Fee Agen</th><th>Password</th><th>Aksi</th></tr></thead><tbody><tr><td><form id="agent-create" method="post" action="{{ route('ma.agents.store') }}">@csrf</form><input form="agent-create" name="name" required></td><td><input form="agent-create" name="email" type="email" required></td><td><input form="agent-create" name="contact"></td><td><select form="agent-create" name="status"><option>Active</option><option>Review</option><option>Suspended</option></select></td><td><input form="agent-create" name="default_agent_fee_percent" value="0.15" required></td><td><input form="agent-create" name="password" value="Rahasia123"></td><td><button form="agent-create" class="btn primary compact-btn">Buat</button></td></tr></tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Agen</h2></div><table class="table qris-table super-create-table"><thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Fee Agen</th><th>Password</th><th>Aksi</th></tr></thead><tbody><tr><td><form id="agent-create" method="post" action="{{ route('ma.agents.store') }}">@csrf</form><input form="agent-create" name="name" required></td><td><input form="agent-create" name="email" type="email" required></td><td><input form="agent-create" name="contact"></td><td><select form="agent-create" name="status"><option>Active</option><option>Review</option><option>Suspended</option></select></td><td><input form="agent-create" name="default_agent_fee_percent" value="0.15" required></td><td><input form="agent-create" name="password" value="{{ config('paygrid.demo_password') }}"></td><td><button form="agent-create" class="btn primary compact-btn">Buat</button></td></tr></tbody></table></section>
     <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Agen</h2></div><table class="table qris-table"><thead><tr><th>Agen</th><th>Email</th><th>Kontak</th><th>Fee</th><th>Status</th></tr></thead><tbody>@foreach($agents as $a)<tr><td><strong>{{ $a->name }}</strong><br><span class="muted">{{ $a->code }}</span></td><td>{{ $a->email ?: '-' }}</td><td>{{ $a->contact ?: '-' }}</td><td>{{ $pct($a->default_agent_fee_percent) }}</td><td><span class="badge {{ $a->is_active ? 'ok' : 'danger' }}">{{ $a->is_active ? 'Active' : 'Suspended' }}</span></td></tr>@endforeach</tbody></table></section>
 @endif
 

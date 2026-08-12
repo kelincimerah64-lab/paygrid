@@ -106,7 +106,7 @@ class MaController extends Controller
             'default_agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'password' => ['nullable', 'string', 'min:6', 'max:120'],
         ]);
-        $password = $data['password'] ?: 'Rahasia123';
+        $password = $data['password'] ?: config('paygrid.demo_password');
         $code = $this->uniqueAgentCode($data['name']);
         $isActive = $data['status'] === 'Active';
         $agent = Agent::query()->create([
@@ -224,13 +224,13 @@ class MaController extends Controller
             'email' => $data['admin_email'],
             'role' => 'admin',
             'merchant_id' => $merchant->id,
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make(config('paygrid.demo_password')),
+            'plain_password' => config('paygrid.demo_password'),
         ]);
         $audit->record('ma.merchant_created', $merchant, null, $merchant->only(['slug', 'name', 'agent_id', 'gateway', 'merchant_type']));
         $audit->record('ma.merchant_admin_created', $admin, null, $admin->only(['email', 'role', 'merchant_id']));
 
-        return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admin->email.' / Rahasia123.');
+        return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admin->email.' / '.config('paygrid.demo_password').'.');
     }
 
     public function updateStoreFee(Request $request, Merchant $merchant, AuditLogService $audit): RedirectResponse

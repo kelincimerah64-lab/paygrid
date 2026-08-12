@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'demo_password' => env('PAYGRID_DEMO_PASSWORD', 'PayGridDemo!2026'),
     'gateway' => [
         'hilogate' => [
             'base_url' => rtrim((string) env('HILOGATE_BASE_URL', 'https://app.hilogate.com/api'), '/'),

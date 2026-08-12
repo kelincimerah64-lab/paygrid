@@ -16,12 +16,14 @@ class PayGridDemoSeeder extends Seeder
 {
     public function run(): void
     {
+        $demoPassword = config('paygrid.demo_password');
+
         User::query()->create([
             'name' => 'Superadmin',
             'email' => 'superadmin@paygrid.local',
             'role' => 'superadmin',
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make($demoPassword),
+            'plain_password' => $demoPassword,
         ]);
 
         $maUser = User::query()->create([
@@ -35,24 +37,24 @@ class PayGridDemoSeeder extends Seeder
             'settlement_method' => 'h_plus_1',
             'settlement_fee_percent' => 0.05,
             'ma_fee_percent' => 0.15,
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make($demoPassword),
+            'plain_password' => $demoPassword,
         ]);
 
         User::query()->create([
             'name' => 'CS Pusat',
             'email' => 'cs-pusat@paygrid.local',
             'role' => 'cs_pusat',
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make($demoPassword),
+            'plain_password' => $demoPassword,
         ]);
 
         $csUser = User::query()->create([
             'name' => 'CS BJ',
             'email' => 'cs-bj@paygrid.local',
             'role' => 'cs',
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make($demoPassword),
+            'plain_password' => $demoPassword,
         ]);
 
         $epc = Agent::query()->create([
@@ -60,7 +62,7 @@ class PayGridDemoSeeder extends Seeder
             'code' => 'AG-EPC',
             'name' => 'EPC',
             'email' => 'epc@paygrid.local',
-            'password_plain' => 'Rahasia123',
+            'password_plain' => $demoPassword,
             'hg_group_id' => 'fabe45a6-9a2c-4ee9-a36a-e337aca2142a',
             'base_hg_percent' => 0.8,
             'connection_type' => 'cm',
@@ -76,7 +78,7 @@ class PayGridDemoSeeder extends Seeder
             'code' => 'AG-OTHER',
             'name' => 'others',
             'email' => 'others@paygrid.local',
-            'password_plain' => 'Rahasia123',
+            'password_plain' => $demoPassword,
             'base_hg_percent' => 0.8,
             'connection_type' => 'script',
             'connection_fee_percent' => 0.05,
@@ -92,8 +94,8 @@ class PayGridDemoSeeder extends Seeder
                 'email' => $agent->email ?: strtolower($agent->code).'@paygrid.local',
                 'username' => $agent->code,
                 'role' => 'agent',
-                'password' => Hash::make('Rahasia123'),
-                'plain_password' => 'Rahasia123',
+                'password' => Hash::make($demoPassword),
+                'plain_password' => $demoPassword,
             ]);
         }
 
@@ -110,8 +112,8 @@ class PayGridDemoSeeder extends Seeder
             'email' => 'admin@nnp-cm-bj.local',
             'role' => 'admin',
             'merchant_id' => $bj->id,
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make($demoPassword),
+            'plain_password' => $demoPassword,
         ]);
 
         User::query()->create([
@@ -119,8 +121,8 @@ class PayGridDemoSeeder extends Seeder
             'email' => 'finance@nnp-cm-bj.local',
             'role' => 'finance',
             'merchant_id' => $bj->id,
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make($demoPassword),
+            'plain_password' => $demoPassword,
         ]);
 
         User::query()->create([
@@ -128,8 +130,8 @@ class PayGridDemoSeeder extends Seeder
             'email' => 'bisnisasall1111@gmail.com',
             'role' => 'cs',
             'merchant_id' => $gate->id,
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make($demoPassword),
+            'plain_password' => $demoPassword,
         ]);
 
         User::query()->create([
@@ -146,8 +148,8 @@ class PayGridDemoSeeder extends Seeder
             'email' => 'admin@tiktok5000.local',
             'role' => 'admin',
             'merchant_id' => $tiktok->id,
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make($demoPassword),
+            'plain_password' => $demoPassword,
         ]);
 
         User::query()->create([
@@ -155,8 +157,8 @@ class PayGridDemoSeeder extends Seeder
             'email' => 'finance@tiktok5000.local',
             'role' => 'finance',
             'merchant_id' => $tiktok->id,
-            'password' => Hash::make('Rahasia123'),
-            'plain_password' => 'Rahasia123',
+            'password' => Hash::make($demoPassword),
+            'plain_password' => $demoPassword,
         ]);
 
         $this->request($bj, 'success', 50000, true, $csUser->email, 'BJ0001');

@@ -63,7 +63,7 @@ class PayGridRoutingTest extends TestCase
             'email' => 'cs-script@paygrid.local',
             'role' => 'cs',
             'merchant_id' => $merchant->id,
-            'password' => Hash::make('Rahasia123'),
+            'password' => Hash::make(config('paygrid.demo_password')),
         ]);
 
         $this->actingAs($user)
@@ -190,7 +190,7 @@ class PayGridRoutingTest extends TestCase
 
         $this->post('/login', [
             'email' => 'superadmin@paygrid.local',
-            'password' => 'Rahasia123',
+            'password' => config('paygrid.demo_password'),
         ])->assertRedirect('/superadmin');
 
         $this->actingAs($superadmin)
@@ -207,7 +207,7 @@ class PayGridRoutingTest extends TestCase
             'email' => 'ma-baru@paygrid.local',
             'contact' => '0812',
             'is_active' => 1,
-            'password' => 'Rahasia123',
+            'password' => config('paygrid.demo_password'),
             'base_hg_percent' => '0,80',
             'connection_type' => 'cm',
             'connection_fee_percent' => '0,05',
@@ -247,7 +247,7 @@ class PayGridRoutingTest extends TestCase
         $this->post('/logout')->assertRedirect('/login');
         $this->post('/login', [
             'email' => 'AG-GROUP-BARU',
-            'password' => 'Rahasia123',
+            'password' => config('paygrid.demo_password'),
         ])->assertRedirect('/agent');
         $this->actingAs($superadmin);
 
@@ -270,14 +270,14 @@ class PayGridRoutingTest extends TestCase
 
         $this->post('/login', [
             'email' => 'admin@nnp-cm-bj.local',
-            'password' => 'Rahasia123',
+            'password' => config('paygrid.demo_password'),
         ])->assertRedirect('/portal/nnp-cm-bj/admin/users');
 
         $this->actingAs($admin)
             ->get('/portal/nnp-cm-bj/admin/users')
             ->assertOk()
             ->assertSee('Data User')
-            ->assertSee('Rahasia123')
+            ->assertSee(config('paygrid.demo_password'))
             ->assertSee('>Topup Request</a>', false)
             ->assertSee('>Sukses Checklist</a>', false)
             ->assertDontSee('>History TRX</a>', false);
@@ -337,12 +337,12 @@ class PayGridRoutingTest extends TestCase
             'name' => 'Unscoped CS',
             'email' => 'unscoped-cs@paygrid.local',
             'role' => 'cs',
-            'password' => Hash::make('Rahasia123'),
+            'password' => Hash::make(config('paygrid.demo_password')),
         ]);
 
         $this->post('/login', [
             'email' => 'unscoped-cs@paygrid.local',
-            'password' => 'Rahasia123',
+            'password' => config('paygrid.demo_password'),
         ])->assertSessionHasErrors('email');
 
         $this->assertGuest();
@@ -361,7 +361,7 @@ class PayGridRoutingTest extends TestCase
 
         $this->post('/login', [
             'email' => 'cs-bj@paygrid.local',
-            'password' => 'Rahasia123',
+            'password' => config('paygrid.demo_password'),
         ])->assertRedirect('/portal/nnp-cm-bj/cs/tickets');
 
         $this->assertDatabaseHas('audit_logs', ['action' => 'auth.login_success']);
@@ -576,7 +576,7 @@ class PayGridRoutingTest extends TestCase
             'email' => 'cs-script-ticket@paygrid.local',
             'role' => 'cs',
             'merchant_id' => $merchant->id,
-            'password' => Hash::make('Rahasia123'),
+            'password' => Hash::make(config('paygrid.demo_password')),
         ]);
         $topup = TopupRequest::query()->create([
             'merchant_id' => $merchant->id,
@@ -742,7 +742,7 @@ class PayGridRoutingTest extends TestCase
             'contact' => '0812',
             'status' => 'Active',
             'default_agent_fee_percent' => '0,15',
-            'password' => 'Rahasia123',
+            'password' => config('paygrid.demo_password'),
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('agents', ['code' => 'AGN-AGEN-LOKAL', 'name' => 'Agen Lokal']);
         $this->assertDatabaseHas('users', ['username' => 'AGN-AGEN-LOKAL', 'role' => 'agent']);
