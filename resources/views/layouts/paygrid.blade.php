@@ -238,10 +238,13 @@
         .compact-user-table input { min-height:28px; height:28px; padding:4px 8px; max-width:150px; font-size:12px; }
         .compact-user-table .btn, .compact-btn { min-height:28px; height:28px; padding:4px 10px; font-size:12px; border-radius:6px; justify-self:start; width:auto; }
         .reset-inline { flex-wrap:nowrap; gap:6px; }
-        .admin-create-form { display:grid; grid-template-columns:minmax(220px, 1fr) 150px minmax(180px, 1fr) auto; gap:10px; align-items:end; }
-        .admin-create-form label { margin:0; }
-        .admin-create-form input, .admin-create-form select { height:32px; min-height:32px; padding:5px 9px; }
-        .admin-create-form .btn { margin-bottom:1px; }
+        .admin-create-card { padding:18px; }
+        .admin-create-card h2 { font-size:20px; letter-spacing:-.02em; }
+        .admin-create-card .muted { margin-top:6px; font-size:13px; }
+        .admin-create-form { display:grid; grid-template-columns:minmax(260px, 1.2fr) minmax(150px, .55fr) minmax(230px, 1fr) auto; gap:18px; align-items:end; }
+        .admin-create-form label { display:grid; gap:8px; margin:0; min-width:0; }
+        .admin-create-form input, .admin-create-form select { width:100%; height:40px; min-height:40px; padding:8px 12px; font-weight:800; }
+        .admin-create-form .btn { min-height:40px; padding-inline:16px; margin-bottom:0; }
         .admin-minimum-card { max-width:520px; }
         .admin-minimum-card h2 { font-size:17px; }
         .admin-minimum-form { display:grid; grid-template-columns:auto auto; gap:10px; align-items:end; }

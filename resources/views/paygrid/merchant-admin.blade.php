@@ -28,14 +28,15 @@
 @endif
 
 @if($active === 'users')
-    <section class="card pad section">
+    <section class="card pad section admin-create-card">
         <h2>Create Role User</h2>
+        <p class="muted">Tambahkan akun CS, Finance, atau Admin khusus untuk toko ini.</p>
         <form method="post" action="{{ route('merchant.admin.users.store', $merchant) }}" class="admin-create-form section">
             @csrf
             <label>Email<input name="email" type="email" required placeholder="email@domain.com"></label>
             <label>Role<select name="role" required><option value="cs">CS</option><option value="finance">Finance</option><option value="admin">Admin</option></select></label>
             <label>Password<input name="password" required minlength="6" placeholder="Password awal"></label>
-            <button class="btn primary compact-btn">Create User</button>
+            <button class="btn primary">Create User</button>
         </form>
     </section>
 
