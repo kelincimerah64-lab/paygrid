@@ -29,8 +29,8 @@ return new class extends Migration
             $table->unsignedBigInteger('ticket_total')->default(0);
             $table->timestamps();
 
-            $table->unique(['merchant_id', 'metric_date', 'data_source']);
-            $table->index(['agent_id', 'metric_date']);
+            $table->unique(['merchant_id', 'metric_date', 'data_source'], 'metrics_merchant_date_source_unique');
+            $table->index(['agent_id', 'metric_date'], 'metrics_agent_date_idx');
         });
     }
 
