@@ -16,11 +16,7 @@
         <h1>{{ $title }}</h1>
         <div class="sub">{{ $subtitle }}</div>
     </div>
-    <div class="page-actions">
-        @if(in_array($active, ['create-store', 'new-store']))
-            <span class="badge ok">Link wajib lewat token unik</span>
-        @endif
-    </div>
+    <div class="page-actions"></div>
 </div>
 
 @if($active === 'approval')
@@ -192,7 +188,7 @@
 @elseif(in_array($active, ['create-store', 'new-store']))
     @php($latestLink = session('onboarding_link') ?: (($onboardingLinks ?? collect())->firstWhere('status', 'active') ? route('merchant-registration.token-form', ($onboardingLinks ?? collect())->firstWhere('status', 'active')) : ''))
     <section class="card pad agent-onboarding-card">
-        <div class="qris-toolbar compact-toolbar"><div><h2>Generate Link Onboarding</h2><p class="muted">Buat link registrasi unik untuk merchant. Link otomatis expired setelah satu kali submit.</p></div><span class="badge ok">Token unik</span></div>
+        <div class="qris-toolbar compact-toolbar"><div><h2>Generate Link Onboarding</h2><p class="muted">Buat link registrasi unik untuk merchant. Link otomatis expired setelah satu kali submit.</p></div></div>
         <form method="post" action="{{ route('agent.onboarding-links.store') }}" class="form-grid pad">
             @csrf
             <label>Email Penerima<input name="recipient_email" type="email" placeholder="merchant@domain.com"></label>
