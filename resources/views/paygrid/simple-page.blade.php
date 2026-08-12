@@ -163,11 +163,17 @@
         </div>
     </section>
 @elseif($active === 'status-request')
-    <section class="card">
-        <form class="filters" method="get"><input class="search" name="q" value="{{ $requestFilters['q'] ?? '' }}" placeholder="Cari toko, merchant, token..."><div class="actions"><select name="status"><option value="all" @selected(($requestFilters['status'] ?? 'all') === 'all')>Semua status</option>@foreach(['pending_agent', 'pending_ma', 'approved', 'rejected'] as $status)<option value="{{ $status }}" @selected(($requestFilters['status'] ?? 'all') === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>@endforeach</select><input type="date" name="from" value="{{ $requestFilters['from'] ?? '' }}"><input type="date" name="to" value="{{ $requestFilters['to'] ?? '' }}"><button class="btn primary">Submit Filter</button><a class="btn" href="{{ route('agent.requests') }}">Reset</a><a class="btn" href="{{ route('agent.export') }}">Export CSV</a></div></form>
+    <section class="card agent-filter-card">
+        <form class="agent-filter-grid" method="get">
+            <label class="agent-filter-search"><span>Pencarian</span><input class="search" name="q" value="{{ $requestFilters['q'] ?? '' }}" placeholder="Cari toko, merchant ID, atau token request"></label>
+            <label><span>Status</span><select name="status"><option value="all" @selected(($requestFilters['status'] ?? 'all') === 'all')>Semua status</option>@foreach(['pending_agent', 'pending_ma', 'approved', 'rejected'] as $status)<option value="{{ $status }}" @selected(($requestFilters['status'] ?? 'all') === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>@endforeach</select></label>
+            <label><span>Dari tanggal</span><input type="date" name="from" value="{{ $requestFilters['from'] ?? '' }}"></label>
+            <label><span>Sampai tanggal</span><input type="date" name="to" value="{{ $requestFilters['to'] ?? '' }}"></label>
+            <div class="agent-filter-actions"><button class="btn primary">Terapkan Filter</button><a class="btn" href="{{ route('agent.requests') }}">Reset</a><a class="btn ghost" href="{{ route('agent.export') }}">Export CSV</a></div>
+        </form>
         <form method="post" action="{{ route('agent.requests.bulk') }}">@csrf
-        <div class="actions pad"><select name="action"><option value="submit">Submit MA Selected</option><option value="delete">Delete Selected</option></select><button class="btn primary">Apply Bulk</button></div>
-        <table class="table">
+        <div class="agent-bulk-bar"><div><strong>Bulk Action</strong><span>Pilih request pending, lalu submit ke MA atau hapus dari daftar.</span></div><div class="actions"><select name="action"><option value="submit">Submit ke MA</option><option value="delete">Hapus request</option></select><button class="btn primary">Apply Selected</button></div></div>
+        <table class="table agent-request-table">
             <thead><tr><th>Nama Toko</th><th>Merchant ID</th><th>Tanggal Request</th><th>User Finance</th><th>User CS</th><th>Status Approval</th><th>Action</th></tr></thead>
             <tbody>
             @foreach($registrations as $registration)
@@ -182,10 +188,9 @@
     </section>
 @elseif(in_array($active, ['create-store', 'new-store']))
     @php($latestLink = session('onboarding_link') ?: (($onboardingLinks ?? collect())->firstWhere('status', 'active') ? route('merchant-registration.token-form', ($onboardingLinks ?? collect())->firstWhere('status', 'active')) : ''))
-    <section class="card pad">
-        <h2>Generate Link Form Onboarding</h2>
-        <p class="muted">Agen generate link unik, kirim ke merchant, dan link otomatis expired setelah satu kali submit.</p>
-        <form method="post" action="{{ route('agent.onboarding-links.store') }}" class="form-grid">
+    <section class="card pad agent-onboarding-card">
+        <div class="qris-toolbar compact-toolbar"><div><h2>Generate Link Onboarding</h2><p class="muted">Buat link registrasi unik untuk merchant. Link otomatis expired setelah satu kali submit.</p></div><span class="badge ok">Token unik</span></div>
+        <form method="post" action="{{ route('agent.onboarding-links.store') }}" class="form-grid pad">
             @csrf
             <label>Email Penerima<input name="recipient_email" type="email" placeholder="merchant@domain.com"></label>
             <label>Username Telegram<input name="recipient_telegram" placeholder="@merchantusername"></label>

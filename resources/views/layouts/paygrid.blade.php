@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $roleLabel ?? 'PayGrid' }} | PayGrid Laravel</title>
+    <title>{{ $roleLabel ?? 'PayGrid' }} | PayGrid</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
         :root {
@@ -206,6 +206,20 @@
         .search { width:min(520px, 100%); border-radius:7px; padding-left:12px; color:#68768a; background:#fbfdff; }
         .filters { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:16px 18px; }
         .actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        .agent-filter-card { overflow:hidden; }
+        .agent-filter-grid { display:grid; grid-template-columns:minmax(280px, 1.4fr) 170px 170px 170px auto; gap:10px; align-items:end; padding:18px; background:linear-gradient(180deg, #fff, #fbfdff); }
+        .agent-filter-grid label { display:grid; gap:7px; margin:0; }
+        .agent-filter-grid label span { font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:#52637a; font-weight:950; }
+        .agent-filter-grid input, .agent-filter-grid select { width:100%; height:36px; }
+        .agent-filter-search .search { width:100%; color:var(--ink); }
+        .agent-filter-actions { display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
+        .agent-bulk-bar { display:flex; justify-content:space-between; gap:14px; align-items:center; padding:13px 18px; border-top:1px solid #e7edf6; background:#f7faff; }
+        .agent-bulk-bar strong { display:block; font-size:13px; }
+        .agent-bulk-bar span { display:block; margin-top:3px; color:var(--muted); font-size:12px; font-weight:700; }
+        .agent-request-table th { background:#f3f7fc; color:#20324d; font-size:11px; letter-spacing:.08em; }
+        .agent-request-table td { padding:10px 12px; }
+        .agent-onboarding-card { padding:0; overflow:hidden; }
+        .compact-toolbar { padding:16px 18px; }
         .split { display:grid; grid-template-columns:1.1fr 1fr; gap:18px; }
         .mini-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
         .fee-row { display:grid; grid-template-columns:minmax(78px, 1fr) auto; gap:12px; align-items:center; padding:7px 0; border-bottom:1px solid #edf2f8; }
@@ -306,6 +320,9 @@
             .cards, .qris-metrics, .topup-cards, .checklist-cards, .split, .approval-card, .approval-review-card, .approval-detail-grid, .form-grid { grid-template-columns:1fr; }
             .admin-create-form, .admin-minimum-form { grid-template-columns:1fr; }
             .page-head, .filters, .qris-hero, .qris-toolbar { flex-direction:column; align-items:stretch; }
+            .agent-filter-grid { grid-template-columns:1fr; }
+            .agent-filter-actions, .agent-bulk-bar { align-items:stretch; justify-content:flex-start; }
+            .agent-bulk-bar { flex-direction:column; }
             .page-actions, .actions { justify-content:flex-start; }
             .qris-hero h1 { font-size:32px; }
             .qris-filters, .hero-actions { justify-content:flex-start; }

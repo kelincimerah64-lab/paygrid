@@ -84,7 +84,7 @@ Route::get('/agent/requests', fn (DashboardController $controller) => $controlle
 Route::delete('/agent/requests/{registration}', [DashboardController::class, 'deleteAgentRegistration'])->middleware('throttle:dashboard-writes')->name('agent.requests.delete');
 Route::post('/agent/requests/bulk', [DashboardController::class, 'bulkAgentRegistrations'])->middleware('throttle:dashboard-writes')->name('agent.requests.bulk');
 Route::get('/agent/export', [DashboardController::class, 'exportAgentReport'])->name('agent.export');
-Route::get('/agent/new-store', fn (DashboardController $controller) => $controller->agentSimple('new-store', app(\App\Services\Navigation\MenuBuilder::class)))->name('agent.new-store');
+Route::redirect('/agent/new-store', '/agent/create-store')->name('agent.new-store');
 });
 
 Route::match(['get', 'post'], '/form', fn () => abort(404));

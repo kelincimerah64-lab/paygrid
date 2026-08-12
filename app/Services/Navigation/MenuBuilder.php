@@ -39,7 +39,6 @@ class MenuBuilder
             ['key' => 'overview', 'label' => 'Overview', 'url' => route('agent.overview')],
             ['key' => 'create-store', 'label' => 'Create Toko', 'url' => route('agent.create-store')],
             ['key' => 'status-request', 'label' => 'Status Request', 'url' => route('agent.requests')],
-            ['key' => 'new-store', 'label' => 'New Store', 'url' => route('agent.new-store')],
         ];
     }
 

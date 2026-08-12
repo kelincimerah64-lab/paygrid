@@ -102,7 +102,11 @@ class DashboardController extends Controller
                 'status-request' => 'Status Request Toko',
                 default => 'Agen',
             },
-            'subtitle' => 'Request dari form masuk ke agen dahulu, lalu agen submit ke MA.',
+            'subtitle' => match ($page) {
+                'create-store', 'new-store' => 'Buat link onboarding unik untuk merchant. Setiap link hanya berlaku satu kali submit.',
+                'status-request' => 'Pantau progres onboarding toko, filter request, dan kirim data terpilih ke MA.',
+                default => 'Ringkasan toko, transaksi, dan aktivitas onboarding agen.',
+            },
             'agent' => $agent,
             'merchants' => $metrics->agentMerchants($agent),
             'requestFilters' => $requestFilters,
