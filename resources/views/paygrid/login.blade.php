@@ -31,7 +31,7 @@
         @if($errors->any())<div style="color:#c62828; margin-bottom:12px">{{ $errors->first() }}</div>@endif
         <form action="{{ route('login.store') }}" method="post">
             @csrf
-            <label>Email<input name="email" type="email" value="{{ old('email') }}" autocomplete="email" required placeholder="email@domain.com"></label>
+            <label>Email / Username<input name="email" type="text" value="{{ old('email') }}" autocomplete="username" required placeholder="email@domain.com atau username"></label>
             <label>Password
                 <span class="password-wrap">
                     <input id="login-password" name="password" type="password" autocomplete="current-password" required placeholder="Masukkan password">
