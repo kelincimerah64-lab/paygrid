@@ -157,6 +157,7 @@ class SuperadminController extends Controller
             'default_agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'is_active' => ['required', 'boolean'],
         ]);
+        abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create merchant group ke HG masih dinonaktifkan.');
         $data['code'] = ($data['code'] ?? null) ?: $this->uniqueAgentCode($data['name']);
         $data['hg_group_id'] = null;
         $password = config('paygrid.demo_password');
@@ -175,7 +176,7 @@ class SuperadminController extends Controller
         $audit->record('superadmin.agent_created', $agent, null, $agent->toArray());
         $audit->record('superadmin.agent_account_created', $agentUser, null, $agentUser->only(['name', 'email', 'username', 'role']));
 
-        return back()->with('status', 'Merchant Group berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. MDR Agen: '.$this->fmt($this->agentMdr($agent)).'%.');
+        return back()->with('status', 'Merchant Group lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. MDR Agen: '.$this->fmt($this->agentMdr($agent)).'%. Belum dikirim ke HG.');
     }
 
     public function updateTimer(Request $request, AuditLogService $audit): RedirectResponse
@@ -224,7 +225,7 @@ class SuperadminController extends Controller
     private function summary(): array
     {
         $row = TopupRequest::query()
-            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as total")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as success_volume")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN fee_amount ELSE 0 END), 0) as fee_total")
             ->first();
@@ -265,7 +266,7 @@ class SuperadminController extends Controller
 
     private function fmt(float $value): string
     {
-        return number_format($value, 4, ',', '.');
+        return number_format($value, 2, ',', '.');
     }
 
     private function normalizePercentInputs(Request $request, array $fields): void

@@ -5,11 +5,14 @@ namespace Tests\Feature;
 use App\Models\Merchant;
 use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
+use App\Models\MerchantSettlement;
 use App\Models\Agent;
 use App\Models\AgentOnboardingLink;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
+use App\Services\Gateway\GatewayClientInterface;
+use App\Services\Gateway\HilogateClient;
 use App\Services\TransactionIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -108,6 +111,7 @@ class PayGridRoutingTest extends TestCase
             'merchant_id' => $merchant->id,
             'customer_reference' => 'PLAYER-QR-LOCAL',
             'idempotency_key' => 'qr-local-test',
+            'public_token' => (string) \Illuminate\Support\Str::uuid(),
             'gateway' => $merchant->gateway,
             'data_source' => 'gateway_create',
             'payment_id' => 'qris_local_test',
@@ -122,15 +126,63 @@ class PayGridRoutingTest extends TestCase
             'expires_at' => now()->addMinutes(30),
         ]);
 
-        $this->get(route('topup.status', [$merchant, $topup]))
+        $this->get(route('topup.status', [$merchant, $topup->public_token]))
             ->assertOk()
-            ->assertSee(route('topup.qr', [$merchant, $topup]), false)
+            ->assertSee(route('topup.qr', [$merchant, $topup->public_token]), false)
             ->assertDontSee('api.qrserver.com', false);
 
-        $this->get(route('topup.qr', [$merchant, $topup]))
+        $this->get(route('topup.qr', [$merchant, $topup->public_token]))
             ->assertOk()
             ->assertHeader('Content-Type', 'image/svg+xml')
             ->assertSee('<svg', false);
+    }
+
+    public function test_topup_submit_returns_form_error_when_gateway_fails(): void
+    {
+        $this->seed();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $this->app->instance(HilogateClient::class, new class implements GatewayClientInterface {
+            public function createQrisTransaction(Merchant $merchant, string $reference, int $amount, int $expiresInMinutes = 30): array
+            {
+                throw new \RuntimeException('Gateway rejected amount.');
+            }
+
+            public function getTransaction(Merchant $merchant, string $reference): array
+            {
+                return [];
+            }
+
+            public function pullTransactions(Merchant $merchant, array $filters = []): array
+            {
+                return [];
+            }
+
+            public function pullSettlements(Merchant $merchant, array $filters = []): array
+            {
+                return [];
+            }
+
+            public function createMerchant(array $payload): array
+            {
+                return [];
+            }
+        });
+
+        $this->from(route('topup', $merchant))
+            ->post(route('topup.submit', $merchant), [
+                'customer_reference' => 'PLAYER-5758',
+                'amount' => 5758,
+                'idempotency_key' => 'gateway-fail-5758',
+            ])
+            ->assertRedirect(route('topup', $merchant))
+            ->assertSessionHasErrors('amount');
+
+        $this->assertDatabaseHas('topup_requests', [
+            'merchant_id' => $merchant->id,
+            'customer_reference' => 'PLAYER-5758',
+            'amount' => 5758,
+            'status' => 'failed',
+        ]);
     }
 
     public function test_merchant_cs_cannot_access_other_merchant_portal(): void
@@ -283,7 +335,11 @@ class PayGridRoutingTest extends TestCase
             ->assertDontSee('>History TRX</a>', false);
 
         $this->get('/portal/nnp-cm-bj/admin/qris')->assertOk()->assertSee('Topup Request');
-        $this->get('/portal/nnp-cm-bj/admin/checklist')->assertOk()->assertSee('Sukses Checklist');
+        $this->get('/portal/nnp-cm-bj/admin/qris')->assertDontSee('nnp CM - BJ Admin Dashboard');
+        $this->get('/portal/nnp-cm-bj/admin/checklist')
+            ->assertOk()
+            ->assertSee('Sukses Checklist')
+            ->assertDontSee('nnp CM - BJ Admin Dashboard');
         $this->get('/portal/nnp-cm-bj/admin/history')->assertNotFound();
 
         $this->post(route('merchant.admin.users.store', $merchant), [
@@ -294,6 +350,7 @@ class PayGridRoutingTest extends TestCase
         $this->assertDatabaseHas('users', ['email' => 'finance-baru@nnp-cm-bj.local', 'role' => 'finance', 'merchant_id' => $merchant->id]);
 
         $created = User::query()->where('email', 'finance-baru@nnp-cm-bj.local')->firstOrFail();
+        $this->assertNotSame('PassBaru123', $created->getRawOriginal('plain_password'));
         $this->post(route('merchant.admin.users.reset-password', [$merchant, $created]), ['password' => 'Reset123'])
             ->assertRedirect();
         $this->assertTrue(Hash::check('Reset123', $created->refresh()->password));
@@ -329,6 +386,37 @@ class PayGridRoutingTest extends TestCase
         $this->get('/portal/tiktok5000/admin/history')->assertOk()->assertSee('History TRX');
         $this->get('/portal/tiktok5000/admin/qris')->assertNotFound();
         $this->get('/portal/tiktok5000/admin/checklist')->assertNotFound();
+    }
+
+    public function test_readonly_admin_cannot_view_or_manage_user_passwords(): void
+    {
+        $this->seed();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $readonly = User::query()->create([
+            'name' => 'Readonly Admin',
+            'email' => 'readonly-admin@nnp-cm-bj.local',
+            'role' => 'readonly_admin',
+            'merchant_id' => $merchant->id,
+            'password' => Hash::make('Readonly123'),
+            'plain_password' => 'Readonly123',
+        ]);
+        $target = User::query()->where('email', 'admin@nnp-cm-bj.local')->firstOrFail();
+
+        $this->actingAs($readonly)
+            ->get(route('merchant.admin.users', $merchant))
+            ->assertOk()
+            ->assertDontSee('Create Role User')
+            ->assertDontSee(config('paygrid.demo_password'))
+            ->assertDontSee('Reset Password');
+
+        $this->post(route('merchant.admin.users.store', $merchant), [
+            'email' => 'blocked@nnp-cm-bj.local',
+            'role' => 'cs',
+            'password' => 'Blocked123',
+        ])->assertForbidden();
+        $this->post(route('merchant.admin.users.reset-password', [$merchant, $target]), [
+            'password' => 'Blocked123',
+        ])->assertForbidden();
     }
 
     public function test_unscoped_cs_cannot_login(): void
@@ -420,6 +508,75 @@ class PayGridRoutingTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_uncheck_processed_checklist(): void
+    {
+        $this->seed();
+
+        $user = User::query()->where('email', 'admin@nnp-cm-bj.local')->firstOrFail();
+        $request = TopupRequest::query()
+            ->where('merchant_id', $user->merchant_id)
+            ->where('status', 'success')
+            ->where('is_processed', true)
+            ->firstOrFail();
+
+        $this->actingAs($user)
+            ->patchJson(route('api.checklist.update', $request), ['checked' => false])
+            ->assertOk()
+            ->assertJsonPath('is_processed', false)
+            ->assertJsonPath('checked_by_email', null);
+
+        $this->assertDatabaseHas('topup_requests', [
+            'id' => $request->id,
+            'is_processed' => false,
+            'checked_by_email' => null,
+            'checked_by_role' => null,
+            'processed_at' => null,
+        ]);
+    }
+
+    public function test_cs_cannot_uncheck_processed_checklist(): void
+    {
+        $this->seed();
+
+        $user = User::query()->where('email', 'cs-bj@paygrid.local')->firstOrFail();
+        $request = TopupRequest::query()
+            ->where('merchant_id', $user->merchant_id)
+            ->where('status', 'success')
+            ->where('is_processed', true)
+            ->firstOrFail();
+
+        $this->actingAs($user)
+            ->patchJson(route('api.checklist.update', $request), ['checked' => false])
+            ->assertForbidden();
+    }
+
+    public function test_processed_checklist_note_cannot_be_changed(): void
+    {
+        $this->seed();
+
+        $user = User::query()->where('email', 'cs-bj@paygrid.local')->firstOrFail();
+        $request = TopupRequest::query()
+            ->where('merchant_id', $user->merchant_id)
+            ->where('status', 'success')
+            ->where('is_processed', false)
+            ->firstOrFail();
+
+        $this->actingAs($user)
+            ->patchJson(route('api.topup-requests.cs-note', $request), ['cs_note' => 'Catatan sebelum checklist'])
+            ->assertOk();
+        $this->actingAs($user)
+            ->patchJson(route('api.checklist.update', $request), ['checked' => true])
+            ->assertOk();
+        $this->actingAs($user)
+            ->patchJson(route('api.topup-requests.cs-note', $request), ['cs_note' => 'Catatan setelah checklist'])
+            ->assertUnprocessable();
+
+        $this->assertDatabaseHas('topup_requests', [
+            'id' => $request->id,
+            'cs_note' => 'Catatan sebelum checklist',
+        ]);
+    }
+
     public function test_cs_can_submit_ticket_with_required_image_attachment(): void
     {
         Storage::fake('public');
@@ -443,7 +600,8 @@ class PayGridRoutingTest extends TestCase
         $this->assertNotNull($ticket->submitted_to_center_at);
         $this->assertSame('Bukti dari CS toko.', $ticket->note);
         $this->assertCount(1, $ticket->attachments);
-        Storage::disk('public')->assertExists($ticket->attachments[0]['path']);
+        $this->assertSame('local', $ticket->attachments[0]['disk']);
+        Storage::disk('local')->assertExists($ticket->attachments[0]['path']);
 
         $this->actingAs($user)
             ->post(route('merchant.cs.ticket.submit', [$merchant, $ticket]), [
@@ -513,7 +671,7 @@ class PayGridRoutingTest extends TestCase
         $this->actingAs($cs)
             ->get('/portal/nnp-cm-bj/cs/tickets')
             ->assertOk()
-            ->assertSee('ISSUE BANK')
+            ->assertSee('Issue Bank')
             ->assertSee('testing only');
     }
 
@@ -624,6 +782,51 @@ class PayGridRoutingTest extends TestCase
             ->assertSee('Valohoki [1LG]');
     }
 
+    public function test_ma_overview_shows_only_final_hilogate_settlements_for_its_merchants(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $other = Merchant::query()->where('slug', 'bl77')->firstOrFail();
+
+        MerchantSettlement::query()->create([
+            'merchant_id' => $merchant->id,
+            'gateway' => 'hilogate',
+            'gateway_merchant_id' => $merchant->merchant_id,
+            'reference' => 'HG-SETTLED-001',
+            'settlement_date' => now('Asia/Jakarta')->toDateString(),
+            'status' => 'APPROVED',
+            'net_amount' => 123456789,
+        ]);
+        MerchantSettlement::query()->create([
+            'merchant_id' => $merchant->id,
+            'gateway' => 'hilogate',
+            'gateway_merchant_id' => $merchant->merchant_id,
+            'reference' => 'HG-PENDING-001',
+            'settlement_date' => now('Asia/Jakarta')->toDateString(),
+            'status' => 'PENDING',
+            'net_amount' => 777777777,
+        ]);
+        MerchantSettlement::query()->create([
+            'merchant_id' => $other->id,
+            'gateway' => 'artageto',
+            'gateway_merchant_id' => $other->merchant_id,
+            'reference' => 'OTHER-GATEWAY-001',
+            'settlement_date' => now('Asia/Jakarta')->toDateString(),
+            'status' => 'SUCCESS',
+            'net_amount' => 999999999,
+        ]);
+
+        $this->actingAs($ma)
+            ->get('/ma')
+            ->assertOk()
+            ->assertSee('Settlement Real HG')
+            ->assertSee('Rp 123.456.789')
+            ->assertSee('HG-SETTLED-001')
+            ->assertDontSee('HG-PENDING-001')
+            ->assertDontSee('OTHER-GATEWAY-001');
+    }
+
     public function test_gateway_sync_preserves_existing_checklist_state(): void
     {
         $this->seed();
@@ -634,6 +837,8 @@ class PayGridRoutingTest extends TestCase
             ->where('status', 'success')
             ->where('is_processed', true)
             ->firstOrFail();
+        $request->forceFill(['expires_at' => now()->addMinutes(20)])->save();
+        $expiresAt = $request->expires_at;
 
         app(TransactionIngestionService::class)->ingestForMerchant($merchant, [
             'id' => $request->gateway_ref_id,
@@ -653,6 +858,7 @@ class PayGridRoutingTest extends TestCase
             'checked_by_email' => $request->checked_by_email,
             'rrn' => 'UPDATEDRRN',
         ]);
+        $this->assertTrue($expiresAt?->equalTo($request->refresh()->expires_at));
     }
 
     public function test_dashboard_reads_gateway_balance_from_matching_merchant_cache(): void
@@ -734,7 +940,9 @@ class PayGridRoutingTest extends TestCase
 
         $this->get('/ma/report/export')
             ->assertOk()
-            ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+            ->assertHeader('Content-Type', 'text/csv; charset=UTF-8')
+            ->assertSee('Reference,RRN,Payment ID,Net,Settlement', false)
+            ->assertDontSee('Sumber TRX');
 
         $this->post(route('ma.agents.store'), [
             'name' => 'Agen Lokal',
@@ -888,7 +1096,12 @@ class PayGridRoutingTest extends TestCase
             ->assertOk()
             ->assertSee('Link Store One Shot')
             ->assertDontSee('Request To Delete');
-        $this->get(route('agent.export'))->assertOk()->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $agentExport = $this->get(route('agent.export'))
+            ->assertOk()
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $agentCsv = $agentExport->streamedContent();
+        $this->assertStringContainsString('merchant_name,type,status', $agentCsv);
+        $this->assertStringNotContainsString('merchant_id', $agentCsv);
 
         $this->actingAs($agentUser)->post(route('agent.onboarding-links.store'), [])->assertRedirect();
         $bulkLink = AgentOnboardingLink::query()->where('status', 'active')->latest()->firstOrFail();
@@ -900,5 +1113,18 @@ class PayGridRoutingTest extends TestCase
         $cleanupLink->update(['expires_at' => now()->subMinute()]);
         $this->artisan('onboarding-links:expire')->assertSuccessful();
         $this->assertSame('expired', $cleanupLink->refresh()->status);
+    }
+
+    public function test_agent_dashboard_shows_scoped_ticket_tracking(): void
+    {
+        $this->seed();
+
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+
+        $this->actingAs($agentUser)
+            ->get(route('agent.overview'))
+            ->assertOk()
+            ->assertSee('Ticket Toko Saya')
+            ->assertSee('Status CS Pusat');
     }
 }

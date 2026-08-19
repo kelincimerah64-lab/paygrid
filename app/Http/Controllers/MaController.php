@@ -4,9 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\Merchant;
-use App\Models\MerchantDailyMetric;
 use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
+use App\Models\MerchantSettlement;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
@@ -59,6 +59,7 @@ class MaController extends Controller
             'merchants' => $merchants,
             'registrations' => $registrations,
             'transactions' => $transactions,
+            'selectedStoreStats' => $dataFilters['store_id'] === 'all' ? null : $this->selectedStoreStats($dataFilters),
             'summary' => $this->summary($dataFilters),
             'overviewDetails' => $this->overviewDetails($dataFilters),
             'reportAgents' => $this->reportAgents($dataFilters),
@@ -72,10 +73,12 @@ class MaController extends Controller
     public function export(Request $request): Response
     {
         $rows = $this->transactions($this->filters())->limit(5000)->get();
-        $csv = "Tanggal,Toko,Agen,Status,Amount,Reference,RRN,Payment ID,Net,Settlement,Sumber TRX\n";
+        $csv = "Masuk,Sukses,Durasi,Toko,Agen,Status,Amount,Reference,RRN,Payment ID,Net,Settlement\n";
         foreach ($rows as $row) {
             $csv .= implode(',', array_map(fn ($value) => '"'.str_replace('"', '""', (string) $value).'"', [
-                $row->submitted_at?->timezone('Asia/Jakarta')->format('Y-m-d H:i:s'),
+                $row->submitted_at?->format('Y-m-d H:i:s'),
+                $row->succeeded_at?->format('Y-m-d H:i:s'),
+                $row->successDurationLabel(),
                 $row->merchant?->name,
                 $row->merchant?->agent?->name,
                 $row->status,
@@ -85,7 +88,6 @@ class MaController extends Controller
                 $row->payment_id,
                 $row->net_amount,
                 $row->status === 'success' ? 'settleable' : 'pending',
-                $row->data_source,
             ]))."\n";
         }
 
@@ -106,6 +108,7 @@ class MaController extends Controller
             'default_agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'password' => ['nullable', 'string', 'min:6', 'max:120'],
         ]);
+        abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create agen ke HG masih dinonaktifkan.');
         $password = $data['password'] ?: config('paygrid.demo_password');
         $code = $this->uniqueAgentCode($data['name']);
         $isActive = $data['status'] === 'Active';
@@ -115,6 +118,7 @@ class MaController extends Controller
             'name' => $data['name'],
             'email' => $data['email'],
             'contact' => $data['contact'] ?? null,
+            'hg_group_id' => null,
             'default_agent_fee_percent' => $data['default_agent_fee_percent'],
             'is_active' => $isActive,
             'password_plain' => $password,
@@ -131,7 +135,7 @@ class MaController extends Controller
         $audit->record('ma.agent_created', $agent, null, $agent->toArray());
         $audit->record('ma.agent_account_created', $agentUser, null, $agentUser->only(['email', 'username', 'role']));
 
-        return back()->with('status', 'Agen berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'.');
+        return back()->with('status', 'Agen lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG.');
     }
 
     public function mapAgent(Request $request, Merchant $merchant, AuditLogService $audit): RedirectResponse
@@ -236,18 +240,22 @@ class MaController extends Controller
     public function updateStoreFee(Request $request, Merchant $merchant, AuditLogService $audit): RedirectResponse
     {
         abort_unless($this->canUseMerchant($merchant), 403);
-        $this->normalizePercentInputs($request, ['merchant_mdr_percent', 'base_mdr_percent', 'payin_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent']);
+        $this->normalizePercentInputs($request, ['merchant_mdr_percent', 'base_mdr_percent', 'payin_fee_percent', 'settlement_fee_percent', 'agent_fee_percent']);
         $data = $request->validate([
             'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'base_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'payin_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'settlement_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
         ]);
-        $cost = (float) $data['base_mdr_percent'] + (float) $data['payin_fee_percent'] + (float) $data['settlement_fee_percent'] + (float) $data['ma_fee_percent'] + (float) $data['agent_fee_percent'];
-        abort_if((float) $data['merchant_mdr_percent'] < $cost, 422, 'Merchant MDR harus >= total Base + Pay In + Settlement + MA + Agent.');
-        $before = $merchant->only(['merchant_mdr_percent', 'base_mdr_percent', 'payin_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent']);
+        $cost = (float) $data['base_mdr_percent'] + (float) $data['payin_fee_percent'] + (float) $data['settlement_fee_percent'] + (float) $data['agent_fee_percent'];
+        if ((float) $data['merchant_mdr_percent'] < $cost) {
+            return back()->withErrors(['fee' => 'Merchant MDR minimal harus >= Base HG + Pay In + Settlement + Agent.'])->withInput();
+        }
+
+        $data['connection_fee_percent'] = $data['payin_fee_percent'];
+        $data['ma_fee_percent'] = max(0, (float) $data['merchant_mdr_percent'] - $cost);
+        $before = $merchant->only(['merchant_mdr_percent', 'base_mdr_percent', 'payin_fee_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent']);
         $merchant->forceFill($data)->save();
         $audit->record('ma.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($before)));
 
@@ -307,7 +315,7 @@ class MaController extends Controller
         $from = $filters['from'] ? CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->translatedFormat('d M Y H:i:s') : 'awal';
         $to = $filters['to'] ? CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->translatedFormat('d M Y') : 'hari ini';
 
-        return $from.' - '.$to;
+        return $from.' - '.$to.' WIB';
     }
 
     private function merchants(array $filters)
@@ -383,30 +391,47 @@ class MaController extends Controller
             return collect();
         }
 
-        return $this->merchants(array_merge($filters, ['store_id' => 'all']))
-            ->withSum(['metrics as metric_trx_total' => fn ($query) => $this->metricPeriod($query, $filters)], 'trx_total')
-            ->withSum(['metrics as metric_volume_success' => fn ($query) => $this->metricPeriod($query, $filters)], 'amount_success')
-            ->orderByDesc('metric_trx_total')
-            ->get();
+        $stores = $this->merchants(array_merge($filters, ['store_id' => 'all']))->get();
+        $totals = TopupRequest::query()
+            ->whereIn('merchant_id', $stores->pluck('id'))
+            ->where('status', 'success')
+            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw('merchant_id, COUNT(*) as trx_total')
+            ->selectRaw('COALESCE(SUM(amount), 0) as volume_success')
+            ->groupBy('merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
+
+        return $stores
+            ->each(function (Merchant $store) use ($totals): void {
+                $row = $totals->get($store->id);
+                $store->metric_trx_total = (int) ($row?->trx_total ?? 0);
+                $store->metric_volume_success = (int) ($row?->volume_success ?? 0);
+            })
+            ->sortByDesc('metric_trx_total')
+            ->values();
     }
 
     private function summary(array $filters): array
     {
         $totals = (clone $this->transactions($filters))
             ->reorder()
-            ->selectRaw('COUNT(*) as trx_total')
+            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_total")
             ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as volume_success")
             ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.net_amount ELSE 0 END), 0) as total_settlement")
-            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'pending' THEN topup_requests.amount ELSE 0 END), 0) as pending_settlement")
+            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'pending' THEN topup_requests.amount ELSE 0 END), 0) as pending_transaction_amount")
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
             ->selectRaw("SUM(CASE WHEN topup_requests.status IN ('expired', 'failed', 'rejected') THEN 1 ELSE 0 END) as trx_expired")
             ->first();
         $fee = $this->feeTotalsForFilters($filters);
+        $hgSettlement = $this->hgSettlements($filters)->sum('net_amount');
 
         return [
             'volume_success' => (int) ($totals->volume_success ?? 0),
-            'pending_settlement' => (int) ($totals->pending_settlement ?? 0),
+            'pending_transaction_amount' => (int) ($totals->pending_transaction_amount ?? 0),
             'total_settlement' => (int) ($totals->total_settlement ?? 0),
+            'hg_settlement' => (int) $hgSettlement,
             'trx_total' => (int) ($totals->trx_total ?? 0),
             'trx_pending' => (int) ($totals->trx_pending ?? 0),
             'trx_expired' => (int) ($totals->trx_expired ?? 0),
@@ -427,6 +452,7 @@ class MaController extends Controller
         $successTransactions = $this->transactions(array_merge($filters, ['status' => 'success']))->limit(200)->get();
         $pendingTransactions = $this->transactions(array_merge($filters, ['status' => 'pending']))->limit(200)->get();
         $expiredTransactions = $this->transactions(array_merge($filters, ['status' => 'all']))->whereIn('topup_requests.status', ['expired', 'failed', 'rejected'])->limit(200)->get();
+        $hgSettlements = $this->hgSettlements($filters)->with('merchant.agent')->latest('settlement_date')->limit(200)->get();
         $merchants = $this->merchants($filters)->limit(200)->get();
         $agents = $this->agents($filters)->withCount('merchants')->get();
         $tickets = $this->ticketQuery($filters)->with(['merchant.agent', 'topupRequest'])
@@ -435,8 +461,9 @@ class MaController extends Controller
             ->get();
         return [
             'volume_success' => ['title' => 'Volume Sukses', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions)],
-            'pending_settlement' => ['title' => 'Pending Settlement', 'type' => 'transaction', 'items' => $this->transactionItems($pendingTransactions)],
+            'pending_transaction_amount' => ['title' => 'Pending Transaksi', 'type' => 'transaction', 'items' => $this->transactionItems($pendingTransactions)],
             'total_settlement' => ['title' => 'Total Settlement', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions)],
+            'hg_settlement' => ['title' => 'Settlement Real HG', 'type' => 'settlement', 'items' => $this->settlementItems($hgSettlements)],
             'trx_total' => ['title' => 'Total Transaksi', 'type' => 'transaction', 'items' => $this->transactionItems($latestTransactions)],
             'trx_pending' => ['title' => 'Transaksi Pending', 'type' => 'transaction', 'items' => $this->transactionItems($pendingTransactions)],
             'trx_expired' => ['title' => 'Transaksi Expired', 'type' => 'transaction', 'items' => $this->transactionItems($expiredTransactions)],
@@ -452,13 +479,17 @@ class MaController extends Controller
 
     private function reportAgents(array $filters)
     {
-        $metrics = MerchantDailyMetric::query()
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('agent', 'ma_user_id', $maId))
-            ->when($filters['from'], fn ($query) => $query->whereDate('metric_date', '>=', $filters['from']))
-            ->when($filters['to'], fn ($query) => $query->whereDate('metric_date', '<=', $filters['to']))
-            ->selectRaw('agent_id, SUM(amount_total) as volume, SUM(trx_pending) as pending, SUM(trx_success) as settled')
-            ->whereNotNull('agent_id')
-            ->groupBy('agent_id')
+        $metrics = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->join('agents', 'agents.id', '=', 'merchants.agent_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->where('agents.ma_user_id', $maId))
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw('merchants.agent_id, COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as pending")
+            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as settled")
+            ->whereNotNull('merchants.agent_id')
+            ->groupBy('merchants.agent_id')
             ->get()
             ->keyBy('agent_id');
 
@@ -480,6 +511,26 @@ class MaController extends Controller
             ->sortByDesc('volume')
             ->when($filters['agents_view'] !== 'all', fn ($items) => $items->take(5))
             ->values();
+    }
+
+    private function selectedStoreStats(array $filters): array
+    {
+        $row = (clone $this->transactions($filters))
+            ->reorder()
+            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_total")
+            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_success")
+            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
+            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as amount_success")
+            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.net_amount ELSE 0 END), 0) as settlement")
+            ->first();
+
+        return [
+            'trx_total' => (int) ($row->trx_total ?? 0),
+            'trx_success' => (int) ($row->trx_success ?? 0),
+            'trx_pending' => (int) ($row->trx_pending ?? 0),
+            'amount_success' => (int) ($row->amount_success ?? 0),
+            'settlement' => (int) ($row->settlement ?? 0),
+        ];
     }
 
     private function feeTotals($transactions): array
@@ -514,13 +565,42 @@ class MaController extends Controller
     private function transactionItems($transactions): array
     {
         return $transactions->take(200)->map(fn (TopupRequest $trx) => [
-            'date' => $trx->submitted_at?->timezone('Asia/Jakarta')->format('d/m/y H.i') ?: '-',
+            'date' => $trx->submitted_at?->format('d/m/y H.i') ?: '-',
             'title' => $trx->customer_reference ?: $trx->gateway_ref_id ?: $trx->payment_id ?: '-',
             'subtitle' => ($trx->merchant?->name ?: '-').' / '.($trx->merchant?->agent?->name ?: '-'),
             'status' => $trx->status,
             'amount' => (int) $trx->amount,
             'meta' => $trx->rrn ?: $trx->payment_id ?: '-',
         ])->values()->all();
+    }
+
+    private function settlementItems($settlements): array
+    {
+        return $settlements->take(200)->map(fn (MerchantSettlement $settlement) => [
+            'date' => $settlement->settlement_date?->format('d/m/y') ?: '-',
+            'title' => $settlement->reference,
+            'subtitle' => ($settlement->merchant?->name ?: '-').' / '.($settlement->merchant?->agent?->name ?: '-'),
+            'status' => $settlement->status,
+            'amount' => (int) $settlement->net_amount,
+            'meta' => $settlement->batch_name ?: '-',
+        ])->values()->all();
+    }
+
+    private function hgSettlements(array $filters)
+    {
+        return MerchantSettlement::query()
+            ->where('gateway', 'hilogate')
+            ->whereIn('status', ['APPROVED', 'SUCCESS', 'DONE', 'SETTLED'])
+            ->when($filters['from'], fn ($query) => $query->whereDate('settlement_date', '>=', $this->rangeStart($filters['from'])->toDateString()))
+            ->when($filters['to'], fn ($query) => $query->whereDate('settlement_date', '<=', $this->rangeEnd($filters['to'])->toDateString()))
+            ->whereHas('merchant', function ($query) use ($filters): void {
+                $query
+                    ->when($this->currentMaId(), fn ($nested, $maId) => $nested->whereRelation('agent', 'ma_user_id', $maId))
+                    ->when($filters['q'] !== '', fn ($nested) => $nested->where(fn ($search) => $search->where('name', 'like', $filters['q'].'%')->orWhere('slug', 'like', $filters['q'].'%')->orWhere('merchant_id', 'like', $filters['q'].'%')->orWhereRelation('agent', 'name', 'like', $filters['q'].'%')))
+                    ->when($filters['agent_id'] !== 'all', fn ($nested) => $nested->where('agent_id', $filters['agent_id']))
+                    ->when($filters['store_id'] !== 'all', fn ($nested) => $nested->whereKey($filters['store_id']))
+                    ->when($filters['type'] !== 'all', fn ($nested) => $nested->where('merchant_type', $filters['type']));
+            });
     }
 
     private function merchantItems($merchants): array
@@ -563,7 +643,7 @@ class MaController extends Controller
             $percent = (float) $trx->merchant?->{$percentColumn};
 
             return [
-                'date' => $trx->submitted_at?->timezone('Asia/Jakarta')->format('d/m/y H.i') ?: '-',
+                'date' => $trx->submitted_at?->format('d/m/y H.i') ?: '-',
                 'title' => $trx->customer_reference ?: $trx->gateway_ref_id ?: $trx->payment_id ?: '-',
                 'subtitle' => ($trx->merchant?->name ?: '-').' / '.$percent.'%',
                 'status' => $trx->status,
@@ -575,12 +655,14 @@ class MaController extends Controller
 
     private function storeRanking(array $filters)
     {
-        return MerchantDailyMetric::query()
+        return TopupRequest::query()
             ->with('merchant')
+            ->where('status', 'success')
             ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->when($filters['from'], fn ($query) => $query->whereDate('metric_date', '>=', $filters['from']))
-            ->when($filters['to'], fn ($query) => $query->whereDate('metric_date', '<=', $filters['to']))
-            ->selectRaw('merchant_id, SUM(amount_success) as volume, SUM(trx_success) as trx')
+            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw('merchant_id, COUNT(*) as trx')
+            ->selectRaw('COALESCE(SUM(amount), 0) as volume')
             ->groupBy('merchant_id')
             ->orderBy('trx')
             ->orderBy('volume')
@@ -590,37 +672,53 @@ class MaController extends Controller
 
     private function agentRanking(array $filters)
     {
-        return MerchantDailyMetric::query()
-            ->with('agent')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('agent', 'ma_user_id', $maId))
-            ->when($filters['from'], fn ($query) => $query->whereDate('metric_date', '>=', $filters['from']))
-            ->when($filters['to'], fn ($query) => $query->whereDate('metric_date', '<=', $filters['to']))
-            ->selectRaw('agent_id, SUM(amount_success) as volume, SUM(trx_success) as trx')
-            ->whereNotNull('agent_id')
-            ->groupBy('agent_id')
+        return TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->with('merchant.agent')
+            ->where('topup_requests.status', 'success')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->whereNotNull('merchants.agent_id')
+            ->selectRaw('merchants.agent_id, COUNT(*) as trx')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->groupBy('merchants.agent_id')
             ->orderBy('trx')
             ->orderBy('volume')
             ->limit(10)
-            ->get();
+            ->get()
+            ->each(function ($row): void {
+                $row->agent = Agent::query()->find($row->agent_id);
+            });
     }
 
     private function storeSummaries(array $filters)
     {
         $balances = MerchantGatewayBalance::query()->get()->keyBy('merchant_id');
-
-        return $this->merchants($filters)
-            ->withSum(['metrics as metric_trx_total' => fn ($query) => $this->metricPeriod($query, $filters)], 'trx_total')
-            ->withSum(['metrics as metric_volume_success' => fn ($query) => $this->metricPeriod($query, $filters)], 'amount_success')
-            ->withSum(['metrics as metric_amount_pending' => fn ($query) => $this->metricPeriod($query, $filters)], 'amount_pending')
+        $merchants = $this->merchants($filters)->get();
+        $totals = TopupRequest::query()
+            ->whereIn('merchant_id', $merchants->pluck('id'))
+            ->where('status', 'success')
+            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw('merchant_id, COUNT(*) as trx_total')
+            ->selectRaw('COALESCE(SUM(amount), 0) as volume_success')
+            ->selectRaw('COALESCE(SUM(net_amount), 0) as settlement')
+            ->groupBy('merchant_id')
             ->get()
-            ->map(function (Merchant $merchant) use ($balances) {
+            ->keyBy('merchant_id');
+
+        return $merchants
+            ->map(function (Merchant $merchant) use ($balances, $totals) {
+                $row = $totals->get($merchant->id);
+
                 return [
                     'name' => $merchant->name,
                     'agent' => $merchant->agent?->name ?: '-',
-                    'trx_total' => (int) ($merchant->metric_trx_total ?? 0),
-                    'volume_success' => (int) ($merchant->metric_volume_success ?? 0),
-                    'pending_balance' => (int) ($balances->get($merchant->id)?->pending_balance ?? $merchant->metric_amount_pending ?? 0),
-                    'settlement' => (int) ($merchant->metric_volume_success ?? 0),
+                    'trx_total' => (int) ($row?->trx_total ?? 0),
+                    'volume_success' => (int) ($row?->volume_success ?? 0),
+                    'pending_balance' => (int) ($balances->get($merchant->id)?->pending_balance ?? 0),
+                    'settlement' => (int) ($row?->settlement ?? 0),
                 ];
             })
             ->sortBy('trx_total')

@@ -1,4 +1,4 @@
-@extends('layouts.paygrid')
+@extends((request()->boolean('partial') || request()->header('X-PayGrid-Partial') === '1') ? 'layouts.partial' : 'layouts.paygrid')
 
 @php
     $title = $active === 'history' ? 'History Transaksi' : ($active === 'topup' ? 'Topup Request' : ($active === 'checklist' ? 'Sukses Checklist' : 'Tiket Status'));
@@ -8,8 +8,9 @@
         'pending' => 'warn',
         default => 'danger',
     };
-    $statusLabel = fn ($status) => strtoupper(str_replace('_', ' ', (string) $status));
+    $statusLabel = fn ($status) => App\Support\PayGridLabels::status($status);
     $latestSyncAt = $latestSync?->finished_at?->timezone('Asia/Jakarta')->format('d M Y, H:i:s') ?? 'Belum ada sync';
+    $dashboardRefreshAt = now('Asia/Jakarta')->format('H:i:s');
     $paginator = $active === 'tickets' ? $tickets : $requests;
     $panelTitle = match ($active) {
         'tickets' => 'Daftar Tiket',
@@ -19,20 +20,61 @@
     $filterBase = ['period' => $period, 'from' => $from, 'to' => $to];
     $isCardActive = fn (?string $status, ?string $processed = null) => request('status') === $status && (string) request('processed') === (string) $processed;
     $ticketPendingMinutes = (int) App\Models\PaygridSetting::value('ticket_pending_minutes', '40');
+    $ticketDeadlineFor = function ($row) use ($ticketPendingMinutes) {
+        $base = $row->submitted_at && $row->submitted_at->lte(now()->addMinute()) ? $row->submitted_at : $row->created_at;
+        if ($base) {
+            return $base->copy()->addMinutes($ticketPendingMinutes);
+        }
+
+        return $row->expires_at ? $row->expires_at->copy()->addMinutes(max(0, $ticketPendingMinutes - config('paygrid.topup.expires_in_minutes', 30))) : null;
+    };
+    $isWorkspace = in_array($active, ['topup', 'checklist'], true);
+    $workspaceRoute = $active === 'checklist' ? 'merchant.cs.checklist' : 'merchant.cs.topup';
+    $workspaceSubtitle = $active === 'checklist'
+        ? 'Review transaksi sukses dan tandai checklist yang sudah diselesaikan CS.'
+        : 'Kelola transaksi pending, sukses, expired, dan status checklist toko ini.';
+    $canUncheckChecklist = in_array(request()->user()?->role, ['admin', 'ma', 'superadmin'], true);
 @endphp
 
 @section('content')
-<section class="qris-hero">
-    <div>
-        <h1>{{ $title }}</h1>
-    </div>
-</section>
+@if(! $isWorkspace)
+    <section class="qris-hero">
+        <div>
+            <h1>{{ $title }}</h1>
+        </div>
+    </section>
+@endif
 
 @if(session('status'))
     <div class="card pad section" style="margin-top:0; margin-bottom:12px; background:#ecfff5; border-color:#a4ebc4; color:#008450">{{ session('status') }}</div>
 @endif
 @if($errors->any())
     <div class="card pad section" style="margin-top:0; margin-bottom:12px; background:#fff1f0; border-color:#f0b4ae; color:#c62828">{{ $errors->first() }}</div>
+@endif
+
+@if($isWorkspace)
+    <div data-live-root data-live-interval="3000">
+    <section class="merchant-workspace-head section" data-live-region="cs-workspace-head">
+        <div>
+            <h1>{{ $title }}</h1>
+            <a class="workspace-link" href="{{ route('merchant.cs.topup', $merchant) }}">{{ $merchant->name }} CS Dashboard</a>
+            <p>{{ $workspaceSubtitle }}</p>
+            <span>Terakhir sync gateway: {{ $latestSyncAt }} <span class="muted">| Refresh dashboard: {{ $dashboardRefreshAt }}</span></span>
+        </div>
+        <form method="get" action="{{ route($workspaceRoute, $merchant) }}" class="merchant-workspace-filter" data-auto-filter data-auto-filter-delay="450">
+            <input type="hidden" name="period" value="{{ $period }}">
+            <input class="search" name="q" value="{{ request('q') }}" placeholder="Cari username, ID, RRN...">
+            <label><span>Dari</span><input type="date" name="from" value="{{ $from }}"></label>
+            <label><span>Sampai</span><input type="date" name="to" value="{{ $to }}"></label>
+            @if($active === 'checklist')
+                <input type="hidden" name="processed" value="{{ request('processed') }}">
+            @else
+                <input type="hidden" name="status" value="{{ request('status') }}">
+                <input type="hidden" name="processed" value="{{ request('processed') }}">
+            @endif
+            <button class="btn primary">Submit Filter</button>
+        </form>
+    </section>
 @endif
 
 @if($active === 'tickets')
@@ -54,7 +96,7 @@
     </div>
 </section>
 @elseif($active === 'topup')
-<section class="grid topup-cards">
+<section class="grid topup-cards merchant-workspace-cards" data-live-region="cs-topup-cards">
     <a class="card pad topup-card {{ $isCardActive('pending') ? 'active-card' : '' }}" href="{{ route('merchant.cs.topup', [$merchant] + $filterBase + ['status' => 'pending']) }}">
         <span>Transaksi Pending</span>
         <div class="topup-card-row"><small>Jumlah</small><strong>{{ number_format($topupCards['pending_count'], 0, ',', '.') }}</strong></div>
@@ -76,40 +118,46 @@
         <div class="topup-card-row"><small>Nilai</small><strong>{{ number_format($topupCards['expired_amount'], 0, ',', '.') }}</strong></div>
     </a>
     <div class="card pad topup-card balance-card">
-        <span>Available Balance</span>
+        <span>Available Balance HG</span>
         <div class="balance-number">{{ number_format((int) ($gatewayBalance['active'] ?? 0), 0, ',', '.') }}</div>
     </div>
     <div class="card pad topup-card pending-balance-card">
-        <span>Pending Balance</span>
+        <span>Saldo Pending HG</span>
         <div class="balance-number">{{ number_format((int) ($gatewayBalance['pending'] ?? 0), 0, ',', '.') }}</div>
     </div>
 </section>
+<section class="workspace-tabs"><a class="btn {{ ! request('status') && ! request('processed') ? 'primary' : '' }}" href="{{ route('merchant.cs.topup', [$merchant] + $filterBase) }}">Semua</a><a class="btn {{ request('status') === 'success' && ! request('processed') ? 'primary' : '' }}" href="{{ route('merchant.cs.topup', [$merchant] + $filterBase + ['status' => 'success']) }}">Sukses saja</a><a class="btn {{ $isCardActive('success', 'checked') ? 'primary' : '' }}" href="{{ route('merchant.cs.topup', [$merchant] + $filterBase + ['status' => 'success', 'processed' => 'checked']) }}">Sukses checklist</a><a class="btn {{ request('status') === 'pending' ? 'primary' : '' }}" href="{{ route('merchant.cs.topup', [$merchant] + $filterBase + ['status' => 'pending']) }}">Pending</a><a class="btn {{ request('status') === 'expired' ? 'primary' : '' }}" href="{{ route('merchant.cs.topup', [$merchant] + $filterBase + ['status' => 'expired']) }}">Expired</a></section>
 @elseif($active === 'checklist')
-<section class="grid checklist-cards">
-    <a class="card pad topup-card active-card" href="{{ route('merchant.cs.checklist', [$merchant] + $filterBase) }}">
+<section class="grid checklist-cards merchant-workspace-cards" data-live-region="cs-checklist-cards">
+    <a class="card pad topup-card {{ ! request('processed') ? 'active-card' : '' }}" href="{{ route('merchant.cs.checklist', [$merchant] + $filterBase) }}">
         <span>Total Topup Sukses</span>
         <div class="topup-card-row"><small>Jumlah</small><strong>{{ number_format($stats['success'], 0, ',', '.') }}</strong></div>
         <div class="topup-card-row"><small>Nilai</small><strong>{{ number_format($stats['volume_success'], 0, ',', '.') }}</strong></div>
     </a>
-    <a class="card pad topup-card" href="{{ route('merchant.cs.checklist', [$merchant] + $filterBase + ['processed' => 'checked']) }}">
+    <a class="card pad topup-card {{ request('processed') === 'checked' ? 'active-card' : '' }}" href="{{ route('merchant.cs.checklist', [$merchant] + $filterBase + ['processed' => 'checked']) }}">
         <span>Sukses Sudah Checklist</span>
         <div class="topup-card-row"><small>Jumlah</small><strong>{{ number_format($topupCards['success_checked_count'], 0, ',', '.') }}</strong></div>
         <div class="topup-card-row"><small>Nilai</small><strong>{{ number_format($topupCards['success_checked_amount'], 0, ',', '.') }}</strong></div>
     </a>
-    <a class="card pad topup-card" href="{{ route('merchant.cs.checklist', [$merchant] + $filterBase + ['processed' => 'unchecked']) }}">
+    <a class="card pad topup-card {{ request('processed') === 'unchecked' ? 'active-card' : '' }}" href="{{ route('merchant.cs.checklist', [$merchant] + $filterBase + ['processed' => 'unchecked']) }}">
         <span>Sukses Belum Checklist</span>
         <div class="topup-card-row"><small>Jumlah</small><strong>{{ number_format($topupCards['success_unchecked_count'], 0, ',', '.') }}</strong></div>
         <div class="topup-card-row"><small>Nilai</small><strong>{{ number_format($topupCards['success_unchecked_amount'], 0, ',', '.') }}</strong></div>
     </a>
     <div class="card pad topup-card balance-card">
-        <span>Available Balance</span>
+        <span>Available Balance HG</span>
         <div class="balance-number">{{ number_format((int) ($gatewayBalance['active'] ?? 0), 0, ',', '.') }}</div>
     </div>
+    <div class="card pad topup-card pending-balance-card">
+        <span>Saldo Pending HG</span>
+        <div class="balance-number">{{ number_format((int) ($gatewayBalance['pending'] ?? 0), 0, ',', '.') }}</div>
+    </div>
 </section>
+<section class="workspace-tabs"><a class="btn {{ ! request('processed') ? 'primary' : '' }}" href="{{ route('merchant.cs.checklist', [$merchant] + $filterBase) }}">Semua sukses</a><a class="btn {{ request('processed') === 'unchecked' ? 'primary' : '' }}" href="{{ route('merchant.cs.checklist', [$merchant] + $filterBase + ['processed' => 'unchecked']) }}">Belum checklist</a><a class="btn {{ request('processed') === 'checked' ? 'primary' : '' }}" href="{{ route('merchant.cs.checklist', [$merchant] + $filterBase + ['processed' => 'checked']) }}">Sudah checklist</a></section>
 @else
 <section class="grid qris-metrics {{ $active === 'history' ? 'history-metrics' : '' }}">
     <div class="card pad qris-metric primary">
-        <span>Total Request</span>
+        <span>Request Sukses</span>
         <strong>{{ number_format($stats['total'], 0, ',', '.') }}</strong>
         <small>{{ $from ?: 'All' }} - {{ $to ?: 'All' }}</small>
     </div>
@@ -130,7 +178,7 @@
     </div>
     @if($active === 'history')
         <div class="card pad qris-metric success">
-            <span>Available Balance</span>
+        <span>Available Balance HG</span>
             <strong>{{ number_format((int) ($gatewayBalance['active'] ?? 0), 0, ',', '.') }}</strong>
             <small>Merchant {{ $merchant->name }}</small>
         </div>
@@ -138,9 +186,12 @@
 </section>
 @endif
 
-<section class="card qris-panel">
+<section class="card qris-panel" data-live-region="cs-table">
     <div class="qris-toolbar">
         <h2>{{ $panelTitle }}</h2>
+        @if($isWorkspace)
+            <div class="muted">Showing data sesuai filter di atas.</div>
+        @else
         <form method="get" class="qris-filters">
             <input class="search" name="q" value="{{ request('q') }}" placeholder="Search...">
             <select name="period" data-period-select>
@@ -172,6 +223,7 @@
             <input type="date" name="to" value="{{ $period === 'all' ? '' : $to }}" data-date-to>
             <button class="btn primary">Filter</button>
         </form>
+        @endif
     </div>
 
     <div class="table-wrap">
@@ -228,19 +280,98 @@
             </tbody>
         </table>
         @else
+        @if($isWorkspace)
+        <table class="table workspace-table {{ $active === 'topup' ? 'topup-table' : 'checklist-table' }}">
+            <thead>
+                <tr>
+                    @if($active === 'topup')
+                        <th>Nama Toko</th><th>Masuk</th><th>Sukses</th><th>Durasi</th><th>Nominal</th><th>Status</th><th>Checked by</th><th>Checkbox</th><th>ID / RRN</th><th>Action</th><th>Keterangan</th>
+                    @else
+                        <th>Merchant</th><th>Masuk</th><th>Sukses</th><th>Durasi</th><th>Nominal</th><th>Checked by</th><th>Checkbox</th><th>ID / RRN</th><th>Submit</th><th>Keterangan</th>
+                    @endif
+                </tr>
+            </thead>
+            <tbody>
+            @forelse($requests as $row)
+                <tr class="{{ $row->status === 'success' && $row->is_processed ? ($active === 'checklist' ? 'checked-row' : 'topup-success-checked-row') : '' }}">
+                    <td><span class="muted">{{ $merchant->name }}</span><br><strong>{{ $row->customer_reference ?: $row->transaction_id ?: $row->payment_id ?: '-' }}</strong></td>
+                    <td class="time-mini">{{ $row->submitted_at?->format('H.i.s') ?? '-' }}</td>
+                    <td class="time-mini">{{ $row->succeeded_at?->format('H.i.s') ?? '-' }}</td>
+                    <td class="duration-cell">{{ $row->successDurationLabel() }}</td>
+                    <td><strong>{{ number_format((int) $row->amount, 0, ',', '.') }}</strong></td>
+                    @if($active === 'topup')
+                        <td><span class="badge {{ $statusClass($row->status) }}">{{ $statusLabel($row->status) }}</span></td>
+                    @endif
+                    <td class="workspace-checked-by">{{ $row->checked_by_email ?: '-' }}@if($row->checked_by_role)<br><span class="muted">{{ strtoupper($row->checked_by_role) }}</span>@endif</td>
+                    <td class="checkbox-cell">
+                        @if($row->status === 'success' && $row->is_processed)
+                            @if($canUncheckChecklist)
+                                <form method="post" action="{{ route('api.checklist.update', $row) }}" class="compact-actions">
+                                    @csrf @method('PATCH')
+                                    <input type="hidden" name="checked" value="0">
+                                    <button class="check-icon checked" type="submit" title="Lepas checklist" aria-label="Lepas checklist" onclick="return confirm('Lepas checklist transaksi ini?')"></button>
+                                </form>
+                            @else
+                                <span class="check-icon checked" title="Checked" aria-label="Checked"></span>
+                            @endif
+                        @elseif($row->status === 'success')
+                            <form method="post" action="{{ route('api.checklist.update', $row) }}" class="compact-actions">
+                                @csrf @method('PATCH')
+                                <input type="hidden" name="checked" value="1">
+                                <button class="check-icon" type="submit" title="Checklist" aria-label="Checklist"></button>
+                            </form>
+                        @else
+                            <span class="check-icon"></span>
+                        @endif
+                    </td>
+                    <td><div class="id-stack"><code>{{ str($row->payment_id ?: $row->gateway_ref_id ?: '-')->limit(18) }}</code><span class="muted">RRN: {{ str($row->rrn ?: '-')->limit(14) }}</span></div></td>
+                    <td>
+                        @if($active === 'topup' && in_array($row->status, ['pending', 'expired', 'failed', 'rejected'], true))
+                            @php($ticketDeadline = $ticketDeadlineFor($row))
+                            @php($remaining = $ticketDeadline && now()->lt($ticketDeadline) ? max(1, (int) ceil(now()->diffInSeconds($ticketDeadline) / 60)) : 0)
+                            @php($canTicket = in_array($row->status, ['expired', 'failed', 'rejected'], true) || $remaining === 0)
+                            @if($row->ticket?->submitted_to_center_at)
+                                <span class="badge ok">Terkirim</span>
+                            @elseif($row->ticket)
+                                <span class="badge ok">Sudah Ticket</span><br><span class="muted">{{ $row->ticket->ticket_no }}</span>
+                            @else
+                                <button class="btn ticket-open" type="button" data-action="{{ route('merchant.cs.topup.ticket', [$merchant, $row]) }}" @disabled(! $canTicket)>{{ $canTicket ? 'Ticket' : 'Tunggu '.$remaining.'m' }}</button>
+                            @endif
+                        @elseif($active === 'checklist' && $row->status === 'success' && ! $row->is_processed)
+                            <form method="post" action="{{ route('api.checklist.update', $row) }}">
+                                @csrf @method('PATCH')
+                                <input type="hidden" name="checked" value="1">
+                                <button class="btn primary">Checklist</button>
+                            </form>
+                        @else
+                            <span class="muted">-</span>
+                        @endif
+                    </td>
+                    <td><textarea name="cs_note_{{ $row->id }}" @unless($row->is_processed) data-cs-note data-note-url="{{ route('api.topup-requests.cs-note', $row) }}" @endunless data-preserve-key="cs-note-{{ $row->id }}" placeholder="{{ $row->is_processed ? '' : 'Tulis keterangan...' }}" @readonly($row->is_processed)>{{ $row->cs_note }}</textarea></td>
+                </tr>
+            @empty
+                <tr><td colspan="{{ $active === 'topup' ? 11 : 10 }}"><div class="empty"><strong>Belum ada transaksi.</strong>Coba ubah periode/filter atau tunggu sync Hilogate berikutnya.</div></td></tr>
+            @endforelse
+            </tbody>
+        </table>
+        @else
         <table class="table qris-table {{ $active === 'topup' ? 'topup-table' : ($active === 'history' ? 'history-table' : 'checklist-table') }}">
             <colgroup>
                 @if($active === 'topup' || $active === 'history')
-                    <col class="col-time">
-                    <col class="col-payment">
+                    <col class="col-time-mini">
+                    <col class="col-time-mini">
+                    <col class="col-duration">
+                    <col class="{{ $active === 'history' ? 'col-reference' : 'col-payment' }}">
                     <col class="col-rrn">
                     <col class="col-trx">
                     <col class="col-amount">
                     <col class="col-status">
-                    <col class="col-check">
+                    <col class="{{ $active === 'history' ? 'col-note' : 'col-check' }}">
                     <col class="col-follow">
                 @else
-                    <col class="col-time">
+                    <col class="col-time-mini">
+                    <col class="col-time-mini">
+                    <col class="col-duration">
                     <col class="col-reference">
                     <col class="col-rrn">
                     <col class="col-amount">
@@ -253,7 +384,9 @@
             <thead>
                 <tr>
                     @if($active === 'topup')
-                        <th>Timestamp</th>
+                        <th>Masuk</th>
+                        <th>Sukses</th>
+                        <th>Durasi</th>
                         <th>Payment ID</th>
                         <th>RRN</th>
                         <th>TRX ID</th>
@@ -262,7 +395,9 @@
                         <th>Checklist</th>
                         <th>Tindak Lanjut</th>
                     @elseif($active === 'history')
-                        <th>Timestamp</th>
+                        <th>Masuk</th>
+                        <th>Sukses</th>
+                        <th>Durasi</th>
                         <th>Reference</th>
                         <th>RRN</th>
                         <th>TRX ID</th>
@@ -271,7 +406,9 @@
                         <th>Keterangan</th>
                         <th>Tindak Lanjut</th>
                     @else
-                        <th>Timestamp</th>
+                        <th>Masuk</th>
+                        <th>Sukses</th>
+                        <th>Durasi</th>
                         <th>Reference</th>
                         <th>RRN</th>
                         <th>Amount</th>
@@ -284,21 +421,34 @@
             </thead>
             <tbody>
             @forelse($requests as $row)
-                <tr>
+                <tr class="{{ $row->status === 'success' && $row->is_processed ? ($active === 'checklist' ? 'checked-row' : 'topup-success-checked-row') : '' }}">
                     @if($active === 'topup')
                         <td class="time-cell">
-                            {{ $row->submitted_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}
-                            <span>{{ $row->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span>
+                            {{ $row->submitted_at?->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->submitted_at?->format('H.i.s') ?? '-' }}</span>
                         </td>
+                        <td class="time-cell">
+                            {{ $row->succeeded_at?->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->succeeded_at?->format('H.i.s') ?? '-' }}</span>
+                        </td>
+                        <td>{{ $row->successDurationLabel() }}</td>
                         <td><span class="truncate ref-line">{{ $row->payment_id ?: $row->gateway_ref_id ?: '-' }}</span></td>
                         <td><strong>{{ $row->rrn ?: '-' }}</strong></td>
                         <td><button class="btn trx-view" type="button" data-trx="{{ $row->transaction_id ?: $row->idempotency_key ?: '-' }}">Lihat</button></td>
                         <td><strong>{{ number_format((int) $row->amount, 0, ',', '.') }}</strong></td>
                         <td><span class="status-dot {{ $row->status }}" title="{{ $statusLabel($row->status) }}"></span></td>
-                        <td>
+                        <td class="checkbox-cell">
                             @if($row->status === 'success')
                                 @if($row->is_processed)
-                                    <span class="check-icon checked" title="Checked" aria-label="Checked"></span>
+                                    @if($canUncheckChecklist)
+                                        <form method="post" action="{{ route('api.checklist.update', $row) }}" class="compact-actions">
+                                            @csrf @method('PATCH')
+                                            <input type="hidden" name="checked" value="0">
+                                    <button class="check-icon checked" type="submit" title="Lepas checklist" aria-label="Lepas checklist" onclick="return confirm('Lepas checklist transaksi ini?')"></button>
+                                        </form>
+                                    @else
+                                        <span class="check-icon checked" title="Checked" aria-label="Checked"></span>
+                                    @endif
                                 @else
                                     <form method="post" action="{{ route('api.checklist.update', $row) }}" class="compact-actions">
                                         @csrf @method('PATCH')
@@ -312,7 +462,7 @@
                         </td>
                         <td>
                             @if(in_array($row->status, ['pending', 'expired', 'failed', 'rejected'], true))
-                                @php($ticketDeadline = $row->submitted_at ? $row->submitted_at->copy()->addMinutes($ticketPendingMinutes) : ($row->expires_at ? $row->expires_at->copy()->addMinutes(max(0, $ticketPendingMinutes - config('paygrid.topup.expires_in_minutes', 30))) : null))
+                                @php($ticketDeadline = $ticketDeadlineFor($row))
                                 @php($remaining = $ticketDeadline && now()->lt($ticketDeadline) ? max(1, (int) ceil(now()->diffInSeconds($ticketDeadline) / 60)) : 0)
                                 @php($canTicket = in_array($row->status, ['expired', 'failed', 'rejected'], true) || $remaining === 0)
                                 @if($row->ticket?->submitted_to_center_at)
@@ -328,9 +478,14 @@
                         </td>
                     @elseif($active === 'history')
                         <td class="time-cell">
-                            {{ $row->submitted_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}
-                            <span>{{ $row->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span>
+                            {{ $row->submitted_at?->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->submitted_at?->format('H.i.s') ?? '-' }}</span>
                         </td>
+                        <td class="time-cell">
+                            {{ $row->succeeded_at?->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->succeeded_at?->format('H.i.s') ?? '-' }}</span>
+                        </td>
+                        <td>{{ $row->successDurationLabel() }}</td>
                         <td><span class="truncate ref-line">{{ $row->customer_reference ?: $row->payment_id ?: $row->gateway_ref_id ?: '-' }}</span></td>
                         <td><strong>{{ $row->rrn ?: '-' }}</strong></td>
                         <td><button class="btn trx-view" type="button" data-trx="{{ $row->transaction_id ?: $row->idempotency_key ?: '-' }}">Lihat</button></td>
@@ -339,7 +494,7 @@
                         <td>-</td>
                         <td>
                             @if(in_array($row->status, ['pending', 'expired', 'failed', 'rejected'], true))
-                                @php($ticketDeadline = $row->submitted_at ? $row->submitted_at->copy()->addMinutes($ticketPendingMinutes) : ($row->expires_at ? $row->expires_at->copy()->addMinutes(max(0, $ticketPendingMinutes - config('paygrid.topup.expires_in_minutes', 30))) : null))
+                                @php($ticketDeadline = $ticketDeadlineFor($row))
                                 @php($remaining = $ticketDeadline && now()->lt($ticketDeadline) ? max(1, (int) ceil(now()->diffInSeconds($ticketDeadline) / 60)) : 0)
                                 @php($canTicket = in_array($row->status, ['expired', 'failed', 'rejected'], true) || $remaining === 0)
                                 @if($row->ticket?->submitted_to_center_at)
@@ -355,9 +510,14 @@
                         </td>
                     @else
                         <td class="time-cell">
-                            {{ $row->submitted_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}
-                            <span>{{ $row->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span>
+                            {{ $row->submitted_at?->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->submitted_at?->format('H.i.s') ?? '-' }}</span>
                         </td>
+                        <td class="time-cell">
+                            {{ $row->succeeded_at?->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->succeeded_at?->format('H.i.s') ?? '-' }}</span>
+                        </td>
+                        <td>{{ $row->successDurationLabel() }}</td>
                         <td><span class="truncate ref-line">{{ $row->customer_reference ?: $row->transaction_id ?: $row->gateway_ref_id ?: '-' }}</span></td>
                         <td><strong>{{ $row->rrn ?: '-' }}</strong></td>
                         <td><strong>{{ number_format((int) $row->amount, 0, ',', '.') }}</strong></td>
@@ -366,7 +526,15 @@
                         <td>-</td>
                         <td>
                             @if($row->is_processed)
-                                <span class="check-icon checked" title="Checked" aria-label="Checked"></span>
+                                @if($canUncheckChecklist)
+                                    <form method="post" action="{{ route('api.checklist.update', $row) }}" class="compact-actions">
+                                        @csrf @method('PATCH')
+                                        <input type="hidden" name="checked" value="0">
+                                    <button class="check-icon checked" type="submit" title="Lepas checklist" aria-label="Lepas checklist" onclick="return confirm('Lepas checklist transaksi ini?')"></button>
+                                    </form>
+                                @else
+                                    <span class="check-icon checked" title="Checked" aria-label="Checked"></span>
+                                @endif
                             @else
                                 <form method="post" action="{{ route('api.checklist.update', $row) }}" class="compact-actions">
                                     @csrf @method('PATCH')
@@ -378,10 +546,11 @@
                     @endif
                 </tr>
             @empty
-                <tr><td colspan="8"><div class="empty">Belum ada transaksi pada filter ini.</div></td></tr>
+                <tr><td colspan="10"><div class="empty"><strong>Belum ada transaksi.</strong>Coba ubah periode/filter atau tunggu sync Hilogate berikutnya.</div></td></tr>
             @endforelse
             </tbody>
         </table>
+        @endif
         @endif
     </div>
     <div class="pad qris-pagination">
@@ -415,14 +584,15 @@
         </div>
     </div>
 </section>
-<div id="trx-modal" hidden style="position:fixed; inset:0; z-index:20; place-items:center; padding:20px; background:rgba(6,22,47,.45)">
+@if($isWorkspace)</div>@endif
+<div id="trx-modal" data-live-modal hidden style="position:fixed; inset:0; z-index:20; place-items:center; padding:20px; background:rgba(6,22,47,.45)">
     <div class="card pad" style="width:min(560px, 100%); border-radius:12px">
         <h2>TRX ID</h2>
         <code id="trx-modal-value" style="display:block; margin:14px 0; padding:12px; border-radius:8px; background:#f7faff; overflow-wrap:anywhere"></code>
         <button class="btn" type="button" id="trx-modal-close">Tutup</button>
     </div>
 </div>
-<div id="ticket-modal" hidden style="position:fixed; inset:0; z-index:20; place-items:center; padding:20px; background:rgba(6,22,47,.45)">
+<div id="ticket-modal" data-live-modal hidden style="position:fixed; inset:0; z-index:20; place-items:center; padding:20px; background:rgba(6,22,47,.45)">
     <form id="ticket-modal-form" method="post" class="card pad" style="width:min(520px, 100%); border-radius:12px">
         @csrf
         <h2>Create Ticket</h2>

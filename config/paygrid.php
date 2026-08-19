@@ -16,11 +16,16 @@ return [
             'onboarding_password' => env('HILOGATE_ONBOARDING_PASSWORD'),
             'transaction_callback_url' => env('HILOGATE_TRANSACTION_CALLBACK_URL'),
             'withdrawal_callback_url' => env('HILOGATE_WITHDRAWAL_CALLBACK_URL'),
+            'agent_create_enabled' => env('PAYGRID_HILOGATE_AGENT_CREATE_ENABLED', false),
+        ],
+        'artageto' => [
+            'base_url' => rtrim((string) env('ARTAGETO_BASE_URL', 'https://app.artageto.com/api'), '/'),
+            'environment' => env('ARTAGETO_ENVIRONMENT', env('HILOGATE_ENVIRONMENT', 'production')),
+            'timeout' => (int) env('ARTAGETO_TIMEOUT_SECONDS', 20),
         ],
     ],
     'topup' => [
         'minimum_amount' => (int) env('PAYGRID_TOPUP_MINIMUM_AMOUNT', 10000),
-        'maximum_amount' => (int) env('PAYGRID_TOPUP_MAXIMUM_AMOUNT', 2000000),
         'expires_in_minutes' => (int) env('PAYGRID_TOPUP_EXPIRES_MINUTES', 30),
         'ticket_grace_minutes' => (int) env('PAYGRID_TOPUP_TICKET_GRACE_MINUTES', 10),
     ],
@@ -31,7 +36,12 @@ return [
         'enabled' => env('PAYGRID_GATEWAY_SYNC_ENABLED', true),
         'interval_seconds' => (int) env('PAYGRID_GATEWAY_SYNC_INTERVAL_SECONDS', 8),
         'page_size' => (int) env('PAYGRID_GATEWAY_SYNC_PAGE_SIZE', 50),
+        'max_pages' => (int) env('PAYGRID_GATEWAY_SYNC_MAX_PAGES', 10),
+        'backfill_pages_per_run' => (int) env('PAYGRID_GATEWAY_BACKFILL_PAGES_PER_RUN', 3),
         'concurrency' => (int) env('PAYGRID_GATEWAY_SYNC_CONCURRENCY', 6),
+        'success_log_retention_hours' => (int) env('PAYGRID_GATEWAY_SUCCESS_LOG_RETENTION_HOURS', 6),
+        'failed_log_retention_days' => (int) env('PAYGRID_GATEWAY_FAILED_LOG_RETENTION_DAYS', 14),
+        'failed_job_retention_days' => (int) env('PAYGRID_FAILED_JOB_RETENTION_DAYS', 14),
     ],
 
     'security' => [

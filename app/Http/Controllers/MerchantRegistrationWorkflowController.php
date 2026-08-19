@@ -37,6 +37,7 @@ class MerchantRegistrationWorkflowController extends Controller
 
     public function approve(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse
     {
+        $this->authorizeMaRegistration($request, $registration);
         abort_unless(in_array($registration->status, ['pending_ma', 'pending_agent'], true), 422);
         $data = $request->validate([
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
@@ -119,11 +120,22 @@ class MerchantRegistrationWorkflowController extends Controller
 
     public function reject(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse
     {
+        $this->authorizeMaRegistration($request, $registration);
         abort_unless(in_array($registration->status, ['pending_ma', 'pending_agent'], true), 422);
         $before = $registration->only(['status', 'approved_at']);
         $registration->update(['status' => 'rejected', 'approved_at' => null]);
         $audit->record('merchant_registration.rejected', $registration, $before, $registration->only(array_keys($before)));
 
         return back()->with('status', 'Request merchant ditolak.');
+    }
+
+    private function authorizeMaRegistration(Request $request, MerchantRegistration $registration): void
+    {
+        if ($request->user()?->role === 'superadmin') {
+            return;
+        }
+
+        $registration->loadMissing('agent');
+        abort_unless($request->user()?->role === 'ma' && (int) $registration->agent?->ma_user_id === (int) $request->user()->id, 403);
     }
 }

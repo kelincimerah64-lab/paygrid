@@ -23,7 +23,7 @@ class MetricsService
         $query = $this->metricRange(MerchantDailyMetric::query()->where('merchant_id', $merchant->id), $from, $to);
 
         return [
-            'total' => (int) $query->clone()->sum('trx_total'),
+            'total' => (int) $query->clone()->sum('trx_success'),
             'success' => (int) $query->clone()->sum('trx_success'),
             'pending' => (int) $query->clone()->sum('trx_pending'),
             'expired' => (int) $query->clone()->sum('trx_expired'),
@@ -37,7 +37,7 @@ class MetricsService
         return Merchant::query()
             ->where('agent_id', $agent->id)
             ->where('approval_status', 'approved')
-            ->withSum(['metrics as metric_trx_total' => fn (Builder $query) => $this->metricRange($query, $from, $to)], 'trx_total')
+            ->withSum(['metrics as metric_trx_total' => fn (Builder $query) => $this->metricRange($query, $from, $to)], 'trx_success')
             ->withSum(['metrics as metric_trx_success' => fn (Builder $query) => $this->metricRange($query, $from, $to)], 'trx_success')
             ->withSum(['metrics as metric_trx_pending' => fn (Builder $query) => $this->metricRange($query, $from, $to)], 'trx_pending')
             ->withSum(['metrics as metric_trx_expired' => fn (Builder $query) => $this->metricRange($query, $from, $to)], 'trx_expired')
@@ -55,7 +55,7 @@ class MetricsService
         return Merchant::query()
             ->where('approval_status', 'approved')
             ->with('agent')
-            ->withSum(['metrics as metric_trx_total' => fn (Builder $query) => $this->metricRange($query, $from, $to)], 'trx_total')
+            ->withSum(['metrics as metric_trx_total' => fn (Builder $query) => $this->metricRange($query, $from, $to)], 'trx_success')
             ->withSum(['metrics as metric_volume_success' => fn (Builder $query) => $this->metricRange($query, $from, $to)], 'amount_success')
             ->orderByRaw('COALESCE(metric_trx_total, 0) = 0')
             ->orderByDesc('metric_trx_total')

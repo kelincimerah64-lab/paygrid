@@ -6,7 +6,6 @@ use App\Models\Agent;
 use App\Models\AgentOnboardingLink;
 use App\Models\GatewaySyncLog;
 use App\Models\Merchant;
-use App\Models\MerchantDailyMetric;
 use App\Models\MerchantRegistration;
 use App\Models\MerchantSettlement;
 use App\Models\SupportTicket;
@@ -68,6 +67,22 @@ class DashboardController extends Controller
         $merchants = $metrics->agentMerchants($agent, $filters['from'] ?: null, $filters['to'] ?: null)
             ->when($filters['q'] !== '', fn ($items) => $items->filter(fn (Merchant $merchant) => str_contains(strtolower($merchant->name.' '.$merchant->merchant_id.' '.$merchant->slug), strtolower($filters['q']))))
             ->values();
+        $merchantIds = $merchants->pluck('id')->all();
+        $ticketBase = SupportTicket::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->when($filters['from'] !== '', fn ($query) => $query->whereDate('created_at', '>=', $filters['from']))
+            ->when($filters['to'] !== '', fn ($query) => $query->whereDate('created_at', '<=', $filters['to']));
+        $ticketStats = [
+            'total' => (clone $ticketBase)->count(),
+            'open' => (clone $ticketBase)->whereIn('status', ['not_started', 'open', 'in_progress'])->count(),
+            'done' => (clone $ticketBase)->where('status', 'done')->count(),
+            'issue' => (clone $ticketBase)->whereIn('center_status', ['issue_bank', 'issue_switching'])->count(),
+        ];
+        $tickets = (clone $ticketBase)
+            ->with(['merchant', 'topupRequest'])
+            ->latest()
+            ->limit(30)
+            ->get();
 
         return view('paygrid.agent-overview', [
             'roleLabel' => $agent->name,
@@ -75,6 +90,8 @@ class DashboardController extends Controller
             'active' => 'overview',
             'agent' => $agent,
             'merchants' => $merchants,
+            'tickets' => $tickets,
+            'ticketStats' => $ticketStats,
             'reportFilters' => $filters,
         ]);
     }
@@ -132,14 +149,21 @@ class DashboardController extends Controller
             'recipient_telegram' => ['nullable', 'string', 'max:80'],
         ]);
 
-        $link = AgentOnboardingLink::query()->create([
-            'agent_id' => $agent->id,
-            'token' => Str::random(48),
-            'recipient_email' => $data['recipient_email'] ?? null,
-            'recipient_telegram' => $data['recipient_telegram'] ?? null,
-            'status' => 'active',
-            'expires_at' => now()->addHours(max(1, (int) config('paygrid.onboarding.link_expires_hours', 24))),
-        ]);
+        $link = \Illuminate\Support\Facades\DB::transaction(function () use ($agent, $data) {
+            AgentOnboardingLink::query()
+                ->where('agent_id', $agent->id)
+                ->where('status', 'active')
+                ->update(['status' => 'expired', 'expires_at' => now()]);
+
+            return AgentOnboardingLink::query()->create([
+                'agent_id' => $agent->id,
+                'token' => Str::random(48),
+                'recipient_email' => $data['recipient_email'] ?? null,
+                'recipient_telegram' => $data['recipient_telegram'] ?? null,
+                'status' => 'active',
+                'expires_at' => now()->addHours(max(1, (int) config('paygrid.onboarding.link_expires_hours', 24))),
+            ]);
+        });
         $audit->record('agent.onboarding_link_created', $link, null, $link->only(['agent_id', 'recipient_email', 'recipient_telegram', 'status', 'expires_at']));
 
         return back()->with('status', 'Link form unik berhasil dibuat.')->with('onboarding_link', route('merchant-registration.token-form', $link));
@@ -244,12 +268,11 @@ class DashboardController extends Controller
 
         return response()->streamDownload(function () use ($merchants): void {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['date', 'merchant_name', 'merchant_id', 'type', 'status', 'volume_success', 'trx_total', 'pending_balance']);
+            fputcsv($handle, ['date', 'merchant_name', 'type', 'status', 'volume_success', 'trx_total', 'pending_balance']);
             foreach ($merchants as $merchant) {
                 fputcsv($handle, [
                     now('Asia/Jakarta')->toDateString(),
                     $merchant->name,
-                    $merchant->merchant_id,
                     $merchant->merchant_type,
                     $merchant->approval_status,
                     (int) ($merchant->metric_volume_success ?? 0),
@@ -272,6 +295,7 @@ class DashboardController extends Controller
     private function currentAgent(): Agent
     {
         $user = request()->user();
+        abort_unless($user?->role === 'agent', 403);
         if ($user?->role === 'agent') {
             return Agent::query()
                 ->where('code', $user->username)
@@ -279,7 +303,7 @@ class DashboardController extends Controller
                 ->firstOrFail();
         }
 
-        return Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        abort(403);
     }
 
     public function adminSimple(string $page, MenuBuilder $menus): View
@@ -320,13 +344,15 @@ class DashboardController extends Controller
         $rangeStart = $from ? CarbonImmutable::parse($from, 'Asia/Jakarta')->startOfDay() : null;
         $rangeEnd = $to ? CarbonImmutable::parse($to, 'Asia/Jakarta')->endOfDay() : null;
         $search = trim((string) request('q', ''));
-        $rangeQuery = $this->transactionBaseQuery($merchant, $rangeStart, $rangeEnd, $search);
+        $rangeQuery = $this->transactionBaseQuery($merchant, $from, $to, $search);
         $requests = TopupRequest::query()
             ->with('ticket')
             ->where('merchant_id', $merchant->id)
-            ->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('submitted_at', [$rangeStart, $rangeEnd]))
+            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
             ->when($page === 'checklist', fn ($query) => $query->where('status', 'success'))
             ->when(request('status') && request('status') !== 'all', fn ($query) => request('status') === 'expired' ? $query->whereIn('status', ['expired', 'failed', 'rejected']) : $query->where('status', request('status')))
+            ->when(request('processed') === 'checked', fn ($query) => $query->where('is_processed', true))
+            ->when(request('processed') === 'unchecked', fn ($query) => $query->where('is_processed', false))
             ->when($search !== '', fn ($query) => $this->applyTransactionSearch($query, $search))
             ->orderByRaw("CASE WHEN status = 'success' AND is_processed = 0 THEN 0 WHEN status = 'success' AND is_processed = 1 THEN 1 WHEN status = 'pending' THEN 2 WHEN status = 'expired' THEN 3 ELSE 4 END")
             ->latest('submitted_at')
@@ -352,7 +378,7 @@ class DashboardController extends Controller
             'menus' => $menu,
             'active' => $page,
             'summary' => $metrics->merchantSummary($merchant, $from, $to),
-            'stats' => $stats = $this->dashboardStats($merchant, $rangeStart, $rangeEnd, $search),
+            'stats' => $stats = $this->dashboardStats($merchant, $from, $to, $search),
             'topupCards' => $this->topupCards($stats),
             'gatewayBalance' => in_array($page, ['topup', 'checklist', 'history'], true) ? app(\App\Services\GatewayBalanceService::class)->current($merchant) : ['active' => 0, 'pending' => 0, 'source' => 'none'],
             'latestSync' => GatewaySyncLog::query()
@@ -373,71 +399,39 @@ class DashboardController extends Controller
         ]);
     }
 
-    private function transactionBaseQuery(Merchant $merchant, ?CarbonImmutable $rangeStart, ?CarbonImmutable $rangeEnd, string $search): \Illuminate\Database\Eloquent\Builder
+    private function transactionBaseQuery(Merchant $merchant, ?string $from, ?string $to, string $search): \Illuminate\Database\Eloquent\Builder
     {
         return TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('submitted_at', [$rangeStart, $rangeEnd]))
+            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
             ->when($search !== '', fn ($query) => $this->applyTransactionSearch($query, $search));
     }
 
     private function applyTransactionSearch($query, string $search): void
     {
         $query->where(function ($nested) use ($search) {
-            $nested->where('payment_id', 'like', "{$search}%")
-                ->orWhere('gateway_ref_id', 'like', "{$search}%")
-                ->orWhere('rrn', 'like', "{$search}%")
-                ->orWhere('transaction_id', 'like', "{$search}%")
-                ->orWhere('customer_reference', 'like', "{$search}%");
+            $like = '%'.$search.'%';
+            $nested->where('payment_id', 'like', $like)
+                ->orWhere('gateway_ref_id', 'like', $like)
+                ->orWhere('rrn', 'like', $like)
+                ->orWhere('transaction_id', 'like', $like)
+                ->orWhere('customer_reference', 'like', $like)
+                ->orWhere('amount', 'like', $like)
+                ->orWhereRelation('merchant', 'name', 'like', $like)
+                ->orWhereRelation('merchant', 'slug', 'like', $like)
+                ->orWhereRelation('merchant', 'merchant_id', 'like', $like);
         });
     }
 
-    private function dashboardStats(Merchant $merchant, ?CarbonImmutable $rangeStart, ?CarbonImmutable $rangeEnd, string $search): array
+    private function dashboardStats(Merchant $merchant, ?string $from, ?string $to, string $search): array
     {
-        if ($search === '') {
-            $metrics = MerchantDailyMetric::query()
-                ->where('merchant_id', $merchant->id)
-                ->when($rangeStart && $rangeEnd, fn ($query) => $query
-                    ->whereDate('metric_date', '>=', $rangeStart->toDateString())
-                    ->whereDate('metric_date', '<=', $rangeEnd->toDateString()))
-                ->selectRaw('COALESCE(SUM(trx_total), 0) as total')
-                ->selectRaw('COALESCE(SUM(trx_success), 0) as success')
-                ->selectRaw('COALESCE(SUM(trx_pending), 0) as pending')
-                ->selectRaw('COALESCE(SUM(trx_expired), 0) as expired')
-                ->selectRaw('COALESCE(SUM(amount_success), 0) as volume_success')
-                ->selectRaw('COALESCE(SUM(amount_total), 0) as volume_total')
-                ->selectRaw('COALESCE(SUM(amount_pending), 0) as pending_amount')
-                ->selectRaw('COALESCE(SUM(amount_expired), 0) as expired_amount')
-                ->selectRaw('COALESCE(SUM(trx_success_processed), 0) as success_checked_count')
-                ->selectRaw('COALESCE(SUM(amount_success_processed), 0) as success_checked_amount')
-                ->selectRaw('COALESCE(SUM(trx_success_unprocessed), 0) as success_unchecked_count')
-                ->selectRaw('COALESCE(SUM(amount_success_unprocessed), 0) as success_unchecked_amount')
-                ->first();
-
-            return [
-                'total' => (int) $metrics->total,
-                'success' => (int) $metrics->success,
-                'pending' => (int) $metrics->pending,
-                'expired' => (int) $metrics->expired,
-                'failed' => 0,
-                'volume_success' => (int) $metrics->volume_success,
-                'volume_total' => (int) $metrics->volume_total,
-                'pending_amount' => (int) $metrics->pending_amount,
-                'expired_amount' => (int) $metrics->expired_amount,
-                'success_checked_count' => (int) $metrics->success_checked_count,
-                'success_checked_amount' => (int) $metrics->success_checked_amount,
-                'success_unchecked_count' => (int) $metrics->success_unchecked_count,
-                'success_unchecked_amount' => (int) $metrics->success_unchecked_amount,
-            ];
-        }
-
-        $row = $this->transactionBaseQuery($merchant, $rangeStart, $rangeEnd, $search)
-            ->selectRaw('COUNT(*) as total')
+        $row = $this->transactionBaseQuery($merchant, $from, $to, $search)
+            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as total")
             ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success")
             ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending")
             ->selectRaw("SUM(CASE WHEN status IN ('expired', 'failed', 'rejected') THEN 1 ELSE 0 END) as expired")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as volume_success")
-            ->selectRaw('COALESCE(SUM(amount), 0) as volume_total')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as volume_total")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as pending_amount")
             ->selectRaw("COALESCE(SUM(CASE WHEN status IN ('expired', 'failed', 'rejected') THEN amount ELSE 0 END), 0) as expired_amount")
             ->selectRaw("SUM(CASE WHEN status = 'success' AND is_processed = 1 THEN 1 ELSE 0 END) as success_checked_count")
@@ -498,12 +492,12 @@ class DashboardController extends Controller
         $rangeStart = $from ? CarbonImmutable::parse($from, 'Asia/Jakarta')->startOfDay() : null;
         $rangeEnd = $to ? CarbonImmutable::parse($to, 'Asia/Jakarta')->endOfDay() : null;
         $search = trim((string) request('q', ''));
-        $status = request('status', 'all');
+        $status = request('status', 'success');
         $settlementStatus = request('settlement_status', 'all');
 
         $transactions = TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('submitted_at', [$rangeStart, $rangeEnd]))
+            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
             ->when($status !== 'all', fn ($query) => $status === 'expired' ? $query->whereIn('status', ['expired', 'failed', 'rejected']) : $query->where('status', $status))
             ->when($search !== '', fn ($query) => $this->applyTransactionSearch($query, $search))
             ->latest('submitted_at')
@@ -524,7 +518,7 @@ class DashboardController extends Controller
             ->simplePaginate(config('paygrid.reports.default_page_size', 50), ['*'], 'settlement_page')
             ->withQueryString();
 
-        $stats = $this->financeStats($merchant, $rangeStart, $rangeEnd, $search);
+        $stats = $this->financeStats($merchant, $from, $to, $search);
 
         return view('paygrid.merchant-finance', [
             'roleLabel' => $merchant->name.' Finance',
@@ -558,56 +552,21 @@ class DashboardController extends Controller
         ]);
     }
 
-    private function financeStats(Merchant $merchant, ?CarbonImmutable $rangeStart, ?CarbonImmutable $rangeEnd, string $search): array
+    private function financeStats(Merchant $merchant, ?string $from, ?string $to, string $search): array
     {
-        $todayStart = now('Asia/Jakarta')->startOfDay();
-        $todayEnd = now('Asia/Jakarta')->endOfDay();
-        $today = $this->transactionBaseQuery($merchant, CarbonImmutable::instance($todayStart), CarbonImmutable::instance($todayEnd), $search)
-            ->selectRaw('COUNT(*) as total')
-            ->selectRaw('COALESCE(SUM(amount), 0) as volume')
+        $todayDate = now('Asia/Jakarta')->toDateString();
+        $today = $this->transactionBaseQuery($merchant, $todayDate, $todayDate, $search)
+            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as total")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as volume")
             ->first();
 
-        if ($search === '') {
-            $metrics = MerchantDailyMetric::query()
-                ->where('merchant_id', $merchant->id)
-                ->when($rangeStart && $rangeEnd, fn ($query) => $query
-                    ->whereDate('metric_date', '>=', $rangeStart->toDateString())
-                    ->whereDate('metric_date', '<=', $rangeEnd->toDateString()))
-                ->selectRaw('COALESCE(SUM(trx_total), 0) as total')
-                ->selectRaw('COALESCE(SUM(trx_success), 0) as success')
-                ->selectRaw('COALESCE(SUM(trx_pending), 0) as pending')
-                ->selectRaw('COALESCE(SUM(trx_expired), 0) as expired')
-                ->selectRaw('COALESCE(SUM(amount_success), 0) as gross_success')
-                ->selectRaw('COALESCE(SUM(amount_total), 0) as volume_total')
-                ->selectRaw('COALESCE(SUM(net_success), 0) as net_success')
-                ->selectRaw('COALESCE(SUM(amount_pending), 0) as pending_amount')
-                ->first();
-
-            $grossSuccess = (int) $metrics->gross_success;
-            $netSuccess = (int) $metrics->net_success;
-
-            return [
-                'total' => (int) $metrics->total,
-                'success' => (int) $metrics->success,
-                'pending' => (int) $metrics->pending,
-                'expired' => (int) $metrics->expired,
-                'gross_success' => $grossSuccess,
-                'volume_total' => (int) $metrics->volume_total,
-                'net_success' => $netSuccess,
-                'fee_amount' => max(0, $grossSuccess - $netSuccess),
-                'pending_amount' => (int) $metrics->pending_amount,
-                'today_total' => (int) $today->total,
-                'today_volume' => (int) $today->volume,
-            ];
-        }
-
-        $row = $this->transactionBaseQuery($merchant, $rangeStart, $rangeEnd, $search)
-            ->selectRaw('COUNT(*) as total')
+        $row = $this->transactionBaseQuery($merchant, $from, $to, $search)
+            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as total")
             ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success")
             ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending")
             ->selectRaw("SUM(CASE WHEN status IN ('expired', 'failed', 'rejected') THEN 1 ELSE 0 END) as expired")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as gross_success")
-            ->selectRaw('COALESCE(SUM(amount), 0) as volume_total')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as volume_total")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN net_amount ELSE 0 END), 0) as net_success")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN fee_amount ELSE 0 END), 0) as fee_amount")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as pending_amount")

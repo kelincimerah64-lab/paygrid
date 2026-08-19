@@ -2,8 +2,8 @@
 
 @php
     $money = fn ($value) => number_format((int) ($value ?? 0), 0, ',', '.');
-    $statusClass = fn ($status) => $status === 'success' ? 'ok' : (in_array($status, ['expired', 'failed', 'rejected'], true) ? 'danger' : 'warn');
-    $statusLabel = fn ($status) => ucfirst(str_replace('_', ' ', $status ?: '-'));
+    $statusClass = fn ($status) => App\Support\PayGridLabels::badge(strtolower((string) $status));
+    $statusLabel = fn ($status) => App\Support\PayGridLabels::status(strtolower((string) $status));
 @endphp
 
 @section('content')
@@ -20,22 +20,22 @@
 
 <section class="grid qris-metrics">
     <div class="card pad qris-metric">
-        <span>Total Transaksi</span>
+        <span>Transaksi Sukses</span>
         <strong>{{ $money($stats['total'] ?? 0) }}</strong>
-        <small>{{ $money($stats['total'] ?? 0) }} transaksi periode ini; {{ $money($stats['today_total'] ?? 0) }} hari ini</small>
+        <small>{{ $money($stats['total'] ?? 0) }} sukses periode ini; {{ $money($stats['today_total'] ?? 0) }} hari ini</small>
     </div>
     <div class="card pad qris-metric">
-        <span>Total Volume</span>
+        <span>Volume Sukses</span>
         <strong>{{ $money($stats['volume_total'] ?? 0) }}</strong>
         <small>Periode ini; Rp {{ $money($stats['today_volume'] ?? 0) }} hari ini</small>
     </div>
     <div class="card pad qris-metric primary">
-        <span>Available Balance</span>
+        <span>Available Balance HG</span>
         <strong>{{ $money($gatewayBalance['active'] ?? 0) }}</strong>
         <small>Saldo settlement</small>
     </div>
     <div class="card pad qris-metric pending">
-        <span>Pending Balance</span>
+        <span>Saldo Pending HG</span>
         <strong>{{ $money($gatewayBalance['pending'] ?? 0) }}</strong>
         <small>Saldo pending</small>
     </div>
@@ -50,10 +50,10 @@
                 <p class="muted">Menu settlement belum dibuka untuk eksekusi. Nanti bagian ini akan berisi approval settlement, status pencairan, audit, dan rekonsiliasi saldo.</p>
             </div>
             <div class="mini-grid">
-                <div class="fee-pill"><span>Net Settlement</span><strong>Rp {{ $money($stats['net_success'] ?? 0) }}</strong></div>
+                <div class="fee-pill"><span>Settlement</span><strong>Rp {{ $money($stats['net_success'] ?? 0) }}</strong></div>
                 <div class="fee-pill"><span>Fee</span><strong>Rp {{ $money($stats['fee_amount'] ?? 0) }}</strong></div>
                 <div class="fee-pill"><span>Success</span><strong>{{ $money($stats['success'] ?? 0) }}</strong></div>
-                <div class="fee-pill"><span>Pending</span><strong>{{ $money($stats['pending'] ?? 0) }}</strong></div>
+                <div class="fee-pill"><span>Pending Transaksi</span><strong>{{ $money($stats['pending'] ?? 0) }}</strong></div>
             </div>
         </div>
     </section>
@@ -85,11 +85,13 @@
         </div>
     </form>
 
-    <div class="table-wrap">
+    <div class="table-wrap sticky-head">
         <table class="table qris-table finance-table">
             <thead>
                 <tr>
-                    <th class="col-time">Tanggal</th>
+                    <th class="col-time">Masuk</th>
+                    <th class="col-time">Sukses</th>
+                    <th>Durasi</th>
                     <th>Reference</th>
                     <th>RRN</th>
                     <th>Gross</th>
@@ -101,7 +103,9 @@
             <tbody>
             @forelse($transactions as $transaction)
                 <tr>
-                    <td class="time-cell">{{ $transaction->submitted_at?->timezone('Asia/Jakarta')->format('d M y') ?? '-' }}<span>{{ $transaction->submitted_at?->timezone('Asia/Jakarta')->format('H:i:s') ?? '-' }}</span></td>
+                    <td class="time-cell">{{ $transaction->submitted_at?->format('d M y') ?? '-' }}<span>{{ $transaction->submitted_at?->format('H:i:s') ?? '-' }}</span></td>
+                    <td class="time-cell">{{ $transaction->succeeded_at?->format('d M y') ?? '-' }}<span>{{ $transaction->succeeded_at?->format('H:i:s') ?? '-' }}</span></td>
+                    <td>{{ $transaction->successDurationLabel() }}</td>
                     <td><strong class="truncate ref-line">{{ $transaction->payment_id ?: ($transaction->gateway_ref_id ?: '-') }}</strong><span class="muted truncate ref-line">TRX: {{ $transaction->transaction_id ?: '-' }}</span></td>
                     <td class="truncate">{{ $transaction->rrn ?: '-' }}</td>
                     <td>Rp {{ $money($transaction->amount) }}</td>
@@ -110,7 +114,7 @@
                     <td><span class="badge {{ $statusClass($transaction->status) }}">{{ $statusLabel($transaction->status) }}</span></td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="empty">Belum ada transaksi pada filter ini.</td></tr>
+                <tr><td colspan="9" class="empty"><strong>Belum ada transaksi.</strong>Coba ubah periode/status atau tunggu sync Hilogate berikutnya.</td></tr>
             @endforelse
             </tbody>
         </table>
@@ -158,7 +162,7 @@
         </form>
     </div>
 
-    <div class="table-wrap">
+    <div class="table-wrap sticky-head">
         <table class="table qris-table finance-table settlement-table">
             <thead>
                 <tr>

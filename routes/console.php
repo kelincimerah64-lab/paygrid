@@ -11,12 +11,15 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Artisan::command('gateway:sync-transactions {--merchant=} {--from=} {--to=}', function () {
+Artisan::command('gateway:sync-transactions {--merchant=} {--from=} {--to=} {--max-pages=} {--page-size=} {--queue=default}', function (\App\Services\GatewaySyncDispatcher $dispatcher) {
     $query = Merchant::query()
         ->where('approval_status', 'approved')
-        ->where('gateway', 'hilogate')
+        ->whereIn('gateway', ['hilogate', 'artageto'])
         ->whereNotNull('merchant_id')
-        ->whereNotNull('merchant_key');
+        ->whereNotNull('merchant_key')
+        ->where(fn ($scope) => $scope
+            ->where(fn ($nested) => $nested->where('merchant_type', 'cm')->where('topup_enabled', true))
+            ->orWhere('merchant_type', 'script'));
 
     if ($this->option('merchant')) {
         $query->where(fn ($scope) => $scope
@@ -27,24 +30,29 @@ Artisan::command('gateway:sync-transactions {--merchant=} {--from=} {--to=}', fu
     $filters = array_filter([
         'from' => $this->option('from'),
         'to' => $this->option('to'),
+        'max_pages' => $this->option('max-pages'),
+        'page_size' => $this->option('page-size'),
     ]);
 
     $count = 0;
 
-    $query->chunkById(100, function ($merchants) use ($filters, &$count) {
+    $queue = (string) $this->option('queue');
+
+    $query->chunkById(100, function ($merchants) use ($dispatcher, $filters, $queue, &$count) {
         foreach ($merchants as $merchant) {
-            SyncMerchantTransactions::dispatch($merchant->id, $filters);
-            $count++;
+            if ($dispatcher->dispatch($merchant->id, $filters, $queue)) {
+                $count++;
+            }
         }
     });
 
-    $this->info("Dispatched {$count} merchant sync job(s).");
+    $this->info("Dispatched {$count} merchant sync job(s) to {$queue}; skipped merchants with active sync lock.");
 })->purpose('Dispatch background GET polling jobs for approved merchants.');
 
 Artisan::command('gateway:sync-balances {--merchant=}', function (\App\Services\GatewayBalanceService $balances) {
     $query = Merchant::query()
         ->where('approval_status', 'approved')
-        ->where('gateway', 'hilogate')
+        ->whereIn('gateway', ['hilogate', 'artageto'])
         ->whereNotNull('merchant_id')
         ->whereNotNull('merchant_key');
 
@@ -147,13 +155,74 @@ Artisan::command('gateway:import-hilogate {merchant_id} {--slug=} {--name=} {--t
             app(\App\Services\Gateway\GatewayManager::class),
             app(\App\Services\TransactionIngestionService::class),
             app(\App\Services\GatewayBalanceService::class),
+            app(\App\Services\GatewaySyncDispatcher::class),
         );
         $this->info("Synced merchant {$merchant->name} into PayGrid.");
     } else {
-        SyncMerchantTransactions::dispatch($merchant->id);
+        app(\App\Services\GatewaySyncDispatcher::class)->dispatch($merchant->id);
         $this->info("Imported merchant {$merchant->name} and dispatched sync job.");
     }
 })->purpose('Import one Hilogate merchant mapping without storing credentials in source.');
+
+Artisan::command('paygrid:queue-monitor', function () {
+    $oldestJob = \Illuminate\Support\Facades\DB::table('jobs')
+        ->whereIn('queue', ['default', 'live', 'backfill'])
+        ->whereNull('reserved_at')
+        ->where('available_at', '<=', time())
+        ->min('created_at');
+    $queueLag = $oldestJob ? max(0, time() - (int) $oldestJob) : 0;
+    $failedJobs = \Illuminate\Support\Facades\DB::table('failed_jobs')
+        ->where('failed_at', '>=', now()->subMinutes(15))
+        ->where('exception', 'not like', '%SQLSTATE[40001]%')
+        ->where('exception', 'not like', '%Deadlock found%')
+        ->count();
+    $latestSync = \App\Models\GatewaySyncLog::query()->where('direction', 'pull')->latest('finished_at')->first();
+    $latestCallback = \App\Models\TopupRequest::query()->whereNotNull('callback_received_at')->latest('callback_received_at')->first();
+    $syncLag = $latestSync?->finished_at ? now()->diffInSeconds($latestSync->finished_at) : null;
+    $callbackLag = $latestCallback?->callback_received_at ? now()->diffInSeconds($latestCallback->callback_received_at) : null;
+
+    $this->line('queue_lag_seconds=' . $queueLag);
+    $this->line('failed_jobs=' . $failedJobs);
+    $this->line('sync_lag_seconds=' . ($syncLag ?? 'none'));
+    $this->line('callback_lag_seconds=' . ($callbackLag ?? 'none'));
+
+    if ($queueLag > 120 || $failedJobs > 0 || $syncLag === null || $syncLag > 180) {
+        \Illuminate\Support\Facades\Log::warning('paygrid.queue_monitor.alert', compact('queueLag', 'failedJobs', 'syncLag', 'callbackLag'));
+    }
+
+    return ($queueLag > 300 || $failedJobs > 0) ? self::FAILURE : self::SUCCESS;
+})->purpose('Report queue lag, failed jobs, sync lag, and callback lag.');
+
+Artisan::command('paygrid:maintenance-prune', function () {
+    $successHours = max(1, (int) config('paygrid.gateway_sync.success_log_retention_hours', 6));
+    $failedDays = max(1, (int) config('paygrid.gateway_sync.failed_log_retention_days', 14));
+    $failedJobDays = max(1, (int) config('paygrid.gateway_sync.failed_job_retention_days', 14));
+
+    $deletedSuccessLogs = \App\Models\GatewaySyncLog::query()
+        ->where('direction', 'pull')
+        ->where('status', 'success')
+        ->where('created_at', '<', now()->subHours($successHours))
+        ->delete();
+
+    $deletedFailedLogs = \App\Models\GatewaySyncLog::query()
+        ->where('direction', 'pull')
+        ->where('status', 'failed')
+        ->where('created_at', '<', now()->subDays($failedDays))
+        ->delete();
+
+    $deletedFailedJobs = \Illuminate\Support\Facades\DB::table('failed_jobs')
+        ->where('failed_at', '<', now()->subDays($failedJobDays))
+        ->delete();
+
+    $deletedDeadlockJobs = \Illuminate\Support\Facades\DB::table('failed_jobs')
+        ->where('failed_at', '<', now()->subMinutes(5))
+        ->where(fn ($query) => $query
+            ->where('exception', 'like', '%SQLSTATE[40001]%')
+            ->orWhere('exception', 'like', '%Deadlock found%'))
+        ->delete();
+
+    $this->info("Pruned {$deletedSuccessLogs} success sync log(s), {$deletedFailedLogs} failed sync log(s), {$deletedFailedJobs} failed job(s), and {$deletedDeadlockJobs} transient deadlock job(s).");
+})->purpose('Prune high-volume operational PayGrid logs without touching transaction data.');
 
 Artisan::command('metrics:rebuild-daily {date?}', function (\App\Services\MetricRollupService $rollups) {
     $date = $this->argument('date') ?: now('Asia/Jakarta')->toDateString();

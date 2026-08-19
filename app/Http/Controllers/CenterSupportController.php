@@ -7,6 +7,7 @@ use App\Services\AuditLogService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\View\View;
 
 class CenterSupportController extends Controller
@@ -82,8 +83,20 @@ class CenterSupportController extends Controller
 
     public static function evidenceUrl(SupportTicket $ticket): ?string
     {
-        $first = ($ticket->attachments ?? [])[0]['path'] ?? null;
+        return count($ticket->attachments ?? []) ? route('center-support.tickets.attachment', [$ticket, 0]) : null;
+    }
 
-        return $first ? Storage::disk('public')->url($first) : null;
+    public function attachment(Request $request, SupportTicket $ticket, int $index): StreamedResponse
+    {
+        abort_unless($ticket->submitted_to_center_at, 404);
+
+        $attachment = ($ticket->attachments ?? [])[$index] ?? null;
+        abort_unless($attachment && isset($attachment['path']), 404);
+
+        $disk = $attachment['disk'] ?? 'public';
+        abort_unless(in_array($disk, ['local', 'public'], true), 404);
+        abort_unless(Storage::disk($disk)->exists($attachment['path']), 404);
+
+        return Storage::disk($disk)->download($attachment['path'], $attachment['name'] ?? basename($attachment['path']));
     }
 }

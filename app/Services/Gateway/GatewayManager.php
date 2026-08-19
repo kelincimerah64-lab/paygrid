@@ -10,6 +10,7 @@ class GatewayManager
     {
         return match ($merchant->gateway) {
             'hilogate' => app(HilogateClient::class),
+            'artageto' => app(ArtagetoClient::class),
             default => throw new \RuntimeException("Gateway {$merchant->gateway} belum tersedia untuk transaksi top-up."),
         };
     }

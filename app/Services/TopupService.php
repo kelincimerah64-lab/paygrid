@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Models\Merchant;
 use App\Models\TopupRequest;
 use App\Services\Gateway\GatewayManager;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class TopupService
 {
@@ -15,9 +17,18 @@ class TopupService
     public function create(Merchant $merchant, string $customerReference, int $amount, ?string $idempotencyKey = null): TopupRequest
     {
         $idempotencyKey ??= (string) Str::uuid();
-        $existing = TopupRequest::query()->where('idempotency_key', $idempotencyKey)->first();
+        $existing = TopupRequest::query()
+            ->where('merchant_id', $merchant->id)
+            ->where('idempotency_key', $idempotencyKey)
+            ->first();
 
         if ($existing) {
+            if ((int) $existing->amount !== $amount || (string) $existing->customer_reference !== $customerReference) {
+                throw ValidationException::withMessages([
+                    'idempotency_key' => 'Idempotency key sudah dipakai untuk nominal atau reference berbeda.',
+                ]);
+            }
+
             return $existing;
         }
 
@@ -25,6 +36,7 @@ class TopupService
             'merchant_id' => $merchant->id,
             'customer_reference' => $customerReference,
             'idempotency_key' => $idempotencyKey,
+            'public_token' => (string) Str::uuid(),
             'gateway' => $merchant->gateway,
             'data_source' => 'public_submit',
             'status' => 'pending',
@@ -55,9 +67,27 @@ class TopupService
             ]);
         } catch (\Throwable $exception) {
             $request->update(['status' => 'failed', 'gateway_payload' => ['error' => $exception->getMessage()]]);
-            throw $exception;
+            throw ValidationException::withMessages([
+                'amount' => $this->gatewayFailureMessage($exception),
+            ]);
         }
 
         return $request->refresh();
+    }
+
+    private function gatewayFailureMessage(\Throwable $exception): string
+    {
+        if ($exception instanceof RequestException && $exception->response) {
+            $payload = $exception->response->json();
+            $message = is_array($payload)
+                ? ($payload['message'] ?? $payload['error'] ?? $payload['errors']['amount'][0] ?? null)
+                : null;
+
+            if (is_string($message) && trim($message) !== '') {
+                return 'Topup ditolak gateway: '.trim($message);
+            }
+        }
+
+        return 'Topup belum bisa dibuat di gateway. Silakan cek nominal dan coba lagi.';
     }
 }

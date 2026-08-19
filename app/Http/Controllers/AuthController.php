@@ -31,12 +31,13 @@ class AuthController extends Controller
             return back()->withErrors(['email' => "Terlalu banyak percobaan login. Coba lagi {$seconds} detik."])->onlyInput('email');
         }
 
-        $user = User::query()
+        $candidates = User::query()
             ->whereRaw('LOWER(email) = ?', [$login])
             ->orWhereRaw('LOWER(username) = ?', [$login])
-            ->first();
+            ->get();
+        $user = $candidates->first(fn (User $candidate): bool => $this->passwordMatches($credentials['password'], (string) $candidate->password));
 
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+        if (! $user) {
             RateLimiter::hit($throttleKey, 60);
             $this->auditAuth('auth.login_failed', $user, $request, ['login' => $credentials['email']]);
 
@@ -56,7 +57,7 @@ class AuthController extends Controller
             return back()->withErrors(['email' => 'Akun nonaktif. Hubungi admin.'])->onlyInput('email');
         }
 
-        if (in_array($request->user()->role, ['cs', 'finance', 'admin'], true) && ! $request->user()->merchant_id) {
+        if (in_array($request->user()->role, ['cs', 'finance', 'admin', 'readonly_admin', 'readonly_cs'], true) && ! $request->user()->merchant_id) {
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -66,7 +67,7 @@ class AuthController extends Controller
 
         $this->auditAuth('auth.login_success', $request->user(), $request);
 
-        if (in_array($request->user()->role, ['cs', 'finance', 'admin'], true)) {
+        if (in_array($request->user()->role, ['cs', 'finance', 'admin', 'readonly_admin', 'readonly_cs'], true)) {
             return redirect($this->homeFor($request->user()->role));
         }
 
@@ -95,11 +96,22 @@ class AuthController extends Controller
             'cs_pusat' => route('center-support.tickets'),
             'agent' => route('agent.overview'),
             'admin' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),
+            'readonly_admin' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),
             'ma' => route('ma.overview'),
             'cs' => $user?->merchant ? route('merchant.cs.tickets', $user->merchant) : route('login'),
+            'readonly_cs' => $user?->merchant ? route('merchant.cs.tickets', $user->merchant) : route('login'),
             'finance' => $user?->merchant ? route('merchant.finance.overview', $user->merchant) : route('login'),
             default => route('login'),
         };
+    }
+
+    private function passwordMatches(string $plain, string $hash): bool
+    {
+        try {
+            return Hash::check($plain, $hash);
+        } catch (\RuntimeException) {
+            return password_verify($plain, $hash);
+        }
     }
 
     private function auditAuth(string $action, ?User $user, Request $request, array $payload = []): void

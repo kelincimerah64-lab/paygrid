@@ -2,8 +2,8 @@
 
 @php
     $money = fn ($value) => 'Rp '.number_format((int) $value, 0, ',', '.');
-    $pct = fn ($value) => rtrim(rtrim(number_format((float) $value, 4, ',', '.'), '0'), ',').'%';
-    $pctInput = fn ($value) => rtrim(rtrim(number_format((float) $value, 4, '.', ''), '0'), '.');
+    $pct = fn ($value) => number_format((float) $value, 2, ',', '.').'%';
+    $pctInput = fn ($value) => number_format((float) $value, 2, '.', '');
     $maMdr = fn ($ma) => (float) $ma->base_hg_percent + (float) $ma->connection_fee_percent + (float) $ma->settlement_fee_percent + (float) $ma->ma_fee_percent;
     $agentMdr = fn ($agent) => (float) $agent->base_hg_percent + (float) $agent->connection_fee_percent + (float) $agent->settlement_fee_percent + (float) $agent->ma_fee_percent + (float) $agent->default_agent_fee_percent;
     $merchantMdr = fn ($merchant) => (float) $merchant->base_mdr_percent + (float) $merchant->connection_fee_percent + (float) $merchant->settlement_fee_percent + (float) $merchant->ma_fee_percent + (float) $merchant->agent_fee_percent + (float) $merchant->toko_fee_percent;
@@ -52,7 +52,7 @@
 
 @if($active === 'dashboard-fee')
     <section class="grid qris-metrics">
-        <div class="card pad qris-metric primary"><span>Total Transaksi</span><strong>{{ number_format($summary['total'], 0, ',', '.') }}</strong></div>
+        <div class="card pad qris-metric primary"><span>Transaksi Sukses</span><strong>{{ number_format($summary['total'], 0, ',', '.') }}</strong></div>
         <div class="card pad qris-metric success"><span>Volume Sukses</span><strong>{{ $money($summary['success_volume']) }}</strong></div>
         <div class="card pad qris-metric pending"><span>Total Fee</span><strong>{{ $money($summary['fee_total']) }}</strong></div>
         <div class="card pad qris-metric"><span>Merchant</span><strong>{{ $merchants->count() }}</strong></div>
@@ -125,11 +125,11 @@
                         <td><input form="ma-create" name="contact"></td>
                         <td><select form="ma-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
                         <td><input form="ma-create" name="password" required></td>
-                        <td><input form="ma-create" name="base_hg_percent" value="0.8" required></td>
+                        <td><input form="ma-create" name="base_hg_percent" value="0.80" required></td>
                         <td><input form="ma-create" name="connection_fee_percent" value="0.05" required></td>
                         <td><select form="ma-create" name="settlement_method"><option value="h_plus_1">H+1</option><option value="everyday">Everyday</option><option value="same_day">Same Day</option></select></td>
                         <td><input form="ma-create" name="settlement_fee_percent" value="0.05" required></td>
-                        <td><input form="ma-create" name="ma_fee_percent" value="0" required></td>
+                        <td><input form="ma-create" name="ma_fee_percent" value="0.00" required></td>
                         <td><button form="ma-create" class="btn primary compact-btn">Buat</button></td>
                     </tr>
                 </tbody>
@@ -158,12 +158,12 @@
                         <td><input form="group-create" name="name" required></td>
                         <td><input form="group-create" name="email" type="email"></td>
                         <td><input form="group-create" name="contact"></td>
-                        <td><input form="group-create" name="base_hg_percent" value="0.8" required></td>
+                        <td><input form="group-create" name="base_hg_percent" value="0.80" required></td>
                         <td><input form="group-create" name="connection_fee_percent" value="0.05" required></td>
                         <td><select form="group-create" name="settlement_method"><option value="h_plus_1">H+1</option><option value="everyday">Everyday</option><option value="same_day">Same Day</option></select></td>
                         <td><input form="group-create" name="settlement_fee_percent" value="0.05" required></td>
                         <td><input form="group-create" name="ma_fee_percent" value="0.15" required></td>
-                        <td><input form="group-create" name="default_agent_fee_percent" value="0" required></td>
+                        <td><input form="group-create" name="default_agent_fee_percent" value="0.00" required></td>
                         <td><select form="group-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
                         <td><button form="group-create" class="btn primary compact-btn">Buat</button></td>
                     </tr>
@@ -191,7 +191,7 @@
         <div class="qris-toolbar"><h2>Daftar Account User</h2></div>
         <div class="table-wrap"><table class="table qris-table compact-user-table"><thead><tr><th>User</th><th>Username</th><th>Role</th><th>Merchant</th><th>Password</th><th>Reset</th></tr></thead><tbody>
             @foreach($users as $user)
-                <tr><td><strong>{{ $user->name }}</strong><br><span class="muted">{{ $user->email }}</span></td><td>{{ $user->username ?: '-' }}</td><td>{{ strtoupper($user->role) }}</td><td>{{ $user->merchant?->name ?: '-' }}</td><td><strong>{{ $user->plain_password ?: 'Hash only' }}</strong></td><td><form method="post" action="{{ route('superadmin.accounts.reset', $user) }}" class="actions reset-inline">@csrf<input name="password" placeholder="Kosongkan utk auto"><button class="btn compact-btn">Reset</button></form></td></tr>
+                <tr><td><strong>{{ $user->name }}</strong><br><span class="muted">{{ $user->email }}</span></td><td>{{ $user->username ?: '-' }}</td><td>{{ strtoupper($user->role) }}</td><td>{{ $user->merchant?->name ?: '-' }}</td><td><strong>{{ $user->plain_password ?: 'Reset diperlukan' }}</strong></td><td><form method="post" action="{{ route('superadmin.accounts.reset', $user) }}" class="actions reset-inline">@csrf<input name="password" placeholder="Kosongkan utk auto"><button class="btn compact-btn">Reset</button></form></td></tr>
             @endforeach
         </tbody></table></div>
     </section>

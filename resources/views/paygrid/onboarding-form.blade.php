@@ -1,19 +1,59 @@
-@extends('layouts.paygrid', ['roleLabel' => 'Onboarding', 'menus' => [], 'active' => ''])
-
-@section('content')
 @php($usable = ! isset($link) || ! $link || $link->isUsable())
-<div class="page-head">
-    <div>
-        <h1>Form Registrasi Toko</h1>
-        <div class="sub">Form terhubung ke agen {{ $agent?->name ?? 'default' }}. Data masuk ke agen dahulu, tidak langsung dikirim ke HG.</div>
-    </div>
-</div>
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Form Registrasi Toko | PayGrid</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
+        :root { --blue:#1557c2; --ink:#06162f; --muted:#55657a; --line:#dbe5f2; --bg:#f5f8fc; --success:#008450; --danger:#c62828; }
+        * { box-sizing:border-box; }
+        body { margin:0; font-family:"Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color:var(--ink); background:radial-gradient(circle at top right, #eaf2ff 0, transparent 34%), var(--bg); }
+        .page { min-height:100vh; padding:28px 18px 42px; }
+        .wrap { width:min(980px, 100%); margin:0 auto; }
+        .hero { margin-bottom:18px; padding:22px; border:1px solid #d8e5f7; border-radius:14px; background:#fff; box-shadow:0 8px 26px rgba(14, 35, 70, .055); }
+        h1 { margin:0; font-size:30px; line-height:1.08; letter-spacing:-.035em; }
+        h2 { margin:0 0 14px; font-size:18px; }
+        .sub { margin-top:8px; color:#304158; line-height:1.5; }
+        .muted { color:var(--muted); }
+        .card { background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 26px rgba(14, 35, 70, .055); }
+        .pad { padding:20px; }
+        .section { margin-top:22px; }
+        .notice { margin-bottom:16px; }
+        .notice.success { border-color:#81dfa9; color:var(--success); }
+        .notice.danger { border-color:#f4b3b3; color:var(--danger); }
+        .form-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
+        label { display:grid; gap:8px; font-size:12px; letter-spacing:.05em; color:#26364f; text-transform:uppercase; font-weight:900; }
+        input, select { width:100%; border:1px solid #c9d6ea; border-radius:9px; min-height:40px; padding:9px 11px; font:inherit; font-size:13px; background:#fff; color:var(--ink); }
+        input:disabled, select:disabled { background:#f3f6fa; color:#8b98aa; }
+        .actions { display:flex; gap:10px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
+        .btn { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:9px 14px; border:1px solid #b9cef6; border-radius:9px; background:#fff; color:var(--blue); font:inherit; font-size:13px; font-weight:900; cursor:pointer; }
+        .btn.primary { background:var(--blue); color:#fff; border-color:var(--blue); }
+        .btn:disabled { color:#8b98aa; background:#f3f6fa; border-color:#d8e2f2; cursor:not-allowed; }
+        @media (max-width: 720px) {
+            .page { padding:20px 14px 34px; }
+            .hero, .pad { padding:16px; }
+            h1 { font-size:26px; }
+            .form-grid { grid-template-columns:1fr; }
+            .actions { justify-content:stretch; }
+            .btn { width:100%; }
+        }
+    </style>
+</head>
+<body>
+<main class="page">
+<div class="wrap">
+<section class="hero">
+    <h1>Form Registrasi Toko</h1>
+    <div class="sub">Form terhubung ke agen {{ $agent?->name ?? 'default' }}. Data masuk ke agen dahulu, tidak langsung dikirim ke HG.</div>
+</section>
 
 @if(session('status'))
-    <div class="card pad" style="margin-bottom:16px; border-color:#81dfa9">{{ session('status') }}</div>
+    <div class="card pad notice success">{{ session('status') }}</div>
 @endif
 @if(! $usable)
-    <div class="card pad" style="margin-bottom:16px; border-color:#f4b3b3"><strong>Link sudah expired.</strong><br><span class="muted">Link onboarding ini hanya bisa dipakai satu kali. Silakan minta agen generate link baru jika perlu submit ulang.</span></div>
+    <div class="card pad notice danger"><strong>Link sudah expired.</strong><br><span class="muted">Link onboarding ini hanya bisa dipakai satu kali. Silakan minta agen generate link baru jika perlu submit ulang.</span></div>
 @endif
 
 <form method="post" action="{{ $link ? route('merchant-registration.token-store', $link) : route('merchant-registration.store') }}" class="card pad">
@@ -70,4 +110,7 @@
 @if(! $usable)
     <script>document.addEventListener('DOMContentLoaded', () => document.querySelectorAll('form input, form select, form button').forEach((el) => el.disabled = true));</script>
 @endif
-@endsection
+</div>
+</main>
+</body>
+</html>

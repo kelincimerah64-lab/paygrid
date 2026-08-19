@@ -54,14 +54,19 @@ class TransactionIngestionService
                 'processed_at',
             ]);
 
+            if ($normalized['expires_at'] === null && $existing->expires_at !== null) {
+                $normalized['expires_at'] = $existing->expires_at;
+            }
+            if ($normalized['succeeded_at'] === null && $existing->succeeded_at !== null) {
+                $normalized['succeeded_at'] = $existing->succeeded_at;
+            }
+
             $existing->forceFill(array_merge($normalized, $preservedChecklist))->save();
 
             return $existing->refresh();
         });
 
-        if ($deferMetrics) {
-            RebuildMerchantDailyMetric::dispatch($merchant->id, ($request->submitted_at ?? now('Asia/Jakarta'))->toDateString(), $request->data_source);
-        } else {
+        if (! $deferMetrics) {
             $this->rollups->rebuildMerchantDay($merchant, $request->submitted_at ?? now('Asia/Jakarta'), $request->data_source);
         }
 
@@ -104,6 +109,18 @@ class TransactionIngestionService
         $netAmount = $this->numericAmount(Arr::get($payload, 'net_amount') ?? Arr::get($payload, 'net') ?? $amount);
         $feeAmount = $this->numericAmount(Arr::get($payload, 'fee') ?? Arr::get($payload, 'fee_amount') ?? max(0, $amount - $netAmount));
 
+        $submittedAt = $this->timestamp(Arr::get($payload, 'created_at') ?? Arr::get($payload, 'createdAt'))
+            ?? $this->timestamp(Arr::get($payload, 'submitted_at') ?? Arr::get($payload, 'submittedAt'))
+            ?? $this->timestamp(Arr::get($payload, 'paid_at') ?? Arr::get($payload, 'paidAt'))
+            ?? now('Asia/Jakarta');
+        $succeededAt = $status === 'success'
+            ? ($this->timestamp(Arr::get($payload, 'paid_at') ?? Arr::get($payload, 'paidAt'))
+                ?? $this->timestamp(Arr::get($payload, 'success_at') ?? Arr::get($payload, 'successAt'))
+                ?? $this->timestamp(Arr::get($payload, 'completed_at') ?? Arr::get($payload, 'completedAt'))
+                ?? $this->timestamp(Arr::get($payload, 'settled_at') ?? Arr::get($payload, 'settledAt'))
+                ?? ($dataSource === 'callback' ? now('Asia/Jakarta') : $submittedAt))
+            : null;
+
         return [
             'merchant_id' => $merchant->id,
             'gateway' => $gateway,
@@ -116,7 +133,8 @@ class TransactionIngestionService
             'amount' => $amount,
             'net_amount' => $netAmount,
             'fee_amount' => $feeAmount,
-            'submitted_at' => $this->timestamp(Arr::get($payload, 'created_at') ?? Arr::get($payload, 'createdAt')) ?? now('Asia/Jakarta'),
+            'submitted_at' => $submittedAt,
+            'succeeded_at' => $succeededAt,
             'callback_received_at' => $dataSource === 'callback' ? now('Asia/Jakarta') : null,
             'expires_at' => $this->timestamp(Arr::get($payload, 'expires_at') ?? Arr::get($payload, 'expired_at')),
             'gateway_payload' => $payload,

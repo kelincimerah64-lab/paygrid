@@ -23,10 +23,11 @@ class SupportTicketController extends Controller
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $path = $request->file('attachment')->store('ticket-attachments/'.$merchant->id, 'public');
+        $path = $request->file('attachment')->store('ticket-attachments/'.$merchant->id, 'local');
         $attachments = $ticket->attachments ?? [];
         $attachments[] = [
             'path' => $path,
+            'disk' => 'local',
             'name' => $request->file('attachment')->getClientOriginalName(),
             'uploaded_at' => now()->toIso8601String(),
         ];
@@ -100,7 +101,9 @@ class SupportTicketController extends Controller
         $pendingMinutes = (int) PaygridSetting::value('ticket_pending_minutes', '40');
 
         if ($request->submitted_at) {
-            return $request->submitted_at->copy()->addMinutes($pendingMinutes);
+            $base = $request->submitted_at->lte(now()->addMinute()) ? $request->submitted_at : $request->created_at;
+
+            return $base?->copy()->addMinutes($pendingMinutes);
         }
 
         if ($request->expires_at) {

@@ -13,7 +13,7 @@
 
 <section class="grid cards">
     <div class="card pad metric"><label>Total Toko</label><strong>{{ $merchants->count() }}</strong></div>
-    <div class="card pad metric"><label>Total Transaksi</label><strong>{{ number_format($merchants->sum('metric_trx_total'), 0, ',', '.') }}</strong></div>
+    <div class="card pad metric"><label>Transaksi Sukses</label><strong>{{ number_format($merchants->sum('metric_trx_total'), 0, ',', '.') }}</strong></div>
     <div class="card pad metric blue"><label>Volume Sukses</label><strong>{{ number_format($merchants->sum('metric_volume_success'), 0, ',', '.') }}</strong></div>
     <div class="card pad metric"><label>Belum Assign Agen</label><strong>{{ $merchants->whereNull('agent_id')->count() }}</strong></div>
 </section>
@@ -25,7 +25,7 @@
     </div>
     <div class="table-wrap">
         <table class="table">
-            <thead><tr><th>Nama Toko</th><th>Agen</th><th>Total Transaksi</th><th>Volume Sukses</th><th>Status</th></tr></thead>
+            <thead><tr><th>Nama Toko</th><th>Agen</th><th>Transaksi Sukses</th><th>Volume Sukses</th><th>Status</th></tr></thead>
             <tbody>
             @foreach($merchants as $merchant)
                 <tr>

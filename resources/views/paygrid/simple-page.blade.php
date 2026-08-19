@@ -8,6 +8,7 @@
     $agent = $agent ?? null;
     $statusClass = fn ($status) => $status === 'approved' ? 'ok' : ($status === 'rejected' ? 'danger' : 'warn');
     $money = fn ($value) => number_format((int) ($value ?? 0), 0, ',', '.');
+    $pct = fn ($value) => number_format((float) ($value ?? 0), 2, ',', '.').'%';
 @endphp
 
 @section('content')
@@ -55,12 +56,12 @@
                 <div class="label">Structure Fee</div>
                 <div class="fee-row"><span>Agen Pemegang Toko</span><strong>{{ $item->agent?->name ?? '-' }}</strong></div>
                 <div class="fee-row"><span>Payment Gateway</span><strong>{{ ucfirst($item->gateway ?? 'hilogate') }}</strong></div>
-                <div class="fee-row"><span>Merchant MDR</span><strong>{{ $merchant?->merchant_mdr_percent ?? ($item->payload['merchant_mdr_percent'] ?? '0') }}%</strong></div>
+                <div class="fee-row"><span>Merchant MDR</span><strong>{{ $pct($merchant?->merchant_mdr_percent ?? ($item->payload['merchant_mdr_percent'] ?? 0)) }}</strong></div>
                 <div class="mini-grid" style="margin-top:10px">
-                    <div class="fee-pill"><span>Base MDR</span><strong>{{ $merchant?->base_mdr_percent ?? ($item->payload['base_mdr_percent'] ?? '0') }}%</strong></div>
-                    <div class="fee-pill"><span>MA</span><strong>{{ $merchant?->ma_fee_percent ?? ($item->payload['ma_fee_percent'] ?? '0') }}%</strong></div>
-                    <div class="fee-pill"><span>Agen</span><strong>{{ $merchant?->agent_fee_percent ?? ($item->payload['agent_fee_percent'] ?? '0') }}%</strong></div>
-                    <div class="fee-pill"><span>Pay In</span><strong>{{ $merchant?->payin_fee_percent ?? ($item->payload['payin_fee_percent'] ?? '0') }}%</strong></div>
+                    <div class="fee-pill"><span>Base MDR</span><strong>{{ $pct($merchant?->base_mdr_percent ?? ($item->payload['base_mdr_percent'] ?? 0)) }}</strong></div>
+                    <div class="fee-pill"><span>MA</span><strong>{{ $pct($merchant?->ma_fee_percent ?? ($item->payload['ma_fee_percent'] ?? 0)) }}</strong></div>
+                    <div class="fee-pill"><span>Agen</span><strong>{{ $pct($merchant?->agent_fee_percent ?? ($item->payload['agent_fee_percent'] ?? 0)) }}</strong></div>
+                    <div class="fee-pill"><span>Pay In</span><strong>{{ $pct($merchant?->payin_fee_percent ?? ($item->payload['payin_fee_percent'] ?? 0)) }}</strong></div>
                 </div>
                 <button class="btn" style="width:100%; margin-top:12px">View Details</button>
             </div>
@@ -98,10 +99,10 @@
                         <td><strong>{{ $merchant->merchant_group_name ?: '-' }}</strong><br><span class="muted">Agen: {{ $merchant->agent?->name ?? '-' }}</span></td>
                         <td><strong>{{ ucfirst($merchant->gateway) }}</strong> {{ strtoupper($merchant->merchant_type) }}</td>
                         <td class="fee-list">
-                            <div class="fee-row"><span>MDR</span><strong>{{ $merchant->merchant_mdr_percent }}%</strong></div>
-                            <div class="fee-row"><span>HG</span><strong>{{ $merchant->base_mdr_percent }}%</strong></div>
-                            <div class="fee-row"><span>MA</span><strong>{{ $merchant->ma_fee_percent }}%</strong></div>
-                            <div class="fee-row"><span>Agen</span><strong>{{ $merchant->agent_fee_percent }}%</strong></div>
+                            <div class="fee-row"><span>MDR</span><strong>{{ $pct($merchant->merchant_mdr_percent) }}</strong></div>
+                            <div class="fee-row"><span>HG</span><strong>{{ $pct($merchant->base_mdr_percent) }}</strong></div>
+                            <div class="fee-row"><span>MA</span><strong>{{ $pct($merchant->ma_fee_percent) }}</strong></div>
+                            <div class="fee-row"><span>Agen</span><strong>{{ $pct($merchant->agent_fee_percent) }}</strong></div>
                         </td>
                         <td>PIC: {{ $merchant->pic_email ?: '-' }}<br>FN: {{ $merchant->finance_email ?: '-' }}<br>CS: {{ $merchant->cs_email ?: '-' }}</td>
                         <td><span class="badge {{ $statusClass($merchant->approval_status) }}">{{ ucfirst($merchant->approval_status) }}</span></td>
@@ -144,7 +145,7 @@
         <div class="filters"><input class="search" placeholder="Cari agen, email, kontak, fee, status, group HG..."></div>
         <table class="table">
             <thead><tr><th>Agen ID</th><th>Nama Agen</th><th>Email</th><th>HG Group ID</th><th>Fee Agen</th><th>Status</th></tr></thead>
-            <tbody>@foreach($agents as $rowAgent)<tr><td>{{ $rowAgent->code }}</td><td>{{ $rowAgent->name }}</td><td>{{ $rowAgent->email ?: '-' }}</td><td>{{ $rowAgent->hg_group_id ?: '-' }}</td><td>{{ $rowAgent->default_agent_fee_percent }}%</td><td><span class="badge ok">Active</span></td></tr>@endforeach</tbody>
+            <tbody>@foreach($agents as $rowAgent)<tr><td>{{ $rowAgent->code }}</td><td>{{ $rowAgent->name }}</td><td>{{ $rowAgent->email ?: '-' }}</td><td>{{ $rowAgent->hg_group_id ?: '-' }}</td><td>{{ $pct($rowAgent->default_agent_fee_percent) }}</td><td><span class="badge ok">Active</span></td></tr>@endforeach</tbody>
         </table>
     </section>
 @elseif($active === 'fee')
@@ -199,7 +200,7 @@
     </section>
     <section class="card section">
         <div class="qris-toolbar"><h2>Link Terakhir</h2><span class="muted">{{ ($onboardingLinks ?? collect())->count() }} link</span></div>
-        <form method="post" action="{{ route('agent.onboarding-links.bulk') }}">@csrf<input type="hidden" name="action" value="expire"><div class="actions pad"><button class="btn danger">Expire Selected</button></div><table class="table"><thead><tr><th>Dibuat</th><th>Penerima</th><th>Status</th><th>Link</th><th>Request</th><th>Aksi</th></tr></thead><tbody>@forelse(($onboardingLinks ?? collect()) as $row)@php($effectiveStatus = $row->isUsable() ? $row->status : 'expired')<tr><td>@if($row->isUsable())<input type="checkbox" name="link_ids[]" value="{{ $row->id }}">@endif {{ $row->created_at->format('d M y H:i') }}</td><td>{{ $row->recipient_email ?: '-' }}<br><span class="muted">{{ $row->recipient_telegram ?: '-' }}</span></td><td><span class="badge {{ $effectiveStatus === 'active' ? 'ok' : 'warn' }}">{{ ucfirst($effectiveStatus) }}</span></td><td><input readonly value="{{ route('merchant-registration.token-form', $row) }}" style="width:100%"></td><td>{{ $row->registration?->store_name ?: '-' }}</td><td>@if($row->isUsable())<button class="btn danger" formaction="{{ route('agent.onboarding-links.expire', $row) }}" formmethod="post">Expire</button>@else<span class="muted">-</span>@endif</td></tr>@empty<tr><td colspan="6" class="empty">Belum ada link.</td></tr>@endforelse</tbody></table></form>
+        <form method="post" action="{{ route('agent.onboarding-links.bulk') }}">@csrf<input type="hidden" name="action" value="expire"><div class="actions pad"><button class="btn danger">Expire Selected</button></div><div class="table-wrap"><table class="table agent-link-table"><thead><tr><th>Pilih</th><th>Dibuat</th><th>Penerima</th><th>Status</th><th>Link</th><th>Request</th><th>Aksi</th></tr></thead><tbody>@forelse(($onboardingLinks ?? collect()) as $row)@php($effectiveStatus = $row->isUsable() ? $row->status : 'expired')<tr><td class="checkbox-cell">@if($row->isUsable())<input type="checkbox" name="link_ids[]" value="{{ $row->id }}">@else<span class="muted">-</span>@endif</td><td class="time-cell">{{ $row->created_at->format('d M y') }}<span>{{ $row->created_at->format('H:i') }}</span></td><td><strong>{{ $row->recipient_email ?: '-' }}</strong><br><span class="muted">{{ $row->recipient_telegram ?: '-' }}</span></td><td><span class="badge {{ $effectiveStatus === 'active' ? 'ok' : 'warn' }}">{{ ucfirst($effectiveStatus) }}</span></td><td><input readonly value="{{ route('merchant-registration.token-form', $row) }}"></td><td>{{ $row->registration?->store_name ?: '-' }}</td><td>@if($row->isUsable())<button class="btn danger" formaction="{{ route('agent.onboarding-links.expire', $row) }}" formmethod="post">Expire</button>@else<span class="muted">-</span>@endif</td></tr>@empty<tr><td colspan="7" class="empty">Belum ada link.</td></tr>@endforelse</tbody></table></div></form>
     </section>
     <script>document.addEventListener('DOMContentLoaded', () => document.querySelector('[data-copy-onboarding-link]')?.addEventListener('click', () => navigator.clipboard?.writeText(document.querySelector('[data-onboarding-link]')?.value || '')));</script>
 @else

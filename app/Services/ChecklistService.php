@@ -37,9 +37,34 @@ class ChecklistService
         });
     }
 
-    public function unmarkProcessed(TopupRequest $request, AuditLogService $audit): TopupRequest
+    public function unmarkProcessed(TopupRequest $request, User $user, AuditLogService $audit): TopupRequest
     {
-        abort(422, 'Checklist yang sudah dicatat tidak bisa dibatalkan.');
+        abort_unless(in_array($user->role, ['admin', 'ma', 'superadmin'], true), 403, 'Hanya Admin, MA, atau Superadmin yang bisa melepas checklist.');
+
+        return DB::transaction(function () use ($request, $user, $audit) {
+            $locked = $this->lockedRequest($request);
+
+            if (! $locked->is_processed) {
+                return $locked;
+            }
+
+            $before = $locked->only(['is_processed', 'processed_by_user_id', 'checked_by_email', 'checked_by_role', 'processed_at']);
+            $locked->forceFill([
+                'is_processed' => false,
+                'processed_by_user_id' => null,
+                'checked_by_email' => null,
+                'checked_by_role' => null,
+                'processed_at' => null,
+            ])->save();
+
+            $updated = $locked->refresh();
+            $audit->record('topup.checklist_unmarked', $updated, $before, array_merge($updated->only(array_keys($before)), [
+                'unchecked_by_email' => $user->email,
+                'unchecked_by_role' => $user->role,
+            ]));
+
+            return $updated;
+        });
     }
 
     private function lockedRequest(TopupRequest $request): TopupRequest

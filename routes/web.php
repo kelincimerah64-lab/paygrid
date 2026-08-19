@@ -51,7 +51,8 @@ Route::post('/superadmin/accounts/{user}/reset', [SuperadminController::class, '
 
 Route::middleware(['auth', 'role:cs_pusat,ma,superadmin'])->group(function () {
 Route::get('/cs-pusat', [CenterSupportController::class, 'index'])->name('center-support.tickets');
-Route::post('/cs-pusat/tickets/{ticket}', [CenterSupportController::class, 'update'])->name('center-support.tickets.update');
+Route::get('/cs-pusat/tickets/{ticket}/attachments/{index}', [CenterSupportController::class, 'attachment'])->whereNumber('index')->name('center-support.tickets.attachment');
+Route::post('/cs-pusat/tickets/{ticket}', [CenterSupportController::class, 'update'])->middleware('throttle:dashboard-writes')->name('center-support.tickets.update');
 });
 
 Route::middleware(['auth', 'role:superadmin'])->group(function () {
@@ -61,7 +62,7 @@ Route::get('/admin/monitoring', [MonitoringController::class, 'index'])->name('a
 });
 
 Route::get('/portal/{merchant}/admin', fn ($merchant) => redirect()->route('merchant.admin.users', $merchant));
-Route::middleware(['auth', 'role:admin,ma,superadmin', 'merchant.scope'])->group(function () {
+Route::middleware(['auth', 'role:admin,readonly_admin,ma,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/admin/users', fn (\App\Models\Merchant $merchant, MerchantAdminController $controller) => $controller->page($merchant, 'users', app(\App\Services\Navigation\MenuBuilder::class)))->name('merchant.admin.users');
 Route::post('/portal/{merchant}/admin/users', [MerchantAdminController::class, 'storeUser'])->middleware('throttle:dashboard-writes')->name('merchant.admin.users.store');
 Route::post('/portal/{merchant}/admin/users/{user}/reset-password', [MerchantAdminController::class, 'resetPassword'])->middleware('throttle:dashboard-writes')->name('merchant.admin.users.reset-password');
@@ -73,7 +74,7 @@ Route::get('/portal/{merchant}/admin/checklist', fn (\App\Models\Merchant $merch
 Route::get('/portal/{merchant}/admin/history', fn (\App\Models\Merchant $merchant, MerchantAdminController $controller) => $controller->page($merchant, 'history', app(\App\Services\Navigation\MenuBuilder::class)))->name('merchant.admin.history');
 });
 
-Route::middleware(['auth', 'role:agent,ma'])->group(function () {
+Route::middleware(['auth', 'role:agent'])->group(function () {
 Route::get('/agent', [DashboardController::class, 'agent'])->name('agent.overview');
 Route::redirect('/agen', '/agent');
 Route::get('/agent/create-store', fn (DashboardController $controller) => $controller->agentSimple('create-store', app(\App\Services\Navigation\MenuBuilder::class)))->name('agent.create-store');
@@ -92,6 +93,8 @@ Route::get('/onboarding/{link:token}', [MerchantRegistrationController::class, '
 Route::post('/onboarding/{link:token}', [MerchantRegistrationController::class, 'tokenStore'])->middleware('throttle:dashboard-writes')->name('merchant-registration.token-store');
 Route::middleware(['auth', 'role:agent,ma,superadmin'])->group(function () {
     Route::post('/api/merchant-registrations/{registration}/submit', [MerchantRegistrationWorkflowController::class, 'submit'])->name('api.merchant-registration.submit');
+});
+Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
     Route::post('/api/merchant-registrations/{registration}/approve', [MerchantRegistrationWorkflowController::class, 'approve'])->name('api.merchant-registration.approve');
     Route::post('/api/merchant-registrations/{registration}/reject', [MerchantRegistrationWorkflowController::class, 'reject'])->name('api.merchant-registration.reject');
     Route::post('/api/merchants/{merchant}/provision/retry', [MerchantProvisioningController::class, 'retry'])->name('api.merchant.provision.retry');
@@ -99,7 +102,7 @@ Route::middleware(['auth', 'role:agent,ma,superadmin'])->group(function () {
 });
 
 Route::get('/portal/{merchant}/cs', fn ($merchant) => redirect()->route('merchant.cs.tickets', $merchant));
-Route::middleware(['auth', 'role:cs,ma,admin,superadmin', 'merchant.scope'])->group(function () {
+Route::middleware(['auth', 'role:cs,readonly_cs,ma,admin,readonly_admin,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/cs/tickets', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'tickets', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.tickets');
 Route::get('/portal/{merchant}/cs/topup', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'topup', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.topup');
 Route::get('/portal/{merchant}/cs/checklist', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'checklist', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.checklist');
@@ -115,7 +118,7 @@ Route::get('/embedded/merchant_script/toko/cs/index.html', fn (DashboardControll
 Route::get('/embedded/merchant_script/toko/finance/index.html', fn (DashboardController $controller) => $controller->merchantFinance(\App\Models\Merchant::query()->where('merchant_type', 'script')->firstOrFail(), 'overview', app(\App\Services\Navigation\MenuBuilder::class)))->middleware('auth')->name('legacy.script.finance');
 });
 
-Route::middleware(['auth', 'role:finance,ma,admin,superadmin', 'merchant.scope'])->group(function () {
+Route::middleware(['auth', 'role:finance,ma,admin,readonly_admin,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/finance', fn ($merchant) => redirect()->route('merchant.finance.overview', $merchant));
 Route::get('/portal/{merchant}/finance/overview', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantFinance($merchant, 'overview', app(\App\Services\Navigation\MenuBuilder::class)))->name('merchant.finance.overview');
 Route::get('/portal/{merchant}/finance/settlement', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantFinance($merchant, 'settlement', app(\App\Services\Navigation\MenuBuilder::class)))->name('merchant.finance.settlement');
@@ -124,13 +127,10 @@ Route::get('/portal/{merchant}/finance/report', fn (\App\Models\Merchant $mercha
 
 Route::get('/topup/{merchant?}', [MerchantRegistrationController::class, 'topup'])->name('topup');
 Route::post('/topup/{merchant}/submit', [\App\Http\Controllers\TopupController::class, 'store'])->middleware('throttle:topup-submit')->name('topup.submit');
-Route::get('/topup/{merchant}/status/{topupRequest}', [\App\Http\Controllers\TopupController::class, 'status'])->name('topup.status');
-Route::get('/topup/{merchant}/qr/{topupRequest}', [\App\Http\Controllers\TopupController::class, 'qr'])->name('topup.qr');
-Route::post('/topup/{merchant}/regenerate/{topupRequest}', [\App\Http\Controllers\TopupController::class, 'regenerate'])->middleware('throttle:topup-submit')->name('topup.regenerate');
-Route::get('/api/topup/{merchant}/status/{topupRequest}', [\App\Http\Controllers\TopupController::class, 'statusJson'])->name('api.topup.status');
+Route::get('/topup/{merchant}/status/{topupRequest:public_token}', [\App\Http\Controllers\TopupController::class, 'status'])->middleware('throttle:topup-public')->name('topup.status');
+Route::get('/topup/{merchant}/qr/{topupRequest:public_token}', [\App\Http\Controllers\TopupController::class, 'qr'])->middleware('throttle:topup-public')->name('topup.qr');
+Route::post('/topup/{merchant}/regenerate/{topupRequest:public_token}', [\App\Http\Controllers\TopupController::class, 'regenerate'])->middleware('throttle:topup-submit')->name('topup.regenerate');
+Route::get('/api/topup/{merchant}/status/{topupRequest:public_token}', [\App\Http\Controllers\TopupController::class, 'statusJson'])->middleware('throttle:topup-public')->name('api.topup.status');
 
-Route::patch('/api/topup-requests/{topupRequest}/checklist', [ChecklistController::class, 'update'])->middleware(['auth', 'throttle:dashboard-writes'])->name('api.checklist.update');
-
-Route::post('/api/callbacks/{gateway}/{type}', [GatewayCallbackController::class, 'receive'])
-    ->whereIn('gateway', ['hilogate', 'alpha', 'artageto', 'kingspay'])
-    ->whereIn('type', ['transaction', 'withdrawal', 'payin']);
+Route::patch('/api/topup-requests/{topupRequest}/checklist', [ChecklistController::class, 'update'])->middleware(['auth', 'role:cs,admin,ma,superadmin', 'throttle:dashboard-writes'])->name('api.checklist.update');
+Route::patch('/api/topup-requests/{topupRequest}/cs-note', [ChecklistController::class, 'updateNote'])->middleware(['auth', 'role:cs,admin,ma,superadmin', 'throttle:dashboard-writes'])->name('api.topup-requests.cs-note');

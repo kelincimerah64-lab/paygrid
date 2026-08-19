@@ -48,7 +48,24 @@ class GatewayBalanceService
             foreach ($keys as $key) {
                 $value = $source[$key] ?? ($source['data'][$key] ?? null) ?? ($source['response'][$key] ?? null);
                 if ($value !== null && $value !== '') {
-                    return (int) preg_replace('/[^0-9-]/', '', (string) $value);
+                    if (is_int($value) || is_float($value)) {
+                        return (int) round((float) $value);
+                    }
+
+                    $normalized = trim((string) $value);
+                    if (str_contains($normalized, '.') && str_contains($normalized, ',')) {
+                        $normalized = str_replace('.', '', $normalized);
+                        $normalized = str_replace(',', '.', $normalized);
+                    } elseif (str_contains($normalized, ',')) {
+                        $normalized = str_replace(',', '.', $normalized);
+                    } elseif (preg_match('/^-?\d+\.\d{1,3}$/', $normalized) === 1) {
+                        // Gateway JSON decimals may arrive as strings like "90413723.304".
+                        $normalized = $normalized;
+                    } else {
+                        $normalized = str_replace('.', '', $normalized);
+                    }
+
+                    return (int) round((float) preg_replace('/[^0-9.\-]/', '', $normalized));
                 }
             }
 

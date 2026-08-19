@@ -11,7 +11,7 @@ class GatewayCallbackSignatureService
     public function verify(Request $request, string $gateway, array $payload, ?Merchant $merchant = null): bool
     {
         if ($gateway !== 'hilogate') {
-            return true;
+            return false;
         }
 
         $trustedIps = config('paygrid.security.callback_trusted_ips', []);
@@ -21,7 +21,7 @@ class GatewayCallbackSignatureService
 
         $secret = (string) ($merchant?->merchant_key ?: config('paygrid.gateway.hilogate.secret_key'));
         if ($secret === '') {
-            return true;
+            return false;
         }
 
         $incoming = (string) ($request->header('X-Signature')
@@ -39,7 +39,9 @@ class GatewayCallbackSignatureService
         $path = '/'.ltrim($request->path(), '/');
         $incoming = strtolower(trim(str_replace(['"', "'"], '', $incoming)));
 
-        return hash_equals(md5($path.$rawBody.$secret), $incoming)
+        return hash_equals(hash_hmac('sha256', $path.$rawBody, $secret), $incoming)
+            || hash_equals(hash_hmac('sha256', $rawBody, $secret), $incoming)
+            || hash_equals(md5($path.$rawBody.$secret), $incoming)
             || hash_equals(md5($rawBody.$secret), $incoming);
     }
 }

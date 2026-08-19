@@ -3,14 +3,12 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login | PayGrid Laravel</title>
+    <title>Login</title>
     <style>
         * { box-sizing:border-box; }
         body { margin:0; font-family:Arial, sans-serif; background:#f4f7fb; color:#071832; }
         .login { min-height:100vh; display:grid; place-items:center; padding:24px; }
         .card { width:min(720px, 100%); background:#fff; border:1px solid #dce5f2; border-radius:10px; padding:34px; box-shadow:0 8px 30px rgba(12,31,62,.08); }
-        .brand { text-align:center; font-weight:900; font-size:34px; margin-bottom:10px; }
-        .brand span { color:#d65519; }
         h1 { text-align:center; margin:0 0 8px; }
         p { text-align:center; color:#526174; margin:0 0 28px; }
         label { display:block; font-weight:700; margin-top:16px; }
@@ -25,9 +23,8 @@
 <body>
 <main class="login">
     <section class="card">
-        <div class="brand">PAY<span>GRID</span></div>
-        <h1>PayGrid Dashboard</h1>
-        <p>Masuk ke dashboard PayGrid sesuai role akun Anda.</p>
+        <h1>Dashboard Login</h1>
+        <p>Masuk sesuai role akun Anda.</p>
         @if($errors->any())<div style="color:#c62828; margin-bottom:12px">{{ $errors->first() }}</div>@endif
         <form action="{{ route('login.store') }}" method="post">
             @csrf

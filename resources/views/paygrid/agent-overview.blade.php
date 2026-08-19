@@ -5,6 +5,8 @@
     $money = fn ($value) => 'Rp '.number_format((int) ($value ?? 0), 0, ',', '.');
     $num = fn ($value) => number_format((int) ($value ?? 0), 0, ',', '.');
     $maxVolume = max(1, (int) $merchants->max('metric_volume_success'));
+    $statusLabel = fn ($status) => App\Support\PayGridLabels::status($status);
+    $statusClass = fn ($status) => App\Support\PayGridLabels::badge($status);
 @endphp
 
 @section('content')
@@ -22,8 +24,15 @@
 <section class="grid cards">
     <div class="card pad metric"><label>Total Toko</label><strong>{{ $num($merchants->count()) }}</strong></div>
     <div class="card pad metric blue"><label>Volume Sukses</label><strong>{{ $money($merchants->sum('metric_volume_success')) }}</strong></div>
-    <div class="card pad metric"><label>Total Transaksi</label><strong>{{ $num($merchants->sum('metric_trx_total')) }}</strong></div>
+    <div class="card pad metric"><label>Transaksi Sukses</label><strong>{{ $num($merchants->sum('metric_trx_total')) }}</strong></div>
     <div class="card pad metric warn-soft"><label>Transaksi Pending</label><strong>{{ $num($merchants->sum('metric_trx_pending')) }}</strong></div>
+</section>
+
+<section class="grid cards section">
+    <div class="card pad metric"><label>Total Ticket</label><strong>{{ $num($ticketStats['total'] ?? 0) }}</strong></div>
+    <div class="card pad metric warn-soft"><label>Ticket Open</label><strong>{{ $num($ticketStats['open'] ?? 0) }}</strong></div>
+    <div class="card pad metric success"><label>Ticket Selesai</label><strong>{{ $num($ticketStats['done'] ?? 0) }}</strong></div>
+    <div class="card pad metric"><label>Issue CS Pusat</label><strong>{{ $num($ticketStats['issue'] ?? 0) }}</strong></div>
 </section>
 
 <section class="card agent-filter-card section">
@@ -39,7 +48,7 @@
     <div class="qris-toolbar"><div><h2>Report Toko</h2><p class="muted" style="margin:4px 0 0">Ringkasan transaksi per toko sesuai periode filter.</p></div><span class="badge ok">{{ $num($merchants->count()) }} toko</span></div>
     <div class="table-wrap">
         <table class="table qris-table agent-store-report-table">
-            <thead><tr><th>Toko</th><th>Tipe</th><th>Total TRX</th><th>Sukses</th><th>Pending</th><th>Expired</th><th>Volume Sukses</th><th>Pending Balance</th><th>Settlement</th></tr></thead>
+            <thead><tr><th>Toko</th><th>Tipe</th><th>TRX Sukses</th><th>Sukses</th><th>Pending Transaksi</th><th>Expired</th><th>Volume Sukses</th><th>Saldo Pending HG</th><th>Settlement</th></tr></thead>
             <tbody>
             @forelse($merchants as $merchant)
                 <tr>
@@ -55,6 +64,34 @@
                 </tr>
             @empty
                 <tr><td colspan="9" class="empty">Belum ada data toko untuk filter ini.</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card qris-panel section">
+    <div class="qris-toolbar"><div><h2>Ticket Toko Saya</h2><p class="muted" style="margin:4px 0 0">Daftar issue/ticket terbaru dari toko-toko di bawah agen ini.</p></div><span class="badge warn">{{ $num($tickets->count()) }} terbaru</span></div>
+    <div class="table-wrap">
+        <table class="table qris-table agent-ticket-table">
+            <thead><tr><th>Dibuat</th><th>Toko</th><th>Ticket</th><th>Reference / RRN</th><th>Customer</th><th>Issue</th><th>Status CS Pusat</th><th>Catatan</th><th>Submitted</th></tr></thead>
+            <tbody>
+            @forelse($tickets as $ticket)
+                @php($topup = $ticket->topupRequest)
+                @php($displayStatus = $ticket->center_status ?: $ticket->status)
+                <tr>
+                    <td class="time-cell"><strong>{{ $ticket->created_at?->timezone('Asia/Jakarta')->format('H:i:s') ?? '-' }}</strong><span>{{ $ticket->created_at?->timezone('Asia/Jakarta')->format('d M Y') ?? '-' }}</span></td>
+                    <td><strong>{{ $ticket->merchant?->name ?: '-' }}</strong><br><span class="muted">{{ strtoupper($ticket->merchant?->merchant_type ?: '-') }}</span></td>
+                    <td><strong>{{ $ticket->ticket_no }}</strong><br><span class="muted">{{ $statusLabel($ticket->status) }}</span></td>
+                    <td><span class="truncate ref-line">{{ $ticket->reference ?: $topup?->payment_id ?: '-' }}</span><br><span class="muted">RRN: {{ $topup?->rrn ?: '-' }}</span></td>
+                    <td><strong class="truncate ref-line">{{ $ticket->client_reference ?: $topup?->customer_reference ?: '-' }}</strong></td>
+                    <td><span class="truncate ref-line">{{ $ticket->issue }}</span></td>
+                    <td><span class="badge {{ $statusClass($displayStatus) }}">{{ $statusLabel($displayStatus) }}</span></td>
+                    <td>{{ $ticket->center_note ?: $ticket->note ?: (count($ticket->attachments ?? []) ? count($ticket->attachments).' lampiran' : '-') }}</td>
+                    <td class="time-cell">{{ $ticket->submitted_to_center_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}<span>{{ $ticket->submitted_to_center_at?->timezone('Asia/Jakarta')->format('H.i') ?? '' }}</span></td>
+                </tr>
+            @empty
+                <tr><td colspan="9" class="empty"><strong>Belum ada ticket.</strong>Ticket dari toko agen ini akan muncul di sini.</td></tr>
             @endforelse
             </tbody>
         </table>

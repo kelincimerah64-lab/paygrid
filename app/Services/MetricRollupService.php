@@ -26,7 +26,7 @@ class MetricRollupService
         }
 
         $rows = $query
-            ->selectRaw('COUNT(*) as trx_total')
+            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as trx_total")
             ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as trx_success")
             ->selectRaw("SUM(CASE WHEN status = 'success' AND is_processed = 1 THEN 1 ELSE 0 END) as trx_success_processed")
             ->selectRaw("SUM(CASE WHEN status = 'success' AND is_processed = 0 THEN 1 ELSE 0 END) as trx_success_unprocessed")
@@ -35,11 +35,11 @@ class MetricRollupService
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as amount_success")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' AND is_processed = 1 THEN amount ELSE 0 END), 0) as amount_success_processed")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' AND is_processed = 0 THEN amount ELSE 0 END), 0) as amount_success_unprocessed")
-            ->selectRaw('COALESCE(SUM(amount), 0) as amount_total')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as amount_total")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as amount_pending")
             ->selectRaw("COALESCE(SUM(CASE WHEN status IN ('expired', 'failed', 'rejected') THEN amount ELSE 0 END), 0) as amount_expired")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN net_amount ELSE 0 END), 0) as net_success")
-            ->selectRaw('COALESCE(SUM(fee_amount), 0) as fee_total')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN fee_amount ELSE 0 END), 0) as fee_total")
             ->first();
 
         $source = $dataSource ?? $this->defaultDataSource($merchant);
