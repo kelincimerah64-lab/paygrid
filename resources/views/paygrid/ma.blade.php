@@ -4,7 +4,7 @@
     $money = fn ($value) => 'Rp '.number_format((int) ($value ?? 0), 0, ',', '.');
     $pct = fn ($value) => number_format((float) $value, 2, ',', '.').'%';
     $pctInput = fn ($value) => number_format((float) $value, 2, '.', '');
-    $badge = fn ($status) => in_array($status, ['approved', 'success', 'Active', 'active'], true) ? 'ok' : (in_array($status, ['rejected', 'failed', 'expired', 'Suspended'], true) ? 'danger' : 'warn');
+    $badge = fn ($status) => App\Support\PayGridLabels::badge($status);
     $dateInput = fn ($value) => $value ? \Carbon\CarbonImmutable::parse($value)->format('Y-m-d') : '';
 @endphp
 
@@ -24,7 +24,7 @@
 <section class="card pad section"><div class="qris-toolbar"><h2>Notifikasi MA</h2><span class="badge warn">{{ ($maNotifications ?? collect())->count() }} baru</span></div><div class="ma-detail-list">@foreach($maNotifications as $notification)<a class="ma-detail-row" href="{{ $notification->data['url'] ?? route('ma.approvals') }}"><div><b>{{ $notification->data['title'] ?? 'Notifikasi' }}</b><span>{{ $notification->data['message'] ?? '-' }}</span></div><span class="badge warn">Unread</span></a>@endforeach</div></section>
 @endif
 
-@if(! in_array($active, ['overview', 'report', 'fee'], true))
+@if(! in_array($active, ['overview', 'report', 'fee', 'bot-monitoring'], true))
 <form class="card filters" method="get">
     @if($active !== 'approval')<input class="search" name="q" value="{{ $filters['q'] }}" placeholder="Cari toko, agen, status, payment, RRN...">@endif
     <div class="actions">
@@ -74,7 +74,7 @@
 
 @if($active === 'report')
     <section class="card pad section ma-period-card"><form method="get" class="ma-period-form"><input type="hidden" name="agent_id" value="{{ $filters['agent_id'] }}"><input type="hidden" name="store_id" value="{{ $filters['store_id'] }}"><input type="hidden" name="agents_view" value="{{ $filters['agents_view'] }}"><label>Periode<select name="period" data-ma-period-select><option value="this_month" @selected($filters['period'] === 'this_month')>Bulan Ini</option><option value="last_month" @selected($filters['period'] === 'last_month')>Bulan Lalu</option><option value="last_30_days" @selected($filters['period'] === 'last_30_days')>30 Hari</option><option value="custom" @selected($filters['period'] === 'custom')>Custom</option></select></label><label>Dari<input type="date" name="from" value="{{ $dateInput($dataFilters['from'] ?? $filters['from']) }}" data-ma-period-custom></label><label>Sampai<input type="date" name="to" value="{{ $dateInput($dataFilters['to'] ?? $filters['to']) }}" data-ma-period-custom></label><button class="btn primary compact-btn">Terapkan</button><span class="badge ok">{{ $periodLabel }}</span></form></section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Report per Agen</h2><p class="muted" style="margin:4px 0 0">Default menampilkan 5 agen teratas. Klik baris agen untuk melihat toko, lalu klik toko untuk membuka transaksi toko tersebut.</p></div><a class="btn compact-btn" href="{{ route('ma.report', $filters['agents_view'] === 'all' ? request()->except(['page', 'agents_view']) : array_merge(request()->except('page'), ['agents_view' => 'all'])) }}">{{ $filters['agents_view'] === 'all' ? 'Top 5 Agen' : 'Semua Agen' }}</a></div><div class="table-wrap"><table class="table qris-table ma-agent-report-table"><thead><tr><th>Nama Agent</th><th>Toko</th><th>Total IDR</th><th>Total Pending</th><th>Settled</th></tr></thead><tbody>@forelse($reportAgents as $agent)<tr class="ma-click-row {{ (string) $filters['agent_id'] === (string) $agent['id'] ? 'active' : '' }}" onclick="window.location='{{ route('ma.report', array_merge(request()->except(['page', 'store_id']), ['agent_id' => $agent['id']])) }}'"><td><strong>{{ $agent['name'] }}</strong></td><td>{{ number_format($agent['stores'], 0, ',', '.') }}</td><td>{{ number_format($agent['volume'], 0, ',', '.') }}</td><td>{{ number_format($agent['pending'], 0, ',', '.') }}</td><td>{{ number_format($agent['settled'], 0, ',', '.') }}</td></tr>@empty<tr><td colspan="5" class="empty">Belum ada agen.</td></tr>@endforelse</tbody></table></div></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Report per Agen</h2><p class="muted" style="margin:4px 0 0">Default menampilkan 5 agen teratas. Klik baris agen untuk melihat toko, lalu klik toko untuk membuka transaksi toko tersebut.</p></div><a class="btn compact-btn" href="{{ route('ma.report', $filters['agents_view'] === 'all' ? request()->except(['page', 'agents_view']) : array_merge(request()->except('page'), ['agents_view' => 'all'])) }}">{{ $filters['agents_view'] === 'all' ? 'Top 5 Agen' : 'Semua Agen' }}</a></div><div class="table-wrap"><table class="table qris-table ma-agent-report-table"><thead><tr><th>Nama Agent</th><th>Toko</th><th>Total IDR Sukses</th><th>Total Pending</th><th>Settled</th></tr></thead><tbody>@forelse($reportAgents as $agent)<tr class="ma-click-row {{ (string) $filters['agent_id'] === (string) $agent['id'] ? 'active' : '' }}" onclick="window.location='{{ route('ma.report', array_merge(request()->except(['page', 'store_id']), ['agent_id' => $agent['id']])) }}'"><td><strong>{{ $agent['name'] }}</strong></td><td>{{ number_format($agent['stores'], 0, ',', '.') }}</td><td>{{ number_format($agent['volume'], 0, ',', '.') }}</td><td>{{ number_format($agent['pending'], 0, ',', '.') }}</td><td>{{ number_format($agent['settled'], 0, ',', '.') }}</td></tr>@empty<tr><td colspan="5" class="empty">Belum ada agen.</td></tr>@endforelse</tbody></table></div></section>
     @if($selectedAgent)
         <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Toko {{ $selectedAgent->name }}</h2><p class="muted" style="margin:4px 0 0">Pilih toko untuk menampilkan transaksi toko di tabel report.</p></div><a class="btn compact-btn" href="{{ route('ma.report', request()->except(['page', 'store_id'])) }}">Semua Toko</a></div><div class="ma-report-shops">@forelse($selectedAgentStores as $store)<a class="report-pill {{ (string) $filters['store_id'] === (string) $store->id ? 'active' : '' }}" href="{{ route('ma.report', array_merge(request()->except('page'), ['agent_id' => $selectedAgent->id, 'store_id' => $store->id])) }}"><b>{{ $store->name }}</b><span>{{ number_format((int) ($store->metric_trx_total ?? 0), 0, ',', '.') }} trx | {{ $money((int) ($store->metric_volume_success ?? 0)) }}</span></a>@empty<p class="muted">Agen ini belum punya toko.</p>@endforelse</div></section>
     @endif
@@ -222,6 +222,68 @@
     <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Toko</h2></div><form method="post" action="{{ route('ma.create-store.store') }}" class="form-grid pad">@csrf<label>Nama Toko<input name="name" required></label><label>Username<input name="username"></label><label>Engine Name<input name="engine_name"></label><label>Agen<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label><label>Email PIC<input name="pic_email" type="email"></label><label>Telegram PIC<input name="pic_telegram"></label><label>Email Admin<input name="admin_email" type="email" required></label><label>Nomor Kontak<input name="phone"></label><label>Environment<select name="environment"><option>Production</option><option>Sandbox</option></select></label><label>Payment Gateway<select name="gateway"><option value="hilogate">hilogate</option><option value="artageto">artageto</option></select></label><label>Merchant ID<input name="merchant_id" placeholder="Kosongkan jika belum real"></label><label>Merchant Key<input name="merchant_key" placeholder="Kosongkan jika belum real"></label><label>Callback URL<input name="transaction_callback_url" value="{{ url('/api/callbacks/hilogate/transaction') }}"></label><label>Withdrawal Callback<input name="withdrawal_callback_url" value="{{ url('/api/callbacks/hilogate/withdrawal') }}"></label><label>API IP Whitelist<input name="api_ip_whitelist" value="15.232.137.74"></label><label>Tipe Toko<select name="merchant_type"><option value="cm">CM</option><option value="script">Script</option></select></label><label>Settlement Method<select name="settlement_method"><option value="standard_h1">standard_h1</option><option value="everyday_1x">everyday_1x</option><option value="sameday_3x">sameday_3x</option></select></label><label>Merchant Fee %<input name="merchant_mdr_percent" value="1.20" required></label><label>Base Fee HG %<input name="base_mdr_percent" value="0.80" required></label><label>Engine Fee %<input name="connection_fee_percent" value="0.05" required></label><label>Settlement Fee %<input name="settlement_fee_percent" value="0.05" required></label><label>Agent Fee %<input name="agent_fee_percent" value="0.15" required></label><label>Toko Fee %<input name="toko_fee_percent" value="0.00"></label><label>Catatan<input name="note"></label><button class="btn primary">Buat Toko</button></form></section>
 @endif
 
+@if($active === 'bot-monitoring')
+    @php($bm = $botMonitoring ?? ['kpis' => [], 'tickets' => [], 'categories' => [], 'statuses' => [], 'assignees' => [], 'error' => null])
+    @php($botFilters = ['status' => request('bot_status', ''), 'category' => request('bot_category', ''), 'assigned' => request('bot_assigned', ''), 'from' => request('bot_from', ''), 'to' => request('bot_to', ''), 'q' => request('bot_q', '')])
+    <form class="card filters section" method="get">
+        <input class="search" name="bot_q" value="{{ $botFilters['q'] }}" placeholder="Cari ticket ID / requester...">
+        <div class="actions">
+            <select name="bot_status"><option value="" @selected($botFilters['status'] === '')>Semua status</option>@foreach($bm['statuses'] as $s)<option value="{{ $s }}" @selected($botFilters['status'] === $s)>{{ $s }}</option>@endforeach</select>
+            <select name="bot_category"><option value="" @selected($botFilters['category'] === '')>Semua kategori</option>@foreach($bm['categories'] as $c)<option value="{{ $c }}" @selected($botFilters['category'] === $c)>{{ $c }}</option>@endforeach</select>
+            <select name="bot_assigned"><option value="" @selected($botFilters['assigned'] === '')>Semua assignee</option>@foreach($bm['assignees'] as $a)<option value="{{ $a }}" @selected($botFilters['assigned'] === $a)>{{ $a }}</option>@endforeach</select>
+            <input type="date" name="bot_from" value="{{ $botFilters['from'] }}"><input type="date" name="bot_to" value="{{ $botFilters['to'] }}">
+            <button class="btn primary">Filter</button><a class="btn" href="{{ route('ma.bot-monitoring') }}">Reset</a>
+            <a class="btn" href="{{ route('ma.bot-monitoring', array_merge(request()->query(), ['refresh' => 1])) }}">Refresh</a>
+        </div>
+    </form>
+
+    @if($bm['error'])
+        <section class="card pad section"><span class="badge danger">{{ $bm['error'] }}</span></section>
+    @else
+        <section class="grid cards section">
+            <div class="card pad metric"><label>Total Ticket</label><strong>{{ number_format($bm['kpis']['total'] ?? 0, 0, ',', '.') }}</strong></div>
+            <div class="card pad metric success"><label>Resolved</label><strong>{{ number_format($bm['kpis']['resolved'] ?? 0, 0, ',', '.') }}</strong></div>
+            <div class="card pad metric warn-soft"><label>Failed</label><strong>{{ number_format($bm['kpis']['failed'] ?? 0, 0, ',', '.') }}</strong></div>
+            <div class="card pad metric"><label>Avg Pickup (min)</label><strong>{{ $bm['kpis']['avg_pickup_minutes'] ?? 0 }}</strong></div>
+            <div class="card pad metric"><label>Avg Handling (min)</label><strong>{{ $bm['kpis']['avg_handling_minutes'] ?? 0 }}</strong></div>
+            <div class="card pad metric"><label>Avg Total Resolution (min)</label><strong>{{ $bm['kpis']['avg_total_resolution_minutes'] ?? 0 }}</strong></div>
+        </section>
+
+        <section class="grid cards section" style="grid-template-columns:1fr 1fr">
+            <div class="card pad"><h2>Distribusi Status</h2><canvas id="bot-status-chart" height="180"></canvas></div>
+            <div class="card pad"><h2>Ticket per Kategori</h2><canvas id="bot-category-chart" height="180"></canvas></div>
+        </section>
+        <script type="application/json" id="bot-monitoring-kpis">@json($bm['kpis'])</script>
+
+        <section class="card qris-panel section">
+            <div class="qris-toolbar"><h2>Daftar Ticket</h2><span class="badge ok">{{ count($bm['tickets']) }} ticket</span></div>
+            <div class="table-wrap">
+                <table class="table qris-table">
+                    <thead><tr><th>Ticket</th><th>Dibuat</th><th>Requester</th><th>Kategori</th><th>Status</th><th>Assigned</th><th>Pickup</th><th>Handling</th><th>Total</th><th>Update Terakhir</th></tr></thead>
+                    <tbody>
+                    @forelse($bm['tickets'] as $t)
+                        <tr>
+                            <td><strong>{{ $t['ticket_id'] ?? '-' }}</strong></td>
+                            <td class="time-cell">{{ $t['created_at']?->format('d/m/y') ?? '-' }}<span>{{ $t['created_at']?->format('H.i') ?? '' }}</span></td>
+                            <td>{{ $t['requester_name'] ?: '-' }}<br><span class="muted">{{ $t['requester_username'] ? '@'.$t['requester_username'] : '-' }}</span></td>
+                            <td>{{ $t['category'] ?: '-' }}</td>
+                            <td><span class="badge {{ $t['status'] === 'RESOLVED' ? 'ok' : ($t['status'] === 'FAILED' ? 'danger' : 'warn') }}">{{ $t['status'] ?: '-' }}</span></td>
+                            <td>{{ $t['assigned_name'] ?: '-' }}</td>
+                            <td>{{ $t['pickup_minutes'] ?? '-' }}</td>
+                            <td>{{ $t['handling_minutes'] ?? '-' }}</td>
+                            <td>{{ $t['total_resolution_minutes'] ?? '-' }}</td>
+                            <td>{{ $t['last_update'] ?: '-' }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="10" class="empty">Belum ada ticket untuk filter ini.</td></tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    @endif
+@endif
+
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -286,5 +348,42 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 @endpush
+
+@if($active === 'bot-monitoring')
+@push('scripts')
+<script src="{{ asset('js/vendor/chart.umd.min.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof Chart === 'undefined') return;
+    const kpiEl = document.getElementById('bot-monitoring-kpis');
+    if (!kpiEl) return;
+    const kpis = JSON.parse(kpiEl.textContent || '{}');
+
+    const statusCanvas = document.getElementById('bot-status-chart');
+    if (statusCanvas && kpis.by_status) {
+        new Chart(statusCanvas, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(kpis.by_status),
+                datasets: [{ data: Object.values(kpis.by_status), backgroundColor: ['#22c55e', '#ef4444', '#f59e0b', '#3b82f6', '#a855f7'] }],
+            },
+        });
+    }
+
+    const categoryCanvas = document.getElementById('bot-category-chart');
+    if (categoryCanvas && kpis.by_category) {
+        new Chart(categoryCanvas, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(kpis.by_category),
+                datasets: [{ label: 'Ticket', data: Object.values(kpis.by_category), backgroundColor: '#3b82f6' }],
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+        });
+    }
+});
+</script>
+@endpush
+@endif
 
 @endsection

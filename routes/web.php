@@ -36,6 +36,7 @@ Route::get('/ma/agents', fn (MaController $controller) => $controller->page('age
 Route::post('/ma/agents', [MaController::class, 'storeAgent'])->middleware('throttle:dashboard-writes')->name('ma.agents.store');
 Route::get('/ma/create-store', fn (MaController $controller) => $controller->page('create-store'))->name('ma.create-store');
 Route::post('/ma/create-store', [MaController::class, 'storeMerchant'])->middleware('throttle:dashboard-writes')->name('ma.create-store.store');
+Route::get('/ma/bot-monitoring', fn (MaController $controller) => $controller->page('bot-monitoring'))->name('ma.bot-monitoring');
 });
 
 Route::middleware(['auth', 'role:superadmin'])->group(function () {

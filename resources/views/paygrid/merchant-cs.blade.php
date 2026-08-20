@@ -3,11 +3,7 @@
 @php
     $title = $active === 'history' ? 'History Transaksi' : ($active === 'topup' ? 'Topup Request' : ($active === 'checklist' ? 'Sukses Checklist' : 'Tiket Status'));
     $money = fn ($value) => 'Rp '.number_format((int) ($value ?? 0), 0, ',', '.');
-    $statusClass = fn ($status) => match ($status) {
-        'success' => 'ok',
-        'pending' => 'warn',
-        default => 'danger',
-    };
+    $statusClass = fn ($status) => App\Support\PayGridLabels::badge($status);
     $statusLabel = fn ($status) => App\Support\PayGridLabels::status($status);
     $latestSyncAt = $latestSync?->finished_at?->timezone('Asia/Jakarta')->format('d M Y, H:i:s') ?? 'Belum ada sync';
     $dashboardRefreshAt = now('Asia/Jakarta')->format('H:i:s');
@@ -254,7 +250,7 @@
                     </td>
                     <td><strong class="truncate ref-line">{{ $ticket->client_reference ?: $topup?->customer_reference ?: '-' }}</strong></td>
                     <td><span class="truncate ref-line">{{ $ticket->issue }}</span></td>
-                    <td><span class="badge {{ $ticket->center_status === 'success' ? 'ok' : (str_starts_with((string) $ticket->center_status, 'issue') ? 'danger' : 'warn') }}">{{ $statusLabel($ticket->center_status ?: $ticket->status) }}</span></td>
+                    <td><span class="badge {{ App\Support\PayGridLabels::centerStatusBadge($ticket->center_status) }}">{{ $statusLabel($ticket->center_status ?: $ticket->status) }}</span></td>
                     <td>{{ $ticket->center_note ?: (count($ticket->attachments ?? []) ? count($ticket->attachments).' lampiran' : 'Belum ada lampiran') }}</td>
                     <td>
                         @if($ticket->submitted_to_center_at)

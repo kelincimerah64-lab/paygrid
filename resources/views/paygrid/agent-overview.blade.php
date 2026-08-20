@@ -6,7 +6,7 @@
     $num = fn ($value) => number_format((int) ($value ?? 0), 0, ',', '.');
     $maxVolume = max(1, (int) $merchants->max('metric_volume_success'));
     $statusLabel = fn ($status) => App\Support\PayGridLabels::status($status);
-    $statusClass = fn ($status) => App\Support\PayGridLabels::badge($status);
+    $statusClass = fn ($status) => App\Support\PayGridLabels::centerStatusBadge($status);
 @endphp
 
 @section('content')

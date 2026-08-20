@@ -8,6 +8,7 @@ use App\Models\PaygridSetting;
 use App\Models\TopupRequest;
 use App\Models\User;
 use App\Services\AuditLogService;
+use App\Services\FeeCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -16,7 +17,7 @@ use Illuminate\View\View;
 
 class SuperadminController extends Controller
 {
-    public function page(string $page = 'dashboard-fee'): View
+    public function page(FeeCalculator $feeCalculator, string $page = 'dashboard-fee'): View
     {
         abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'timer-ticket', 'accounts'], true), 404);
 
@@ -61,6 +62,12 @@ class SuperadminController extends Controller
             ->orderBy('name')
             ->get();
 
+        $merchants->each(fn ($merchant) => $merchant->computed_mdr = (float) $merchant->merchant_mdr_percent ?: $feeCalculator->merchantPrice($merchant->only([
+            'base_mdr_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent', 'toko_fee_percent',
+        ])));
+        $mas->each(fn ($ma) => $ma->computed_mdr = $feeCalculator->maPrice($ma));
+        $agents->each(fn ($agent) => $agent->computed_mdr = $feeCalculator->agentPrice($agent));
+
         return view('paygrid.superadmin', [
             'roleLabel' => 'Superadmin',
             'menus' => $this->menus(),
@@ -83,7 +90,7 @@ class SuperadminController extends Controller
         ]);
     }
 
-    public function storeMa(Request $request, AuditLogService $audit): RedirectResponse
+    public function storeMa(Request $request, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
     {
         $data = $this->validateMa($request);
         $password = $data['password'];
@@ -96,10 +103,10 @@ class SuperadminController extends Controller
         ]);
         $audit->record('superadmin.ma_created', $user, null, $user->only(['name', 'email', 'contact', 'is_active']));
 
-        return back()->with('status', 'MA berhasil dibuat. MDR MA: '.$this->fmt($this->maMdr($user)).'%.');
+        return back()->with('status', 'MA berhasil dibuat. MDR MA: '.$this->fmt($feeCalculator->maPrice($user)).'%.');
     }
 
-    public function updateMa(Request $request, User $user, AuditLogService $audit): RedirectResponse
+    public function updateMa(Request $request, User $user, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
     {
         abort_unless($user->role === 'ma', 404);
         $data = $this->validateMa($request, $user);
@@ -115,10 +122,10 @@ class SuperadminController extends Controller
         $user->forceFill($data)->save();
         $audit->record('superadmin.ma_updated', $user, $before, $user->only(array_keys($before)));
 
-        return back()->with('status', 'MA berhasil diupdate. MDR MA: '.$this->fmt($this->maMdr($user->refresh())).'%.');
+        return back()->with('status', 'MA berhasil diupdate. MDR MA: '.$this->fmt($feeCalculator->maPrice($user->refresh())).'%.');
     }
 
-    public function updateMerchantFee(Request $request, Merchant $merchant, AuditLogService $audit): RedirectResponse
+    public function updateMerchantFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
     {
         $this->normalizePercentInputs($request, ['base_mdr_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent', 'toko_fee_percent']);
         $data = $request->validate([
@@ -130,7 +137,7 @@ class SuperadminController extends Controller
             'agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'toko_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
         ]);
-        $data['merchant_mdr_percent'] = $this->merchantMdr($data);
+        $data['merchant_mdr_percent'] = $feeCalculator->merchantPrice($data);
         $before = $merchant->only(array_keys($data));
         $merchant->forceFill($data)->save();
         $audit->record('superadmin.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($data)));
@@ -138,7 +145,7 @@ class SuperadminController extends Controller
         return back()->with('status', 'Fee toko berhasil disimpan. MDR Toko: '.$this->fmt($data['merchant_mdr_percent']).'%.');
     }
 
-    public function storeAgent(Request $request, AuditLogService $audit): RedirectResponse
+    public function storeAgent(Request $request, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
     {
         $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
         $this->normalizePercentInputs($request, ['base_hg_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'default_agent_fee_percent']);
@@ -176,7 +183,7 @@ class SuperadminController extends Controller
         $audit->record('superadmin.agent_created', $agent, null, $agent->toArray());
         $audit->record('superadmin.agent_account_created', $agentUser, null, $agentUser->only(['name', 'email', 'username', 'role']));
 
-        return back()->with('status', 'Merchant Group lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. MDR Agen: '.$this->fmt($this->agentMdr($agent)).'%. Belum dikirim ke HG.');
+        return back()->with('status', 'Merchant Group lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. MDR Agen: '.$this->fmt($feeCalculator->agentPrice($agent)).'%. Belum dikirim ke HG.');
     }
 
     public function updateTimer(Request $request, AuditLogService $audit): RedirectResponse
@@ -247,21 +254,6 @@ class SuperadminController extends Controller
             ['key' => 'timer-ticket', 'label' => 'Timer Ticket', 'url' => route('superadmin.page', 'timer-ticket')],
             ['key' => 'accounts', 'label' => 'Daftar Account', 'url' => route('superadmin.page', 'accounts')],
         ];
-    }
-
-    private function maMdr(User $ma): float
-    {
-        return (float) $ma->base_hg_percent + (float) $ma->connection_fee_percent + (float) $ma->settlement_fee_percent + (float) $ma->ma_fee_percent;
-    }
-
-    private function agentMdr(Agent $agent): float
-    {
-        return (float) $agent->base_hg_percent + (float) $agent->connection_fee_percent + (float) $agent->settlement_fee_percent + (float) $agent->ma_fee_percent + (float) $agent->default_agent_fee_percent;
-    }
-
-    private function merchantMdr(array $data): float
-    {
-        return (float) $data['base_mdr_percent'] + (float) $data['connection_fee_percent'] + (float) $data['settlement_fee_percent'] + (float) $data['ma_fee_percent'] + (float) $data['agent_fee_percent'] + (float) $data['toko_fee_percent'];
     }
 
     private function fmt(float $value): string

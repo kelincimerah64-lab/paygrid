@@ -4,9 +4,6 @@
     $money = fn ($value) => 'Rp '.number_format((int) $value, 0, ',', '.');
     $pct = fn ($value) => number_format((float) $value, 2, ',', '.').'%';
     $pctInput = fn ($value) => number_format((float) $value, 2, '.', '');
-    $maMdr = fn ($ma) => (float) $ma->base_hg_percent + (float) $ma->connection_fee_percent + (float) $ma->settlement_fee_percent + (float) $ma->ma_fee_percent;
-    $agentMdr = fn ($agent) => (float) $agent->base_hg_percent + (float) $agent->connection_fee_percent + (float) $agent->settlement_fee_percent + (float) $agent->ma_fee_percent + (float) $agent->default_agent_fee_percent;
-    $merchantMdr = fn ($merchant) => (float) $merchant->base_mdr_percent + (float) $merchant->connection_fee_percent + (float) $merchant->settlement_fee_percent + (float) $merchant->ma_fee_percent + (float) $merchant->agent_fee_percent + (float) $merchant->toko_fee_percent;
 @endphp
 
 @section('content')
@@ -71,7 +68,7 @@
                         <td>{{ $pct($merchant->ma_fee_percent) }}</td>
                         <td>{{ $pct($merchant->agent_fee_percent) }}</td>
                         <td>{{ $pct($merchant->toko_fee_percent) }}</td>
-                        <td><strong>{{ $pct($merchant->merchant_mdr_percent ?: $merchantMdr($merchant)) }}</strong></td>
+                        <td><strong>{{ $pct($merchant->computed_mdr) }}</strong></td>
                     </tr>
                 @endforeach
                 </tbody>
@@ -102,7 +99,7 @@
                         <td><input form="fee-{{ $merchant->id }}" name="ma_fee_percent" value="{{ old('ma_fee_percent', $pctInput($merchant->ma_fee_percent)) }}"></td>
                         <td><input form="fee-{{ $merchant->id }}" name="agent_fee_percent" value="{{ old('agent_fee_percent', $pctInput($merchant->agent_fee_percent)) }}"></td>
                         <td><input form="fee-{{ $merchant->id }}" name="toko_fee_percent" value="{{ old('toko_fee_percent', $pctInput($merchant->toko_fee_percent)) }}"></td>
-                        <td><strong>{{ $pct($merchant->merchant_mdr_percent ?: $merchantMdr($merchant)) }}</strong></td>
+                        <td><strong>{{ $pct($merchant->computed_mdr) }}</strong></td>
                         <td><button form="fee-{{ $merchant->id }}" class="btn primary compact-btn">Simpan</button></td>
                     </tr>
                 @endforeach
@@ -140,7 +137,7 @@
         <div class="qris-toolbar"><h2>Daftar MA</h2></div>
         <table class="table qris-table"><thead><tr><th>MA</th><th>Fee</th><th>MDR MA</th><th>Status</th></tr></thead><tbody>
             @foreach($mas as $ma)
-                <tr><td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td><td>Base {{ $pct($ma->base_hg_percent) }} / Conn {{ $pct($ma->connection_fee_percent) }} / Settle {{ $pct($ma->settlement_fee_percent) }} / MA {{ $pct($ma->ma_fee_percent) }}</td><td><strong>{{ $pct($maMdr($ma)) }}</strong></td><td><span class="badge {{ $ma->is_active ? 'ok' : 'danger' }}">{{ $ma->is_active ? 'Aktif' : 'Nonaktif' }}</span></td></tr>
+                <tr><td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td><td>Base {{ $pct($ma->base_hg_percent) }} / Conn {{ $pct($ma->connection_fee_percent) }} / Settle {{ $pct($ma->settlement_fee_percent) }} / MA {{ $pct($ma->ma_fee_percent) }}</td><td><strong>{{ $pct($ma->computed_mdr) }}</strong></td><td><span class="badge {{ $ma->is_active ? 'ok' : 'danger' }}">{{ $ma->is_active ? 'Aktif' : 'Nonaktif' }}</span></td></tr>
             @endforeach
         </tbody></table>
     </section>
@@ -171,7 +168,7 @@
             </table>
         </div>
     </section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Fee Dasar</th><th>MDR Agen</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>Base {{ $pct($agent->base_hg_percent) }} / MA {{ $pct($agent->ma_fee_percent) }} / Agent {{ $pct($agent->default_agent_fee_percent) }}</td><td><strong>{{ $pct($agentMdr($agent)) }}</strong></td></tr>@endforeach</tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Fee Dasar</th><th>MDR Agen</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>Base {{ $pct($agent->base_hg_percent) }} / MA {{ $pct($agent->ma_fee_percent) }} / Agent {{ $pct($agent->default_agent_fee_percent) }}</td><td><strong>{{ $pct($agent->computed_mdr) }}</strong></td></tr>@endforeach</tbody></table></section>
 @endif
 
 @if($active === 'timer-ticket')

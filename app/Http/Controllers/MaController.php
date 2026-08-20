@@ -11,6 +11,8 @@ use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
 use App\Services\AuditLogService;
+use App\Services\FeeCalculator;
+use App\Services\TelegramBotMonitoringService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,7 +25,7 @@ class MaController extends Controller
 {
     public function page(string $page = 'overview'): View
     {
-        abort_unless(in_array($page, ['overview', 'report', 'fee', 'approval', 'mapping', 'stores', 'agents', 'create-store'], true), 404);
+        abort_unless(in_array($page, ['overview', 'report', 'fee', 'approval', 'mapping', 'stores', 'agents', 'create-store', 'bot-monitoring'], true), 404);
 
         $filters = $this->filters();
         $dataFilters = in_array($page, ['overview', 'report', 'fee'], true) ? $this->periodFilters($filters) : $filters;
@@ -46,6 +48,7 @@ class MaController extends Controller
                 'stores' => 'List Toko',
                 'agents' => 'Agen',
                 'create-store' => 'Create Toko',
+                'bot-monitoring' => 'Monitoring Bot Telegram',
                 default => 'Overview',
             },
             'filters' => $filters,
@@ -67,12 +70,15 @@ class MaController extends Controller
             'storeRanking' => $this->storeRanking($dataFilters),
             'agentRanking' => $this->agentRanking($dataFilters),
             'maNotifications' => request()->user()?->unreadNotifications()->latest()->limit(5)->get() ?? collect(),
+            'botMonitoring' => $page === 'bot-monitoring'
+                ? app(TelegramBotMonitoringService::class)->data($this->botMonitoringFilters(), request()->boolean('refresh'))
+                : null,
         ]);
     }
 
     public function export(Request $request): Response
     {
-        $rows = $this->transactions($this->filters())->limit(5000)->get();
+        $rows = $this->transactions($this->periodFilters($this->filters()))->limit(5000)->get();
         $csv = "Masuk,Sukses,Durasi,Toko,Agen,Status,Amount,Reference,RRN,Payment ID,Net,Settlement\n";
         foreach ($rows as $row) {
             $csv .= implode(',', array_map(fn ($value) => '"'.str_replace('"', '""', (string) $value).'"', [
@@ -138,7 +144,7 @@ class MaController extends Controller
         return back()->with('status', 'Agen lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG.');
     }
 
-    public function mapAgent(Request $request, Merchant $merchant, AuditLogService $audit): RedirectResponse
+    public function mapAgent(Request $request, Merchant $merchant, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
     {
         abort_unless($this->canUseMerchant($merchant), 403);
         $data = $request->validate(['agent_id' => ['required', 'exists:agents,id']]);
@@ -154,14 +160,14 @@ class MaController extends Controller
             'merchant_group_id' => $agent->hg_group_id,
             'agent_fee_percent' => $agentFee,
             'merchant_mdr_percent' => $merchantMdr,
-            'ma_fee_percent' => max(0, $merchantMdr - $baseCost - $agentFee),
+            'ma_fee_percent' => $feeCalculator->residual($merchantMdr, $baseCost + $agentFee),
         ])->save();
         $audit->record('ma.merchant_agent_mapped', $merchant, $before, $merchant->only(array_keys($before)));
 
         return back()->with('status', 'Agen toko berhasil disimpan.');
     }
 
-    public function storeMerchant(Request $request, AuditLogService $audit): RedirectResponse
+    public function storeMerchant(Request $request, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
     {
         $this->normalizePercentInputs($request, ['merchant_mdr_percent', 'base_mdr_percent', 'connection_fee_percent', 'settlement_fee_percent', 'agent_fee_percent', 'toko_fee_percent']);
         $data = $request->validate([
@@ -219,7 +225,7 @@ class MaController extends Controller
             'settlement_fee_percent' => $data['settlement_fee_percent'],
             'agent_fee_percent' => $data['agent_fee_percent'],
             'toko_fee_percent' => $data['toko_fee_percent'] ?? 0,
-            'ma_fee_percent' => max(0, (float) $data['merchant_mdr_percent'] - $baseCost - (float) $data['agent_fee_percent']),
+            'ma_fee_percent' => $feeCalculator->residual((float) $data['merchant_mdr_percent'], $baseCost + (float) $data['agent_fee_percent']),
             'onboarding_payload' => $data + ['api_ip_whitelist' => $data['api_ip_whitelist'] ?: '15.232.137.74'],
             'approved_at' => now(),
         ]);
@@ -237,7 +243,7 @@ class MaController extends Controller
         return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admin->email.' / '.config('paygrid.demo_password').'.');
     }
 
-    public function updateStoreFee(Request $request, Merchant $merchant, AuditLogService $audit): RedirectResponse
+    public function updateStoreFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
     {
         abort_unless($this->canUseMerchant($merchant), 403);
         $this->normalizePercentInputs($request, ['merchant_mdr_percent', 'base_mdr_percent', 'payin_fee_percent', 'settlement_fee_percent', 'agent_fee_percent']);
@@ -254,7 +260,7 @@ class MaController extends Controller
         }
 
         $data['connection_fee_percent'] = $data['payin_fee_percent'];
-        $data['ma_fee_percent'] = max(0, (float) $data['merchant_mdr_percent'] - $cost);
+        $data['ma_fee_percent'] = $feeCalculator->residual((float) $data['merchant_mdr_percent'], $cost);
         $before = $merchant->only(['merchant_mdr_percent', 'base_mdr_percent', 'payin_fee_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent']);
         $merchant->forceFill($data)->save();
         $audit->record('ma.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($before)));
@@ -274,6 +280,18 @@ class MaController extends Controller
             'type' => (string) request('type', 'all'),
             'from' => request('from'),
             'to' => request('to'),
+        ];
+    }
+
+    private function botMonitoringFilters(): array
+    {
+        return [
+            'status' => trim((string) request('bot_status', '')),
+            'category' => trim((string) request('bot_category', '')),
+            'assigned_name' => trim((string) request('bot_assigned', '')),
+            'from' => request('bot_from'),
+            'to' => request('bot_to'),
+            'q' => trim((string) request('bot_q', '')),
         ];
     }
 
@@ -448,7 +466,6 @@ class MaController extends Controller
 
     private function overviewDetails(array $filters): array
     {
-        $latestTransactions = $this->transactions($filters)->limit(200)->get();
         $successTransactions = $this->transactions(array_merge($filters, ['status' => 'success']))->limit(200)->get();
         $pendingTransactions = $this->transactions(array_merge($filters, ['status' => 'pending']))->limit(200)->get();
         $expiredTransactions = $this->transactions(array_merge($filters, ['status' => 'all']))->whereIn('topup_requests.status', ['expired', 'failed', 'rejected'])->limit(200)->get();
@@ -462,9 +479,9 @@ class MaController extends Controller
         return [
             'volume_success' => ['title' => 'Volume Sukses', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions)],
             'pending_transaction_amount' => ['title' => 'Pending Transaksi', 'type' => 'transaction', 'items' => $this->transactionItems($pendingTransactions)],
-            'total_settlement' => ['title' => 'Total Settlement', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions)],
+            'total_settlement' => ['title' => 'Total Settlement', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions, 'net_amount')],
             'hg_settlement' => ['title' => 'Settlement Real HG', 'type' => 'settlement', 'items' => $this->settlementItems($hgSettlements)],
-            'trx_total' => ['title' => 'Total Transaksi', 'type' => 'transaction', 'items' => $this->transactionItems($latestTransactions)],
+            'trx_total' => ['title' => 'Total Transaksi', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions)],
             'trx_pending' => ['title' => 'Transaksi Pending', 'type' => 'transaction', 'items' => $this->transactionItems($pendingTransactions)],
             'trx_expired' => ['title' => 'Transaksi Expired', 'type' => 'transaction', 'items' => $this->transactionItems($expiredTransactions)],
             'issue_total' => ['title' => 'Total Issue', 'type' => 'ticket', 'items' => $this->ticketItems($tickets)],
@@ -485,7 +502,7 @@ class MaController extends Controller
             ->when($this->currentMaId(), fn ($query, $maId) => $query->where('agents.ma_user_id', $maId))
             ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw('merchants.agent_id, COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->selectRaw("merchants.agent_id, COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as volume")
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as pending")
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as settled")
             ->whereNotNull('merchants.agent_id')
@@ -533,18 +550,6 @@ class MaController extends Controller
         ];
     }
 
-    private function feeTotals($transactions): array
-    {
-        return $transactions->where('status', 'success')->reduce(function (array $carry, TopupRequest $trx) {
-            $amount = (int) $trx->amount;
-            $carry['ma'] += (int) round($amount * ((float) $trx->merchant?->ma_fee_percent / 100));
-            $carry['agent'] += (int) round($amount * ((float) $trx->merchant?->agent_fee_percent / 100));
-            $carry['merchant'] += (int) round($amount * ((float) $trx->merchant?->merchant_mdr_percent / 100));
-
-            return $carry;
-        }, ['ma' => 0, 'agent' => 0, 'merchant' => 0]);
-    }
-
     private function feeTotalsForFilters(array $filters): array
     {
         $row = (clone $this->transactions(array_merge($filters, ['status' => 'success'])))
@@ -562,14 +567,14 @@ class MaController extends Controller
         ];
     }
 
-    private function transactionItems($transactions): array
+    private function transactionItems($transactions, string $amountField = 'amount'): array
     {
         return $transactions->take(200)->map(fn (TopupRequest $trx) => [
             'date' => $trx->submitted_at?->format('d/m/y H.i') ?: '-',
             'title' => $trx->customer_reference ?: $trx->gateway_ref_id ?: $trx->payment_id ?: '-',
             'subtitle' => ($trx->merchant?->name ?: '-').' / '.($trx->merchant?->agent?->name ?: '-'),
             'status' => $trx->status,
-            'amount' => (int) $trx->amount,
+            'amount' => (int) $trx->{$amountField},
             'meta' => $trx->rrn ?: $trx->payment_id ?: '-',
         ])->values()->all();
     }
@@ -746,13 +751,6 @@ class MaController extends Controller
         $parsed = CarbonImmutable::parse($value, 'Asia/Jakarta');
 
         return str_contains($value, ':') ? $parsed : $parsed->endOfDay();
-    }
-
-    private function metricPeriod($query, array $filters)
-    {
-        return $query
-            ->when($filters['from'], fn ($nested) => $nested->whereDate('metric_date', '>=', $filters['from']))
-            ->when($filters['to'], fn ($nested) => $nested->whereDate('metric_date', '<=', $filters['to']));
     }
 
     private function currentMaId(): ?int

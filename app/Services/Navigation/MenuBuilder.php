@@ -30,6 +30,7 @@ class MenuBuilder
             ['key' => 'stores', 'label' => 'List Toko', 'url' => route('ma.stores')],
             ['key' => 'agents', 'label' => 'Agen', 'url' => route('ma.agents')],
             ['key' => 'create-store', 'label' => 'Create Toko', 'url' => route('ma.create-store')],
+            ['key' => 'bot-monitoring', 'label' => 'Monitoring Bot Telegram', 'url' => route('ma.bot-monitoring')],
         ];
     }
 

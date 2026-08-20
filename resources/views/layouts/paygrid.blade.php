@@ -660,6 +660,7 @@
                         'stores' => '▦',
                         'agents' => '◎',
                         'create-store' => '+',
+                        'bot-monitoring' => '◈',
                         'status-request' => '↗',
                         'users' => 'U',
                         'logs' => '≡',

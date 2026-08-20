@@ -57,4 +57,12 @@ return [
         'default_page_size' => (int) env('PAYGRID_REPORT_PAGE_SIZE', 50),
         'max_page_size' => (int) env('PAYGRID_REPORT_MAX_PAGE_SIZE', 200),
     ],
+
+    'telegram_bot_monitoring' => [
+        'spreadsheet_id' => env('TELEGRAM_BOT_SHEET_ID', '19bXJLfZBarZ4BNnX5K-Dl3ttfsyh7lBIUjUys1i96dg'),
+        'sheet_range' => env('TELEGRAM_BOT_SHEET_RANGE', 'A:X'),
+        'service_account_email' => env('GOOGLE_SHEETS_SERVICE_ACCOUNT_EMAIL'),
+        'service_account_private_key' => env('GOOGLE_SHEETS_SERVICE_ACCOUNT_PRIVATE_KEY'),
+        'cache_ttl_seconds' => (int) env('TELEGRAM_BOT_SHEET_CACHE_TTL', 45),
+    ],
 ];

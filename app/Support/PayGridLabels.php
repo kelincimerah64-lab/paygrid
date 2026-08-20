@@ -33,4 +33,11 @@ class PayGridLabels
             ? 'ok'
             : (in_array($status, ['expired', 'failed', 'rejected', 'cancelled', 'Suspended'], true) ? 'danger' : 'warn');
     }
+
+    public static function centerStatusBadge(string|null $status): string
+    {
+        return $status === 'success'
+            ? 'ok'
+            : (str_starts_with((string) $status, 'issue') ? 'danger' : 'warn');
+    }
 }
