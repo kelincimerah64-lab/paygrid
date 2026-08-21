@@ -53,7 +53,7 @@
                         <span class="time-cell">{{ $ticket->submitted_to_center_at?->timezone('Asia/Jakarta')->format('d M y') ?? '-' }}<span>{{ $ticket->submitted_to_center_at?->timezone('Asia/Jakarta')->format('H.i') ?? '' }}</span></span>
                     </td>
                     <td>
-                        <strong>{{ $topup?->payment_id ?: $ticket->payment_id ?: $ticket->client_reference ?: '-' }}</strong>
+                        <strong class="truncate ref-line">{{ $topup?->payment_id ?: $ticket->payment_id ?: $ticket->client_reference ?: '-' }}</strong>
                     </td>
                     <td>
                         <form id="ticket-update-{{ $ticket->id }}" method="post" action="{{ route('center-support.tickets.update', $ticket) }}" class="center-update-row">

@@ -237,21 +237,23 @@
         </div>
     </form>
 
+    @php($botResolvedPct = ($bm['kpis']['total'] ?? 0) > 0 ? round((($bm['kpis']['resolved'] ?? 0) / $bm['kpis']['total']) * 100) : 0)
+    @php($botFailedPct = ($bm['kpis']['total'] ?? 0) > 0 ? round((($bm['kpis']['failed'] ?? 0) / $bm['kpis']['total']) * 100) : 0)
     @if($bm['error'])
         <section class="card pad section"><span class="badge danger">{{ $bm['error'] }}</span></section>
     @else
-        <section class="grid cards section">
-            <div class="card pad metric"><label>Total Ticket</label><strong>{{ number_format($bm['kpis']['total'] ?? 0, 0, ',', '.') }}</strong></div>
-            <div class="card pad metric success"><label>Resolved</label><strong>{{ number_format($bm['kpis']['resolved'] ?? 0, 0, ',', '.') }}</strong></div>
-            <div class="card pad metric warn-soft"><label>Failed</label><strong>{{ number_format($bm['kpis']['failed'] ?? 0, 0, ',', '.') }}</strong></div>
-            <div class="card pad metric"><label>Avg Pickup (min)</label><strong>{{ $bm['kpis']['avg_pickup_minutes'] ?? 0 }}</strong></div>
-            <div class="card pad metric"><label>Avg Handling (min)</label><strong>{{ $bm['kpis']['avg_handling_minutes'] ?? 0 }}</strong></div>
-            <div class="card pad metric"><label>Avg Total Resolution (min)</label><strong>{{ $bm['kpis']['avg_total_resolution_minutes'] ?? 0 }}</strong></div>
+        <section class="grid qris-metrics section">
+            <div class="card pad qris-metric primary"><span>Total Ticket</span><strong>{{ number_format($bm['kpis']['total'] ?? 0, 0, ',', '.') }}</strong><small>Sesuai filter aktif</small></div>
+            <div class="card pad qris-metric success"><span>Resolved</span><strong>{{ number_format($bm['kpis']['resolved'] ?? 0, 0, ',', '.') }}</strong><small>{{ $botResolvedPct }}% dari total</small></div>
+            <div class="card pad qris-metric expired"><span>Failed</span><strong>{{ number_format($bm['kpis']['failed'] ?? 0, 0, ',', '.') }}</strong><small>{{ $botFailedPct }}% dari total</small></div>
+            <div class="card pad qris-metric"><span>Avg Pickup</span><strong>{{ $bm['kpis']['avg_pickup_minutes'] ?? 0 }} min</strong><small>Respons awal</small></div>
+            <div class="card pad qris-metric"><span>Avg Handling</span><strong>{{ $bm['kpis']['avg_handling_minutes'] ?? 0 }} min</strong><small>Waktu penanganan</small></div>
+            <div class="card pad qris-metric"><span>Avg Resolusi</span><strong>{{ $bm['kpis']['avg_total_resolution_minutes'] ?? 0 }} min</strong><small>End-to-end</small></div>
         </section>
 
-        <section class="grid cards section" style="grid-template-columns:1fr 1fr">
-            <div class="card pad"><h2>Distribusi Status</h2><canvas id="bot-status-chart" height="180"></canvas></div>
-            <div class="card pad"><h2>Ticket per Kategori</h2><canvas id="bot-category-chart" height="180"></canvas></div>
+        <section class="grid bot-charts section">
+            <div class="card pad bot-chart-card"><h2>Distribusi Status</h2><div class="bot-chart-box"><canvas id="bot-status-chart"></canvas></div></div>
+            <div class="card pad bot-chart-card"><h2>Ticket per Kategori</h2><div class="bot-chart-box"><canvas id="bot-category-chart"></canvas></div></div>
         </section>
         <script type="application/json" id="bot-monitoring-kpis">@json($bm['kpis'])</script>
 
@@ -265,14 +267,14 @@
                         <tr>
                             <td><strong>{{ $t['ticket_id'] ?? '-' }}</strong></td>
                             <td class="time-cell">{{ $t['created_at']?->format('d/m/y') ?? '-' }}<span>{{ $t['created_at']?->format('H.i') ?? '' }}</span></td>
-                            <td>{{ $t['requester_name'] ?: '-' }}<br><span class="muted">{{ $t['requester_username'] ? '@'.$t['requester_username'] : '-' }}</span></td>
-                            <td>{{ $t['category'] ?: '-' }}</td>
-                            <td><span class="badge {{ $t['status'] === 'RESOLVED' ? 'ok' : ($t['status'] === 'FAILED' ? 'danger' : 'warn') }}">{{ $t['status'] ?: '-' }}</span></td>
-                            <td>{{ $t['assigned_name'] ?: '-' }}</td>
+                            <td>{{ ($t['requester_name'] ?? null) ?: '-' }}<br><span class="muted">{{ ! empty($t['requester_username']) ? '@'.$t['requester_username'] : '-' }}</span></td>
+                            <td>{{ ($t['category'] ?? null) ?: '-' }}</td>
+                            <td><span class="badge {{ ($t['status'] ?? null) === 'RESOLVED' ? 'ok' : (($t['status'] ?? null) === 'FAILED' ? 'danger' : 'warn') }}">{{ ($t['status'] ?? null) ?: '-' }}</span></td>
+                            <td>{{ ($t['assigned_name'] ?? null) ?: '-' }}</td>
                             <td>{{ $t['pickup_minutes'] ?? '-' }}</td>
                             <td>{{ $t['handling_minutes'] ?? '-' }}</td>
                             <td>{{ $t['total_resolution_minutes'] ?? '-' }}</td>
-                            <td>{{ $t['last_update'] ?: '-' }}</td>
+                            <td>{{ ($t['last_update'] ?? null) ?: '-' }}</td>
                         </tr>
                     @empty
                         <tr><td colspan="10" class="empty">Belum ada ticket untuk filter ini.</td></tr>
@@ -359,13 +361,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!kpiEl) return;
     const kpis = JSON.parse(kpiEl.textContent || '{}');
 
+    const palette = ['#008450', '#c62828', '#b15a00', '#1557c2', '#4f2a8a', '#1f6fe5'];
+    Chart.defaults.font.size = 11;
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
     const statusCanvas = document.getElementById('bot-status-chart');
     if (statusCanvas && kpis.by_status) {
         new Chart(statusCanvas, {
             type: 'doughnut',
             data: {
                 labels: Object.keys(kpis.by_status),
-                datasets: [{ data: Object.values(kpis.by_status), backgroundColor: ['#22c55e', '#ef4444', '#f59e0b', '#3b82f6', '#a855f7'] }],
+                datasets: [{ data: Object.values(kpis.by_status), backgroundColor: palette, borderWidth: 2, borderColor: '#fff' }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '68%',
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 10 } } },
             },
         });
     }
@@ -376,9 +388,17 @@ document.addEventListener('DOMContentLoaded', () => {
             type: 'bar',
             data: {
                 labels: Object.keys(kpis.by_category),
-                datasets: [{ label: 'Ticket', data: Object.values(kpis.by_category), backgroundColor: '#3b82f6' }],
+                datasets: [{ label: 'Ticket', data: Object.values(kpis.by_category), backgroundColor: '#1f6fe5', borderRadius: 4, maxBarThickness: 28 }],
             },
-            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#eef2f8' } },
+                    x: { grid: { display: false } },
+                },
+            },
         });
     }
 });
