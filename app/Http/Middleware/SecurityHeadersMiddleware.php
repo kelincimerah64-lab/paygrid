@@ -18,6 +18,14 @@ class SecurityHeadersMiddleware
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
         $response->headers->set('Cross-Origin-Opener-Policy', 'same-origin');
         $response->headers->set('Cross-Origin-Resource-Policy', 'same-origin');
+
+        // Symfony's ResponseHeaderBag always injects a "no-cache, private" Cache-Control
+        // by default, so has('Cache-Control') is never a reliable "was it set?" check.
+        // Only overwrite that silent default; leave a controller's deliberate value alone.
+        if (in_array($response->headers->get('Cache-Control'), [null, 'no-cache, private'], true)) {
+            $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            $response->headers->set('Pragma', 'no-cache');
+        }
         $csp = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
         if ($request->isSecure()) {
