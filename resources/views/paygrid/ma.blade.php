@@ -20,10 +20,6 @@
 
 @if(session('status'))<section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>@endif
 @if($errors->any())<section class="card pad section"><span class="badge danger">{{ $errors->first() }}</span></section>@endif
-@if(($maNotifications ?? collect())->isNotEmpty())
-<section class="card pad section"><div class="qris-toolbar"><h2>Notifikasi MA</h2><span class="badge warn">{{ ($maNotifications ?? collect())->count() }} baru</span></div><div class="ma-detail-list">@foreach($maNotifications as $notification)<a class="ma-detail-row" href="{{ $notification->data['url'] ?? route('ma.approvals') }}"><div><b>{{ $notification->data['title'] ?? 'Notifikasi' }}</b><span>{{ $notification->data['message'] ?? '-' }}</span></div><span class="badge warn">Unread</span></a>@endforeach</div></section>
-@endif
-
 @if(! in_array($active, ['overview', 'report', 'fee', 'bot-monitoring'], true))
 <form class="card filters" method="get">
     @if($active !== 'approval')<input class="search" name="q" value="{{ $filters['q'] }}" placeholder="Cari toko, agen, status, payment, RRN...">@endif

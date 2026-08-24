@@ -21,6 +21,16 @@
         .brand { display:flex; align-items:center; justify-content:center; }
         .brand img { display:block; width:190px; max-width:100%; height:auto; }
         .role { margin-top:8px; text-align:center; font-size:12px; font-weight:900; color:#111d32; }
+        .notif-bell { position:relative; margin-top:10px; display:flex; justify-content:center; }
+        .notif-bell summary { list-style:none; cursor:pointer; width:34px; height:34px; border-radius:50%; border:1px solid #c6d5ea; background:#fff; display:grid; place-items:center; font-size:16px; position:relative; }
+        .notif-bell summary::-webkit-details-marker { display:none; }
+        .notif-bell .notif-count { position:absolute; top:-3px; right:-3px; background:var(--danger); color:#fff; font-size:10px; font-weight:900; border-radius:999px; min-width:16px; height:16px; display:grid; place-items:center; padding:0 3px; }
+        .notif-bell[open] summary { border-color:#9dbaf1; }
+        .notif-panel { position:absolute; top:42px; left:50%; transform:translateX(-50%); width:260px; max-height:320px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 30px rgba(14,35,70,.12); padding:10px; z-index:20; }
+        .notif-panel h3 { margin:0 0 8px; font-size:11px; letter-spacing:.05em; color:#26364f; text-transform:uppercase; font-weight:900; }
+        .notif-panel .empty { font-size:12px; color:var(--muted); padding:6px 2px; }
+        .notif-panel .ma-detail-row { min-height:auto; padding:8px; margin-bottom:6px; }
+        .notif-panel .ma-detail-row:last-child { margin-bottom:0; }
         .menu-title { margin:12px 6px 8px; font-size:10px; letter-spacing:.18em; color:#7a879b; font-weight:900; text-transform:uppercase; }
         .nav { display:grid; gap:6px; }
         .nav a { position:relative; display:flex; align-items:center; gap:11px; min-height:42px; padding:9px 12px; border:1px solid transparent; border-radius:10px; text-decoration:none; color:#43536d; font-size:13px; font-weight:850; transition:background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease; }
@@ -653,6 +663,18 @@
         <div>
             <div class="brand"><img src="{{ asset('images/paygrid-logo.png') }}" alt="PayGrid Transaction Monitoring Dashboard"></div>
             <div class="role">{{ $roleLabel ?? 'PayGrid' }}</div>
+            @php($maNotifications = $maNotifications ?? collect())
+            @if($maNotifications->isNotEmpty())
+            <details class="notif-bell">
+                <summary aria-label="Notifikasi">🔔<span class="notif-count">{{ $maNotifications->count() }}</span></summary>
+                <div class="notif-panel">
+                    <h3>Notifikasi MA</h3>
+                    @foreach($maNotifications as $notification)
+                        <a class="ma-detail-row" href="{{ $notification->data['url'] ?? route('ma.approvals') }}"><div><b>{{ $notification->data['title'] ?? 'Notifikasi' }}</b><span>{{ $notification->data['message'] ?? '-' }}</span></div></a>
+                    @endforeach
+                </div>
+            </details>
+            @endif
         </div>
         <div>
             <div class="menu-title">Menu</div>
