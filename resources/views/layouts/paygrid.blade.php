@@ -440,7 +440,7 @@
         .empty { padding:24px 18px; color:var(--muted); text-align:center; line-height:1.45; }
         .empty strong { display:block; color:var(--ink); margin-bottom:4px; }
         .ops-panel { display:grid; gap:9px; margin:0 0 18px; }
-        .ops-health { display:flex; gap:10px; align-items:center; justify-content:space-between; min-height:42px; padding:9px 12px; border:1px solid #d8e5f7; border-radius:13px; background:linear-gradient(135deg, #fff, #f7fbff); box-shadow:0 8px 22px rgba(14, 35, 70, .045); overflow:hidden; }
+        .ops-health { display:flex; gap:10px; align-items:center; justify-content:space-between; min-height:42px; padding:9px 12px; border:1px solid #d8e5f7; border-radius:13px; background:linear-gradient(135deg, #fff, #f7fbff); box-shadow:0 8px 22px rgba(14, 35, 70, .045); }
         .ops-live { display:inline-flex; align-items:center; gap:8px; min-width:max-content; color:#0f2c57; font-size:12px; font-weight:950; letter-spacing:.06em; text-transform:uppercase; }
         .ops-dot { width:9px; height:9px; border-radius:999px; background:#00a86b; box-shadow:0 0 0 0 rgba(0,168,107,.45); animation:ops-pulse 1.8s ease-out infinite; }
         .ops-dot.warn { background:#d99a00; box-shadow:0 0 0 0 rgba(217,154,0,.45); }
@@ -711,7 +711,6 @@
                 <div class="ops-health">
                     <div class="ops-live"><span class="ops-dot {{ ($ops['healthy'] ?? false) ? '' : 'warn' }}"></span>Live Operations</div>
                     <div class="ops-stats">
-                        <span class="ops-pill {{ ($ops['healthy'] ?? false) ? 'ok' : 'warn' }}">Sync {{ ($ops['latestPullAge'] ?? null) !== null ? ($ops['latestPullAge'].'s') : 'n/a' }}</span>
                         @php($maNotifications = $maNotifications ?? collect())
                         @if($maNotifications->isNotEmpty())
                         <details class="notif-bell">
@@ -724,6 +723,7 @@
                             </div>
                         </details>
                         @endif
+                        <span class="ops-pill {{ ($ops['healthy'] ?? false) ? 'ok' : 'warn' }}">Sync {{ ($ops['latestPullAge'] ?? null) !== null ? ($ops['latestPullAge'].'s') : 'n/a' }}</span>
                         <span class="ops-pill {{ (($ops['queueLag'] ?? 0) < 60) ? 'ok' : 'warn' }}">Queue {{ $ops['queueLag'] ?? 'n/a' }}s</span>
                         <span class="ops-pill {{ (($ops['failedJobs'] ?? 0) === 0) ? 'ok' : 'danger' }}">Failed {{ $ops['failedJobs'] ?? 'n/a' }}</span>
                         <span class="ops-pill">Refresh 3s</span>
