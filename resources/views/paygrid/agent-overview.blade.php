@@ -26,7 +26,6 @@
     <div class="card pad metric blue"><label>Volume Sukses</label><strong>{{ $money($merchants->sum('metric_volume_success')) }}</strong></div>
     <div class="card pad metric"><label>Transaksi Sukses</label><strong>{{ $num($merchants->sum('metric_trx_total')) }}</strong></div>
     <div class="card pad metric warn-soft"><label>Transaksi Pending</label><strong>{{ $num($merchants->sum('metric_trx_pending')) }}</strong></div>
-    <div class="card pad metric success"><label>Estimasi Fee Agen</label><strong>{{ $money($feeTotal ?? 0) }}</strong></div>
 </section>
 
 <section class="grid cards section">
@@ -35,6 +34,8 @@
     <div class="card pad metric success"><label>Ticket Selesai</label><strong>{{ $num($ticketStats['done'] ?? 0) }}</strong></div>
     <div class="card pad metric"><label>Issue CS Pusat</label><strong>{{ $num($ticketStats['issue'] ?? 0) }}</strong></div>
 </section>
+
+<section class="card pad metric success section"><label>Estimasi Fee Agen</label><strong>{{ $money($feeTotal ?? 0) }}</strong></section>
 
 <section class="card agent-filter-card section">
     <form class="agent-filter-grid" method="get">
