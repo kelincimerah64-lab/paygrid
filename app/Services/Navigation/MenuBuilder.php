@@ -38,6 +38,7 @@ class MenuBuilder
     {
         return [
             ['key' => 'overview', 'label' => 'Overview', 'url' => route('agent.overview')],
+            ['key' => 'fee', 'label' => 'Fee', 'url' => route('agent.fee')],
             ['key' => 'create-store', 'label' => 'Create Toko', 'url' => route('agent.create-store')],
             ['key' => 'status-request', 'label' => 'Status Request', 'url' => route('agent.requests')],
         ];

@@ -83,6 +83,14 @@ class DashboardController extends Controller
             ->latest()
             ->limit(30)
             ->get();
+        $feeTotal = (int) round((float) TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->where('merchants.agent_id', $agent->id)
+            ->where('topup_requests.status', 'success')
+            ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()))
+            ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()))
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as total')
+            ->value('total'));
 
         return view('paygrid.agent-overview', [
             'roleLabel' => $agent->name,
@@ -92,6 +100,39 @@ class DashboardController extends Controller
             'merchants' => $merchants,
             'tickets' => $tickets,
             'ticketStats' => $ticketStats,
+            'reportFilters' => $filters,
+            'feeTotal' => $feeTotal,
+        ]);
+    }
+
+    public function agentFee(MenuBuilder $menus): View
+    {
+        $agent = $this->currentAgent();
+        $filters = [
+            'q' => trim((string) request('q', '')),
+            'from' => (string) request('from', ''),
+            'to' => (string) request('to', ''),
+        ];
+
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->where('merchants.agent_id', $agent->id)
+            ->where('topup_requests.status', 'success')
+            ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()))
+            ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()))
+            ->when($filters['q'] !== '', fn ($query) => $query->where('merchants.name', 'like', '%'.$filters['q'].'%'))
+            ->selectRaw('merchants.id as merchant_id, merchants.name, merchants.slug, merchants.merchant_id as merchant_code, merchants.agent_fee_percent, COUNT(*) as trx, COALESCE(SUM(topup_requests.amount), 0) as volume, COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as fee_amount')
+            ->groupBy('merchants.id', 'merchants.name', 'merchants.slug', 'merchants.merchant_id', 'merchants.agent_fee_percent')
+            ->orderByDesc('fee_amount')
+            ->get();
+
+        return view('paygrid.agent-fee', [
+            'roleLabel' => $agent->name,
+            'menus' => $menus->agent(),
+            'active' => 'fee',
+            'agent' => $agent,
+            'rows' => $rows,
+            'total' => (int) round((float) $rows->sum('fee_amount')),
             'reportFilters' => $filters,
         ]);
     }

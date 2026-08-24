@@ -77,6 +77,7 @@ Route::get('/portal/{merchant}/admin/history', fn (\App\Models\Merchant $merchan
 
 Route::middleware(['auth', 'role:agent'])->group(function () {
 Route::get('/agent', [DashboardController::class, 'agent'])->name('agent.overview');
+Route::get('/agent/fee', [DashboardController::class, 'agentFee'])->name('agent.fee');
 Route::redirect('/agen', '/agent');
 Route::get('/agent/create-store', fn (DashboardController $controller) => $controller->agentSimple('create-store', app(\App\Services\Navigation\MenuBuilder::class)))->name('agent.create-store');
 Route::post('/agent/onboarding-links', [DashboardController::class, 'storeAgentOnboardingLink'])->middleware('throttle:dashboard-writes')->name('agent.onboarding-links.store');
