@@ -35,7 +35,7 @@
     <div class="card pad metric"><label>Issue CS Pusat</label><strong>{{ $num($ticketStats['issue'] ?? 0) }}</strong></div>
 </section>
 
-<section class="grid cards section">
+<section class="cards-compact section">
     <div class="card pad metric success"><label>Estimasi Fee Agen</label><strong>{{ $money($feeTotal ?? 0) }}</strong></div>
 </section>
 

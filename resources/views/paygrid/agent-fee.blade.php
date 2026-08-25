@@ -25,7 +25,7 @@
     </form>
 </section>
 
-<section class="grid cards">
+<section class="cards-compact">
     <div class="card pad metric success"><label>Total Estimasi Fee</label><strong>{{ $money($total) }}</strong></div>
     <div class="card pad metric"><label>Total Toko</label><strong>{{ $num($rows->count()) }}</strong></div>
 </section>
