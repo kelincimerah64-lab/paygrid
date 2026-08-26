@@ -368,16 +368,46 @@ class MaController extends Controller
             ->latest();
     }
 
-    private function transactions(array $filters)
+    /**
+     * Merchant scoping (MA ownership + agent filter) is resolved against the small
+     * merchants/agents tables first, then applied to topup_requests as a plain
+     * whereIn on merchant_id. This keeps the hot report query a single-table scan
+     * ordered by submitted_at (index-only), instead of forcing MySQL to join
+     * topup_requests to merchants/agents before it can sort — which drives the
+     * optimizer to build a temp table + filesort over the whole matched set.
+     */
+    private function transactionsQuery(array $filters)
     {
-        return TopupRequest::query()->with('merchant.agent')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+        $maId = $this->currentMaId();
+
+        $scopedMerchantIds = ($maId || $filters['agent_id'] !== 'all')
+            ? Merchant::query()
+                ->when($maId, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $maId))
+                ->when($filters['agent_id'] !== 'all', fn ($query) => $query->where('agent_id', $filters['agent_id']))
+                ->pluck('id')
+            : null;
+
+        $searchMerchantIds = $filters['q'] !== ''
+            ? Merchant::query()
+                ->when($scopedMerchantIds !== null, fn ($query) => $query->whereIn('id', $scopedMerchantIds))
+                ->where('name', 'like', $filters['q'].'%')
+                ->pluck('id')
+            : null;
+
+        return TopupRequest::query()
+            ->when($scopedMerchantIds !== null, fn ($query) => $query->whereIn('topup_requests.merchant_id', $scopedMerchantIds))
             ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->when($filters['q'] !== '', fn ($query) => $query->where(fn ($nested) => $nested->where('topup_requests.payment_id', 'like', $filters['q'].'%')->orWhere('topup_requests.rrn', 'like', $filters['q'].'%')->orWhere('topup_requests.customer_reference', 'like', $filters['q'].'%')->orWhereRelation('merchant', 'name', 'like', $filters['q'].'%')))
+            ->when($filters['q'] !== '', fn ($query) => $query->where(fn ($nested) => $nested->where('topup_requests.payment_id', 'like', $filters['q'].'%')->orWhere('topup_requests.rrn', 'like', $filters['q'].'%')->orWhere('topup_requests.customer_reference', 'like', $filters['q'].'%')->orWhereIn('topup_requests.merchant_id', $searchMerchantIds)))
             ->when($filters['status'] !== 'all', fn ($query) => $query->where('topup_requests.status', $filters['status']))
-            ->when($filters['agent_id'] !== 'all', fn ($query) => $query->whereRelation('merchant', 'agent_id', $filters['agent_id']))
-            ->when($filters['store_id'] !== 'all', fn ($query) => $query->where('topup_requests.merchant_id', $filters['store_id']))
+            ->when($filters['store_id'] !== 'all', fn ($query) => $query->where('topup_requests.merchant_id', $filters['store_id']));
+    }
+
+    private function transactions(array $filters)
+    {
+        return $this->transactionsQuery($filters)
+            ->select('topup_requests.*')
+            ->with('merchant.agent')
             ->latest('topup_requests.submitted_at');
     }
 
@@ -433,8 +463,7 @@ class MaController extends Controller
 
     private function summary(array $filters): array
     {
-        $totals = (clone $this->transactions($filters))
-            ->reorder()
+        $totals = (clone $this->transactionsQuery($filters))
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_total")
             ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as volume_success")
             ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.net_amount ELSE 0 END), 0) as total_settlement")
@@ -532,8 +561,7 @@ class MaController extends Controller
 
     private function selectedStoreStats(array $filters): array
     {
-        $row = (clone $this->transactions($filters))
-            ->reorder()
+        $row = (clone $this->transactionsQuery($filters))
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_total")
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_success")
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
@@ -552,12 +580,11 @@ class MaController extends Controller
 
     private function feeTotalsForFilters(array $filters): array
     {
-        $row = (clone $this->transactions(array_merge($filters, ['status' => 'success'])))
-            ->reorder()
-            ->join('merchants as fee_merchants', 'fee_merchants.id', '=', 'topup_requests.merchant_id')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * fee_merchants.ma_fee_percent / 100), 0) as ma')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * fee_merchants.agent_fee_percent / 100), 0) as agent')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * fee_merchants.merchant_mdr_percent / 100), 0) as merchant')
+        $row = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.ma_fee_percent / 100), 0) as ma')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as agent')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant')
             ->first();
 
         return [
