@@ -75,7 +75,7 @@
         .sticky-head thead th { position:sticky; top:0; z-index:2; box-shadow:0 1px 0 #e7edf6; }
         .table td { line-height:1.18; }
         .table strong { font-weight:900; }
-        .badge { display:inline-flex; align-items:center; justify-content:center; min-height:24px; padding:4px 9px; border-radius:999px; font-weight:900; font-size:11px; white-space:nowrap; }
+        .badge { display:inline-flex; align-items:center; justify-content:center; min-height:24px; padding:4px 9px; border-radius:999px; font-weight:900; font-size:11px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
         .ok { background:#dff8ec; color:var(--success); }
         .warn { background:#fff0c7; color:var(--warn); }
         .danger { background:#ffe0dd; color:var(--danger); }

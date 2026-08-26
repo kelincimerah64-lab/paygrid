@@ -8,7 +8,7 @@ class PayGridLabels
     {
         return match ((string) $status) {
             'success' => 'Sukses',
-            'pending' => 'Pending Transaksi',
+            'pending' => 'Pending',
             'expired' => 'Expired',
             'failed' => 'Gagal',
             'rejected' => 'Ditolak',
