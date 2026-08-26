@@ -23,18 +23,23 @@ use Illuminate\View\View;
 
 class MaController extends Controller
 {
+    /**
+     * Every MA tab used to eagerly compute all of the below regardless of which
+     * tab was actually being viewed (~50+ queries per request even for a page
+     * like "Create Toko" that needs none of the report/summary data). Each
+     * block below only runs for the tab(s) that actually render it — see
+     * resources/views/paygrid/ma.blade.php for the per-$active variable usage
+     * this mirrors.
+     */
     public function page(string $page = 'overview'): View
     {
         abort_unless(in_array($page, ['overview', 'report', 'fee', 'approval', 'mapping', 'stores', 'agents', 'create-store', 'bot-monitoring'], true), 404);
 
         $filters = $this->filters();
         $dataFilters = in_array($page, ['overview', 'report', 'fee'], true) ? $this->periodFilters($filters) : $filters;
-        $agents = $this->agents($filters)->get();
-        $merchants = $this->merchants($filters)->get();
-        $registrations = $this->registrations($filters)->get();
-        $transactions = $page === 'report' && $dataFilters['store_id'] === 'all'
-            ? null
-            : $this->transactions($dataFilters)->simplePaginate($page === 'report' ? 25 : config('paygrid.reports.default_page_size', 50))->withQueryString();
+
+        $selectedAgent = $page === 'report' ? $this->selectedAgent($filters) : null;
+        $selectedStore = $page === 'report' ? $this->selectedStore($filters) : null;
 
         return view('paygrid.ma', [
             'roleLabel' => 'MA',
@@ -54,21 +59,23 @@ class MaController extends Controller
             'filters' => $filters,
             'dataFilters' => $dataFilters,
             'periodLabel' => $this->periodLabel($dataFilters),
-            'agents' => $agents,
-            'allAgents' => $this->agents($this->blankFilters())->get(),
-            'selectedAgent' => $this->selectedAgent($filters),
-            'selectedStore' => $this->selectedStore($filters),
-            'selectedAgentStores' => $this->selectedAgentStores($filters),
-            'merchants' => $merchants,
-            'registrations' => $registrations,
-            'transactions' => $transactions,
-            'selectedStoreStats' => $dataFilters['store_id'] === 'all' ? null : $this->selectedStoreStats($dataFilters),
-            'summary' => $this->summary($dataFilters),
-            'overviewDetails' => $this->overviewDetails($dataFilters),
-            'reportAgents' => $this->reportAgents($dataFilters),
-            'storeSummaries' => $this->storeSummaries($dataFilters),
-            'storeRanking' => $this->storeRanking($dataFilters),
-            'agentRanking' => $this->agentRanking($dataFilters),
+            'agents' => $page === 'agents' ? $this->agents($filters)->get() : collect(),
+            'allAgents' => in_array($page, ['report', 'fee', 'stores', 'mapping', 'create-store'], true)
+                ? $this->agents($this->blankFilters())->get()
+                : collect(),
+            'selectedAgent' => $selectedAgent,
+            'selectedStore' => $selectedStore,
+            'selectedAgentStores' => $selectedAgent ? $this->selectedAgentStores($filters) : collect(),
+            'merchants' => in_array($page, ['fee', 'mapping', 'stores'], true) ? $this->merchants($filters)->get() : collect(),
+            'registrations' => $page === 'approval' ? $this->registrations($filters)->get() : collect(),
+            'transactions' => $selectedStore ? $this->transactions($dataFilters)->simplePaginate(25)->withQueryString() : null,
+            'selectedStoreStats' => $selectedStore ? $this->selectedStoreStats($dataFilters) : null,
+            'summary' => in_array($page, ['overview', 'fee'], true) ? $this->summary($dataFilters) : [],
+            'overviewDetails' => $page === 'overview' ? $this->overviewDetails($dataFilters) : [],
+            'reportAgents' => $page === 'report' ? $this->reportAgents($dataFilters) : collect(),
+            'storeSummaries' => $page === 'overview' ? $this->storeSummaries($dataFilters) : collect(),
+            'storeRanking' => $page === 'overview' ? $this->storeRanking($dataFilters) : collect(),
+            'agentRanking' => $page === 'overview' ? $this->agentRanking($dataFilters) : collect(),
             'maNotifications' => request()->user()?->unreadNotifications()->latest()->limit(5)->get() ?? collect(),
             'botMonitoring' => $page === 'bot-monitoring'
                 ? app(TelegramBotMonitoringService::class)->data($this->botMonitoringFilters(), request()->boolean('refresh'))
