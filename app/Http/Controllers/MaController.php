@@ -158,16 +158,20 @@ class MaController extends Controller
         $agent = Agent::query()->findOrFail($data['agent_id']);
         abort_unless($this->canUseAgent($agent), 403);
         $before = $merchant->only(['agent_id', 'agent_fee_percent', 'ma_fee_percent', 'merchant_mdr_percent']);
-        $baseCost = (float) $merchant->base_mdr_percent + (float) $merchant->connection_fee_percent + (float) $merchant->settlement_fee_percent;
         $agentFee = (float) $agent->default_agent_fee_percent;
-        $merchantMdr = max((float) $merchant->merchant_mdr_percent, $baseCost + $agentFee);
         $merchant->forceFill([
             'agent_id' => $agent->id,
             'merchant_group_name' => $agent->name,
             'merchant_group_id' => $agent->hg_group_id,
             'agent_fee_percent' => $agentFee,
-            'merchant_mdr_percent' => $merchantMdr,
-            'ma_fee_percent' => $feeCalculator->residual($merchantMdr, $baseCost + $agentFee),
+            'merchant_mdr_percent' => $feeCalculator->merchantPrice([
+                'base_mdr_percent' => (float) $merchant->base_mdr_percent,
+                'connection_fee_percent' => (float) $merchant->connection_fee_percent,
+                'settlement_fee_percent' => (float) $merchant->settlement_fee_percent,
+                'ma_fee_percent' => (float) $merchant->ma_fee_percent,
+                'agent_fee_percent' => $agentFee,
+                'toko_fee_percent' => (float) $merchant->toko_fee_percent,
+            ]),
         ])->save();
         $audit->record('ma.merchant_agent_mapped', $merchant, $before, $merchant->only(array_keys($before)));
 
@@ -176,7 +180,7 @@ class MaController extends Controller
 
     public function storeMerchant(Request $request, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
     {
-        $this->normalizePercentInputs($request, ['merchant_mdr_percent', 'base_mdr_percent', 'connection_fee_percent', 'settlement_fee_percent', 'agent_fee_percent', 'toko_fee_percent']);
+        $this->normalizePercentInputs($request, ['base_mdr_percent', 'connection_fee_percent', 'settlement_fee_percent', 'agent_fee_percent', 'ma_fee_percent', 'toko_fee_percent']);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'username' => ['nullable', 'string', 'max:80'],
@@ -195,16 +199,14 @@ class MaController extends Controller
             'withdrawal_callback_url' => ['nullable', 'url', 'max:255'],
             'api_ip_whitelist' => ['nullable', 'string', 'max:255'],
             'settlement_method' => ['required', 'in:standard_h1,everyday_1x,sameday_3x,h_plus_1,everyday,same_day'],
-            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'base_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'connection_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'settlement_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'toko_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
-        $baseCost = (float) $data['base_mdr_percent'] + (float) $data['connection_fee_percent'] + (float) $data['settlement_fee_percent'];
-        abort_if((float) $data['merchant_mdr_percent'] < $baseCost + (float) $data['agent_fee_percent'], 422, 'Merchant fee minimal harus >= Base Cost + Agent Fee.');
         $slug = $this->uniqueMerchantSlug($data['name']);
         $agent = Agent::query()->findOrFail($data['agent_id']);
         abort_unless($this->canUseAgent($agent), 403);
@@ -225,14 +227,21 @@ class MaController extends Controller
             'withdrawal_callback_url' => $data['withdrawal_callback_url'] ?? null,
             'pic_email' => $data['pic_email'] ?? null,
             'pic_telegram' => $data['pic_telegram'] ?? null,
-            'merchant_mdr_percent' => $data['merchant_mdr_percent'],
+            'merchant_mdr_percent' => $feeCalculator->merchantPrice([
+                'base_mdr_percent' => $data['base_mdr_percent'],
+                'connection_fee_percent' => $data['connection_fee_percent'],
+                'settlement_fee_percent' => $data['settlement_fee_percent'],
+                'ma_fee_percent' => $data['ma_fee_percent'],
+                'agent_fee_percent' => $data['agent_fee_percent'],
+                'toko_fee_percent' => $data['toko_fee_percent'] ?? 0,
+            ]),
             'base_mdr_percent' => $data['base_mdr_percent'],
             'connection_fee_percent' => $data['connection_fee_percent'],
             'settlement_method' => $data['settlement_method'],
             'settlement_fee_percent' => $data['settlement_fee_percent'],
             'agent_fee_percent' => $data['agent_fee_percent'],
             'toko_fee_percent' => $data['toko_fee_percent'] ?? 0,
-            'ma_fee_percent' => $feeCalculator->residual((float) $data['merchant_mdr_percent'], $baseCost + (float) $data['agent_fee_percent']),
+            'ma_fee_percent' => $data['ma_fee_percent'],
             'onboarding_payload' => $data + ['api_ip_whitelist' => $data['api_ip_whitelist'] ?: '15.232.137.74'],
             'approved_at' => now(),
         ]);
@@ -253,21 +262,24 @@ class MaController extends Controller
     public function updateStoreFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
     {
         abort_unless($this->canUseMerchant($merchant), 403);
-        $this->normalizePercentInputs($request, ['merchant_mdr_percent', 'base_mdr_percent', 'payin_fee_percent', 'settlement_fee_percent', 'agent_fee_percent']);
+        $this->normalizePercentInputs($request, ['base_mdr_percent', 'payin_fee_percent', 'settlement_fee_percent', 'agent_fee_percent', 'ma_fee_percent']);
         $data = $request->validate([
-            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'base_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'payin_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'settlement_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
         ]);
-        $cost = (float) $data['base_mdr_percent'] + (float) $data['payin_fee_percent'] + (float) $data['settlement_fee_percent'] + (float) $data['agent_fee_percent'];
-        if ((float) $data['merchant_mdr_percent'] < $cost) {
-            return back()->withErrors(['fee' => 'Merchant MDR minimal harus >= Base HG + Pay In + Settlement + Agent.'])->withInput();
-        }
 
         $data['connection_fee_percent'] = $data['payin_fee_percent'];
-        $data['ma_fee_percent'] = $feeCalculator->residual((float) $data['merchant_mdr_percent'], $cost);
+        $data['merchant_mdr_percent'] = $feeCalculator->merchantPrice([
+            'base_mdr_percent' => $data['base_mdr_percent'],
+            'connection_fee_percent' => $data['connection_fee_percent'],
+            'settlement_fee_percent' => $data['settlement_fee_percent'],
+            'ma_fee_percent' => $data['ma_fee_percent'],
+            'agent_fee_percent' => $data['agent_fee_percent'],
+            'toko_fee_percent' => (float) $merchant->toko_fee_percent,
+        ]);
         $before = $merchant->only(['merchant_mdr_percent', 'base_mdr_percent', 'payin_fee_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent']);
         $merchant->forceFill($data)->save();
         $audit->record('ma.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($before)));

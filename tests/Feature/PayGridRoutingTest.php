@@ -973,14 +973,14 @@ class PayGridRoutingTest extends TestCase
             'withdrawal_callback_url' => 'http://topup.15.232.137.74.nip.io/api/callbacks/hilogate/withdrawal',
             'api_ip_whitelist' => '15.232.137.74',
             'settlement_method' => 'standard_h1',
-            'merchant_mdr_percent' => '1.2',
             'base_mdr_percent' => '0.8',
             'connection_fee_percent' => '0.05',
             'settlement_fee_percent' => '0.05',
             'agent_fee_percent' => '0.15',
+            'ma_fee_percent' => '0.15',
             'toko_fee_percent' => '0',
         ])->assertRedirect()->assertSessionHas('status');
-        $this->assertDatabaseHas('merchants', ['slug' => 'ma-store-local', 'name' => 'MA Store Local', 'approval_status' => 'approved']);
+        $this->assertDatabaseHas('merchants', ['slug' => 'ma-store-local', 'name' => 'MA Store Local', 'approval_status' => 'approved', 'merchant_mdr_percent' => 1.2]);
         $this->assertDatabaseHas('users', ['email' => 'admin-ma-store@paygrid.local', 'role' => 'admin']);
     }
 
