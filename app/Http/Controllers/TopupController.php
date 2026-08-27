@@ -9,7 +9,7 @@ use App\Services\TransactionIngestionService;
 use App\Services\TopupService;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\QrCode;
-use Endroid\QrCode\Writer\SvgWriter;
+use Endroid\QrCode\Writer\PngWriter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -68,7 +68,7 @@ class TopupController extends Controller
         $this->ensurePublicToken($topupRequest);
         abort_unless((bool) $topupRequest->qr_string, 404);
 
-        $result = (new SvgWriter())->write(new QrCode(
+        $result = (new PngWriter())->write(new QrCode(
             data: $topupRequest->qr_string,
             errorCorrectionLevel: ErrorCorrectionLevel::Medium,
             size: 280,

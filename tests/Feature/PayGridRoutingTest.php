@@ -133,8 +133,7 @@ class PayGridRoutingTest extends TestCase
 
         $this->get(route('topup.qr', [$merchant, $topup->public_token]))
             ->assertOk()
-            ->assertHeader('Content-Type', 'image/svg+xml')
-            ->assertSee('<svg', false);
+            ->assertHeader('Content-Type', 'image/png');
     }
 
     public function test_topup_submit_returns_form_error_when_gateway_fails(): void
