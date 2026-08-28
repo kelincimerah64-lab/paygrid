@@ -38,11 +38,10 @@
             <table class="table qris-table bot-monitoring-table">
                 <thead><tr><th>Ticket</th><th>Requester</th><th>Kategori</th><th>Status</th><th>Handler</th><th>SLA</th><th>Timeline</th><th>Detail</th></tr></thead>
                 <tbody>
-                @forelse($bm['tickets'] as $t)
-                    @php
-                        $ticketModalId = 'bot-ticket-detail-'.md5(($t['ticket_id'] ?? '') . '-' . $loop->index);
-                        $status = $t['status'] ?? null;
-                    @endphp
+                @if(count($bm['tickets']))
+                @foreach($bm['tickets'] as $t)
+                    @php($ticketModalId = 'bot-ticket-detail-'.md5(($t['ticket_id'] ?? '') . '-' . $loop->index))
+                    @php($status = $t['status'] ?? null)
                     <tr>
                         <td><strong>{{ $t['ticket_id'] ?? '-' }}</strong><br><span class="muted">{{ ! empty($t['has_attachment']) ? 'Ada lampiran' : 'Tanpa lampiran' }}</span></td>
                         <td><strong>{{ ($t['requester_name'] ?? null) ?: '-' }}</strong><br><span class="muted">{{ ! empty($t['requester_username']) ? '@'.$t['requester_username'] : '-' }}</span></td>
@@ -66,9 +65,10 @@
                             </div>
                         </td>
                     </tr>
-                @empty
+                @endforeach
+                @else
                     <tr><td colspan="8" class="empty">Belum ada ticket untuk filter ini.</td></tr>
-                @endforelse
+                @endif
                 </tbody>
             </table>
         </div>
