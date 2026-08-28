@@ -21,6 +21,7 @@ class TelegramBotMonitoringService
 
         if ($rows === null) {
             return [
+                'headers' => [],
                 'kpis' => $this->emptyKpis(),
                 'tickets' => [],
                 'categories' => [],
@@ -34,6 +35,7 @@ class TelegramBotMonitoringService
         $tickets = $this->filter($all, $filters);
 
         return [
+            'headers' => $this->headers($rows),
             'kpis' => $this->kpis($tickets),
             'tickets' => $tickets->values()->all(),
             'categories' => $all->pluck('category')->filter()->unique()->sort()->values()->all(),
@@ -41,6 +43,21 @@ class TelegramBotMonitoringService
             'assignees' => $all->pluck('assigned_name')->filter()->unique()->sort()->values()->all(),
             'error' => null,
         ];
+    }
+
+    public function overdueTickets(): Collection
+    {
+        $rows = $this->fetchRows(false);
+
+        if ($rows === null) {
+            return collect();
+        }
+
+        $threshold = (int) config('paygrid.telegram_bot_monitoring.reminder_threshold_minutes', 15);
+
+        return $this->normalize($rows)->filter(fn ($ticket) => $ticket['completed_at'] === null
+            && $ticket['created_at'] !== null
+            && $ticket['created_at']->diffInMinutes(CarbonImmutable::now()) >= $threshold)->values();
     }
 
     private function fetchRows(bool $forceRefresh): ?array
@@ -125,9 +142,9 @@ class TelegramBotMonitoringService
     private function normalize(array $rows): Collection
     {
         $rows = collect($rows);
-        $headers = $rows->first();
+        $headers = $this->headers($rows->all());
 
-        if (! $headers) {
+        if ($headers === []) {
             return collect();
         }
 
@@ -143,7 +160,7 @@ class TelegramBotMonitoringService
 
             foreach ($minuteFields as $field) {
                 $ticket[$field] = isset($ticket[$field]) && $ticket[$field] !== ''
-                    ? (int) $ticket[$field]
+                    ? round(((int) $ticket[$field]) / 60, 1)
                     : null;
             }
 
@@ -155,9 +172,55 @@ class TelegramBotMonitoringService
 
             $ticket['has_attachment'] = strtoupper((string) ($ticket['has_attachment'] ?? '')) === 'TRUE';
             $ticket['status'] = strtoupper((string) ($ticket['status'] ?? ''));
+            $ticket['sheet_fields'] = collect($headers)->map(fn (string $header) => [
+                'key' => $header,
+                'label' => $this->columnLabel($header),
+                'value' => $this->displayValue($header, $ticket[$header] ?? null),
+            ])->all();
 
             return $ticket;
         })->values();
+    }
+
+    private function headers(array $rows): array
+    {
+        $headers = $rows[0] ?? null;
+
+        if (! is_array($headers)) {
+            return [];
+        }
+
+        return collect($headers)
+            ->map(fn ($header) => trim((string) $header))
+            ->filter(fn ($header) => $header !== '')
+            ->values()
+            ->all();
+    }
+
+    private function columnLabel(string $header): string
+    {
+        return ucwords(str_replace(['_', '-'], ' ', $header));
+    }
+
+    private function displayValue(string $field, mixed $value): string
+    {
+        if ($value instanceof CarbonImmutable) {
+            return $value->format('d/m/y H.i').' WIB';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Ya' : 'Tidak';
+        }
+
+        if ($value === null || $value === '') {
+            return '-';
+        }
+
+        if (str_ends_with($field, '_minutes') && is_numeric($value)) {
+            return rtrim(rtrim(number_format((float) $value, 1, ',', '.'), '0'), ',').' menit';
+        }
+
+        return (string) $value;
     }
 
     private function filter(Collection $tickets, array $filters): Collection
@@ -179,9 +242,10 @@ class TelegramBotMonitoringService
             ->when($filters['q'] ?? null, function ($items, $q) {
                 $needle = mb_strtolower($q);
 
-                return $items->filter(fn ($t) => str_contains(mb_strtolower((string) ($t['ticket_id'] ?? '')), $needle)
-                    || str_contains(mb_strtolower((string) ($t['requester_name'] ?? '')), $needle)
-                    || str_contains(mb_strtolower((string) ($t['requester_username'] ?? '')), $needle));
+                return $items->filter(function ($ticket) use ($needle) {
+                    return collect($ticket['sheet_fields'] ?? [])
+                        ->contains(fn ($field) => str_contains(mb_strtolower((string) ($field['value'] ?? '')), $needle));
+                });
             })
             ->values();
     }

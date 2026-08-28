@@ -64,10 +64,10 @@ class TelegramBotMonitoringServiceTest extends TestCase
             'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'fake-token', 'expires_in' => 3600]),
             'https://sheets.googleapis.com/v4/spreadsheets/sheet-123/values/A:X' => Http::response([
                 'values' => [
-                    ['ticket_id', 'created_at', 'requester_name', 'requester_username', 'category', 'status', 'assigned_name', 'pickup_minutes', 'handling_minutes', 'total_resolution_minutes', 'has_attachment'],
-                    ['T-1', '2026-08-01 10:00:00', 'Budi', 'budi_x', 'API Error', 'RESOLVED', 'Agent A', '2', '10', '15', 'TRUE'],
-                    ['T-2', '2026-08-02 11:00:00', 'Sari', 'sari_y', 'Dashboard Lemot', 'FAILED', 'Agent B', '', '', '', 'FALSE'],
-                    ['T-3', '2026-08-03 12:00:00', 'Budi', 'budi_x', 'API Error', 'RESOLVED', 'Agent A', '4', '20', '25', 'FALSE'],
+                    ['ticket_id', 'created_at', 'requester_name', 'requester_username', 'category', 'status', 'assigned_name', 'pickup_minutes', 'handling_minutes', 'total_resolution_minutes', 'has_attachment', 'telegram_chat_id', 'last_note'],
+                    ['T-1', '2026-08-01 10:00:00', 'Budi', 'budi_x', 'API Error', 'RESOLVED', 'Agent A', '120', '600', '900', 'TRUE', '1001', 'Refund sudah clear'],
+                    ['T-2', '2026-08-02 11:00:00', 'Sari', 'sari_y', 'Dashboard Lemot', 'FAILED', 'Agent B', '', '', '', 'FALSE', '1002', 'Butuh follow up bank'],
+                    ['T-3', '2026-08-03 12:00:00', 'Budi', 'budi_x', 'API Error', 'RESOLVED', 'Agent A', '240', '1200', '1500', 'FALSE', '1003', 'Done by bot'], 
                 ],
             ]),
         ]);
@@ -81,6 +81,9 @@ class TelegramBotMonitoringServiceTest extends TestCase
         $this->assertSame(1, $result['kpis']['failed']);
         $this->assertEqualsWithDelta(3.0, $result['kpis']['avg_pickup_minutes'], 0.01);
         $this->assertSame(['API Error', 'Dashboard Lemot'], $result['categories']);
+        $this->assertSame(['ticket_id', 'created_at', 'requester_name', 'requester_username', 'category', 'status', 'assigned_name', 'pickup_minutes', 'handling_minutes', 'total_resolution_minutes', 'has_attachment', 'telegram_chat_id', 'last_note'], $result['headers']);
+        $this->assertSame('Refund sudah clear', $result['tickets'][0]['last_note']);
+        $this->assertContains(['key' => 'last_note', 'label' => 'Last Note', 'value' => 'Refund sudah clear'], $result['tickets'][0]['sheet_fields']);
 
         Cache::flush();
         $filtered = $service->data(['category' => 'API Error']);
@@ -88,7 +91,7 @@ class TelegramBotMonitoringServiceTest extends TestCase
         $this->assertSame(0, $filtered['kpis']['failed']);
 
         Cache::flush();
-        $searched = $service->data(['q' => 'sari']);
+        $searched = $service->data(['q' => 'follow up bank']);
         $this->assertSame(1, $searched['kpis']['total']);
         $this->assertSame(1, $searched['kpis']['failed']);
     }

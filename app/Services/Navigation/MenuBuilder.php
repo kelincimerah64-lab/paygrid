@@ -44,6 +44,14 @@ class MenuBuilder
         ];
     }
 
+    public function centerSupport(): array
+    {
+        return [
+            ['key' => 'tickets', 'label' => 'Tickets', 'url' => route('center-support.tickets')],
+            ['key' => 'bot-monitoring', 'label' => 'Monitoring Bot Telegram', 'url' => route('center-support.bot-monitoring')],
+        ];
+    }
+
     public function merchantCs(Merchant $merchant): array
     {
         if ($merchant->isScript()) {

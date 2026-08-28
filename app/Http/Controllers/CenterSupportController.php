@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\SupportTicket;
 use App\Services\AuditLogService;
+use App\Services\Navigation\MenuBuilder;
+use App\Services\TelegramBotMonitoringService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -46,7 +49,7 @@ class CenterSupportController extends Controller
 
         return view('paygrid.center-support', [
             'roleLabel' => 'CS Pusat',
-            'menus' => [['key' => 'tickets', 'label' => 'Tickets', 'url' => route('center-support.tickets')]],
+            'menus' => app(MenuBuilder::class)->centerSupport(),
             'active' => 'tickets',
             'tickets' => $tickets,
             'statuses' => self::STATUSES,
@@ -54,6 +57,49 @@ class CenterSupportController extends Controller
             'status' => $status,
             'delivery' => $delivery,
         ]);
+    }
+
+    public function botMonitoring(Request $request, TelegramBotMonitoringService $service): View
+    {
+        return view('paygrid.cs-pusat-bot-monitoring', [
+            'roleLabel' => 'CS Pusat',
+            'menus' => app(MenuBuilder::class)->centerSupport(),
+            'active' => 'bot-monitoring',
+            'botMonitoring' => $service->data($this->botMonitoringFilters(), $request->boolean('refresh')),
+        ]);
+    }
+
+    public function reminders(Request $request): JsonResponse
+    {
+        return response()->json(
+            $request->user()->unreadNotifications()
+                ->where('type', \App\Notifications\TelegramTicketReminder::class)
+                ->latest()
+                ->limit(10)
+                ->get()
+                ->map(fn ($notification) => array_merge(['id' => $notification->id], $notification->data))
+                ->values()
+        );
+    }
+
+    public function dismissReminder(Request $request, string $notificationId): JsonResponse
+    {
+        $notification = $request->user()->unreadNotifications()->where('id', $notificationId)->first();
+        $notification?->markAsRead();
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function botMonitoringFilters(): array
+    {
+        return [
+            'status' => trim((string) request('bot_status', '')),
+            'category' => trim((string) request('bot_category', '')),
+            'assigned_name' => trim((string) request('bot_assigned', '')),
+            'from' => request('bot_from'),
+            'to' => request('bot_to'),
+            'q' => trim((string) request('bot_q', '')),
+        ];
     }
 
     public function update(Request $request, SupportTicket $ticket, AuditLogService $audit): RedirectResponse
