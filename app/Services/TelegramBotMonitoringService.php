@@ -15,6 +15,8 @@ class TelegramBotMonitoringService
 
     private const DATA_CACHE_KEY = 'telegram-bot-sheet:rows';
 
+    private const TERMINAL_STATUSES = ['RESOLVED', 'FAILED'];
+
     public function data(array $filters, bool $forceRefresh = false): array
     {
         $rows = $this->fetchRows($forceRefresh);
@@ -55,7 +57,7 @@ class TelegramBotMonitoringService
 
         $threshold = (int) config('paygrid.telegram_bot_monitoring.reminder_threshold_minutes', 15);
 
-        return $this->normalize($rows)->filter(fn ($ticket) => $ticket['completed_at'] === null
+        return $this->normalize($rows)->filter(fn ($ticket) => ! in_array($ticket['status'], self::TERMINAL_STATUSES, true)
             && $ticket['created_at'] !== null
             && $ticket['created_at']->diffInMinutes(CarbonImmutable::now()) >= $threshold)->values();
     }
