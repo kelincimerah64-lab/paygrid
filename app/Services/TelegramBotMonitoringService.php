@@ -161,9 +161,8 @@ class TelegramBotMonitoringService
             }
 
             foreach ($minuteFields as $field) {
-                $ticket[$field] = isset($ticket[$field]) && $ticket[$field] !== ''
-                    ? round(((int) $ticket[$field]) / 60, 1)
-                    : null;
+                $seconds = isset($ticket[$field]) && $ticket[$field] !== '' ? (int) $ticket[$field] : null;
+                $ticket[$field] = $seconds !== null && $seconds >= 0 ? round($seconds / 60, 1) : null;
             }
 
             foreach ($timestampFields as $field) {

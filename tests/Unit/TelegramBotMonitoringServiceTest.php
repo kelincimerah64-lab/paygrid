@@ -96,6 +96,28 @@ class TelegramBotMonitoringServiceTest extends TestCase
         $this->assertSame(1, $searched['kpis']['failed']);
     }
 
+    public function test_it_treats_negative_raw_seconds_as_missing_instead_of_a_negative_duration(): void
+    {
+        Cache::flush();
+        $this->configureCredentials();
+
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'fake-token', 'expires_in' => 3600]),
+            'https://sheets.googleapis.com/v4/spreadsheets/sheet-123/values/A:X' => Http::response([
+                'values' => [
+                    ['ticket_id', 'created_at', 'category', 'status', 'assigned_name', 'pickup_minutes', 'handling_minutes', 'total_resolution_minutes'],
+                    ['T-1', '2026-08-01 10:00:00', 'API Error', 'RESOLVED', 'Agent A', '120', '-25163', '300'],
+                ],
+            ]),
+        ]);
+
+        $result = app(TelegramBotMonitoringService::class)->data([]);
+
+        $this->assertNull($result['tickets'][0]['handling_minutes']);
+        $this->assertSame(2.0, $result['tickets'][0]['pickup_minutes']);
+        $this->assertSame(0.0, $result['kpis']['avg_handling_minutes']);
+    }
+
     public function test_it_returns_a_graceful_error_state_when_the_sheets_api_fails(): void
     {
         Cache::flush();
