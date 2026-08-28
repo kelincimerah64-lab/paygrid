@@ -42,6 +42,11 @@ return Application::configure(basePath: dirname(__DIR__))
             ->hourly()
             ->withoutOverlapping(10)
             ->runInBackground();
+
+        $schedule->command('telegram:check-reminders')
+            ->everyFiveMinutes()
+            ->withoutOverlapping(4)
+            ->runInBackground();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
