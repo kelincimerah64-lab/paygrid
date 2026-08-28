@@ -65,6 +65,5 @@ return [
         'service_account_private_key' => env('GOOGLE_SHEETS_SERVICE_ACCOUNT_PRIVATE_KEY'),
         'cache_ttl_seconds' => (int) env('TELEGRAM_BOT_SHEET_CACHE_TTL', 45),
         'reminder_threshold_minutes' => (int) env('TELEGRAM_BOT_REMINDER_THRESHOLD_MINUTES', 15),
-        'reminder_repeat_minutes' => (int) env('TELEGRAM_BOT_REMINDER_REPEAT_MINUTES', 30),
     ],
 ];

@@ -729,7 +729,7 @@
                         <details class="notif-bell">
                             <summary aria-label="Notifikasi">🔔<span class="notif-count">{{ $maNotifications->count() }}</span></summary>
                             <div class="notif-panel">
-                                <h3>Notifikasi MA</h3>
+                                <h3>{{ auth()->user()?->role === 'cs_pusat' ? 'Reminder Bot Telegram' : 'Notifikasi MA' }}</h3>
                                 @foreach($maNotifications as $notification)
                                     <a class="ma-detail-row" href="{{ $notification->data['url'] ?? route('ma.approvals') }}"><div><b>{{ $notification->data['title'] ?? 'Notifikasi' }}</b><span>{{ $notification->data['message'] ?? '-' }}</span></div></a>
                                 @endforeach
@@ -761,67 +761,6 @@
         @yield('content')
     </main>
 </div>
-@if(auth()->user()?->role === 'cs_pusat')
-<div id="reminder-modal" class="approval-modal" hidden>
-    <div class="approval-modal-card pad">
-        <div class="qris-toolbar"><h2 id="reminder-modal-title">Reminder</h2><button id="reminder-modal-close" class="btn compact-btn" type="button">Tutup</button></div>
-        <p id="reminder-modal-message" class="sub"></p>
-    </div>
-</div>
-<script>
-(() => {
-    const remindersUrl = @json(route('center-support.reminders'));
-    const dismissUrlBase = @json(route('center-support.reminders.dismiss', ['notificationId' => '__ID__']));
-    const modal = document.getElementById('reminder-modal');
-    const modalTitle = document.getElementById('reminder-modal-title');
-    const modalMessage = document.getElementById('reminder-modal-message');
-    const shown = new Set();
-    let queue = [];
-
-    const showNext = () => {
-        if (!queue.length) {
-            modal.hidden = true;
-            return;
-        }
-        const reminder = queue[0];
-        modalTitle.textContent = reminder.title || 'Reminder';
-        modalMessage.textContent = reminder.message || '-';
-        modal.hidden = false;
-    };
-
-    document.getElementById('reminder-modal-close').addEventListener('click', () => {
-        const reminder = queue.shift();
-        if (reminder) {
-            fetch(dismissUrlBase.replace('__ID__', reminder.id), {
-                method: 'POST',
-                headers: { 'X-CSRF-TOKEN': @json(csrf_token()), Accept: 'application/json' },
-            }).catch(() => {});
-        }
-        showNext();
-    });
-
-    async function pollReminders() {
-        try {
-            const response = await fetch(remindersUrl, { headers: { Accept: 'application/json' } });
-            if (response.ok) {
-                const reminders = await response.json();
-                const fresh = reminders.filter((reminder) => !shown.has(reminder.id));
-                fresh.forEach((reminder) => shown.add(reminder.id));
-                if (fresh.length) {
-                    queue = queue.concat(fresh);
-                    if (modal.hidden) showNext();
-                }
-            }
-            window.setTimeout(pollReminders, 20000);
-        } catch (_) {
-            window.setTimeout(pollReminders, 30000);
-        }
-    }
-
-    pollReminders();
-})();
-</script>
-@endif
 @stack('scripts')
 <script src="{{ asset('js/paygrid-live.js') }}?v={{ filemtime(public_path('js/paygrid-live.js')) }}" defer></script>
 </body>

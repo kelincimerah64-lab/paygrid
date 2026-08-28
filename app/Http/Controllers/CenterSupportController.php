@@ -6,9 +6,9 @@ use App\Models\SupportTicket;
 use App\Services\AuditLogService;
 use App\Services\Navigation\MenuBuilder;
 use App\Services\TelegramBotMonitoringService;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\View\View;
@@ -23,7 +23,7 @@ class CenterSupportController extends Controller
         'issue_switching' => 'Issue Switching',
     ];
 
-    public function index(Request $request): View
+    public function index(Request $request, TelegramBotMonitoringService $service): View
     {
         $search = trim((string) $request->query('q', ''));
         $status = (string) $request->query('status', 'all');
@@ -56,6 +56,7 @@ class CenterSupportController extends Controller
             'search' => $search,
             'status' => $status,
             'delivery' => $delivery,
+            'maNotifications' => $this->botReminders($service),
         ]);
     }
 
@@ -66,28 +67,19 @@ class CenterSupportController extends Controller
             'menus' => app(MenuBuilder::class)->centerSupport(),
             'active' => 'bot-monitoring',
             'botMonitoring' => $service->data($this->botMonitoringFilters(), $request->boolean('refresh')),
+            'maNotifications' => $this->botReminders($service),
         ]);
     }
 
-    public function reminders(Request $request): JsonResponse
+    private function botReminders(TelegramBotMonitoringService $service): Collection
     {
-        return response()->json(
-            $request->user()->unreadNotifications()
-                ->where('type', \App\Notifications\TelegramTicketReminder::class)
-                ->latest()
-                ->limit(10)
-                ->get()
-                ->map(fn ($notification) => array_merge(['id' => $notification->id], $notification->data))
-                ->values()
-        );
-    }
-
-    public function dismissReminder(Request $request, string $notificationId): JsonResponse
-    {
-        $notification = $request->user()->unreadNotifications()->where('id', $notificationId)->first();
-        $notification?->markAsRead();
-
-        return response()->json(['ok' => true]);
+        return $service->overdueTickets()->take(10)->map(fn ($ticket) => (object) [
+            'data' => [
+                'title' => 'Reminder ticket bot Telegram',
+                'message' => ($ticket['requester_name'] ?: 'Requester').' menunggu tindak lanjut untuk ticket '.$ticket['ticket_id'].'.',
+                'url' => route('center-support.bot-monitoring', ['bot_q' => $ticket['ticket_id']]),
+            ],
+        ]);
     }
 
     private function botMonitoringFilters(): array

@@ -53,8 +53,6 @@ Route::post('/superadmin/accounts/{user}/reset', [SuperadminController::class, '
 Route::middleware(['auth', 'role:cs_pusat,ma,superadmin'])->group(function () {
 Route::get('/cs-pusat', [CenterSupportController::class, 'index'])->name('center-support.tickets');
 Route::get('/cs-pusat/bot-monitoring', [CenterSupportController::class, 'botMonitoring'])->name('center-support.bot-monitoring');
-Route::get('/cs-pusat/reminders', [CenterSupportController::class, 'reminders'])->name('center-support.reminders');
-Route::post('/cs-pusat/reminders/{notificationId}/dismiss', [CenterSupportController::class, 'dismissReminder'])->name('center-support.reminders.dismiss');
 Route::get('/cs-pusat/tickets/{ticket}/attachments/{index}', [CenterSupportController::class, 'attachment'])->whereNumber('index')->name('center-support.tickets.attachment');
 Route::post('/cs-pusat/tickets/{ticket}', [CenterSupportController::class, 'update'])->middleware('throttle:dashboard-writes')->name('center-support.tickets.update');
 });
