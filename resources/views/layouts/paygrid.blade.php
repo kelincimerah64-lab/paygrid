@@ -106,6 +106,20 @@
         .bot-chart-card { display:flex; flex-direction:column; gap:10px; }
         .bot-chart-card h2 { font-size:13px; font-weight:900; letter-spacing:.02em; }
         .bot-chart-box { position:relative; height:200px; }
+        .bot-monitoring-table { min-width:1080px; }
+        .bot-monitoring-wrap { overflow-x:auto; }
+        .bot-monitoring-table th:nth-child(1) { width:12%; }
+        .bot-monitoring-table th:nth-child(2) { width:18%; }
+        .bot-monitoring-table th:nth-child(3) { width:14%; }
+        .bot-monitoring-table th:nth-child(4) { width:10%; }
+        .bot-monitoring-table th:nth-child(5) { width:14%; }
+        .bot-monitoring-table th:nth-child(6) { width:14%; }
+        .bot-monitoring-table th:nth-child(7) { width:10%; }
+        .bot-monitoring-table th:nth-child(8) { width:8%; }
+        .bot-note-row td { height:auto; padding-top:0; color:var(--muted); background:#fbfdff; font-size:11px; }
+        .bot-detail-row td { height:auto; padding:0 8px 10px; background:#fbfdff; }
+        .bot-detail-card { border:1px solid #dbe5f2; border-radius:10px; background:#fff; box-shadow:0 8px 22px rgba(14, 35, 70, .045); overflow:hidden; }
+        .bot-detail-card .approval-detail-grid { padding:12px; }
         .ma-metric-card { width:100%; text-align:left; font:inherit; cursor:pointer; color:inherit; }
         .ma-metric-card:hover, .ma-metric-card.active { border-color:#78a7ff; box-shadow:0 0 0 1px #78a7ff inset, 0 12px 28px rgba(21, 87, 194, .12); transform:translateY(-1px); }
         .ma-detail-list { display:grid; gap:8px; margin-top:12px; }

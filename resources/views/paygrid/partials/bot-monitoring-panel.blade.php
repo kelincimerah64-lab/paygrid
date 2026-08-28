@@ -34,7 +34,7 @@
 
     <section class="card qris-panel section">
         <div class="qris-toolbar"><h2>Daftar Ticket</h2><span class="badge ok">{{ count($bm['tickets']) }} ticket</span></div>
-        <div class="table-wrap sticky-head">
+        <div class="table-wrap sticky-head bot-monitoring-wrap">
             <table class="table qris-table bot-monitoring-table">
                 <thead><tr><th>Ticket</th><th>Requester</th><th>Kategori</th><th>Status</th><th>Handler</th><th>SLA</th><th>Timeline</th><th>Detail</th></tr></thead>
                 <tbody>
