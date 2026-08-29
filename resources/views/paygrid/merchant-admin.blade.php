@@ -57,7 +57,7 @@
                         <td>{{ $user->email }}</td>
                         <td><strong>{{ strtoupper($user->role) }}</strong></td>
                         @if($canManageUsers)
-                        <td><strong>{{ $user->plain_password ?: 'Reset diperlukan' }}</strong></td>
+                        <td><strong>{{ $user->readablePlainPassword() ?: 'Reset diperlukan' }}</strong></td>
                         <td>
                             <form method="post" action="{{ route('merchant.admin.users.reset-password', [$merchant, $user]) }}" class="actions compact-actions reset-inline">
                                 @csrf

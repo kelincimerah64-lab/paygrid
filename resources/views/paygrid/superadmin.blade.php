@@ -211,7 +211,7 @@
         <div class="qris-toolbar"><h2>Daftar Account User</h2></div>
         <div class="table-wrap"><table class="table qris-table compact-user-table"><thead><tr><th>User</th><th>Username</th><th>Role</th><th>Merchant</th><th>Password</th><th>Reset</th></tr></thead><tbody>
             @foreach($users as $user)
-                <tr><td><strong>{{ $user->name }}</strong><br><span class="muted">{{ $user->email }}</span></td><td>{{ $user->username ?: '-' }}</td><td>{{ strtoupper($user->role) }}</td><td>{{ $user->merchant?->name ?: '-' }}</td><td><strong>{{ $user->plain_password ?: 'Reset diperlukan' }}</strong></td><td><form method="post" action="{{ route('superadmin.accounts.reset', $user) }}" class="actions reset-inline">@csrf<input name="password" placeholder="Kosongkan utk auto"><button class="btn compact-btn">Reset</button></form></td></tr>
+                <tr><td><strong>{{ $user->name }}</strong><br><span class="muted">{{ $user->email }}</span></td><td>{{ $user->username ?: '-' }}</td><td>{{ strtoupper($user->role) }}</td><td>{{ $user->merchant?->name ?: '-' }}</td><td><strong>{{ $user->readablePlainPassword() ?: 'Reset diperlukan' }}</strong></td><td><form method="post" action="{{ route('superadmin.accounts.reset', $user) }}" class="actions reset-inline">@csrf<input name="password" placeholder="Kosongkan utk auto"><button class="btn compact-btn">Reset</button></form></td></tr>
             @endforeach
         </tbody></table></div>
     </section>

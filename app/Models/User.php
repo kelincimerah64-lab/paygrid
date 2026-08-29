@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -21,6 +22,20 @@ class User extends Authenticatable
     public function merchant(): BelongsTo
     {
         return $this->belongsTo(Merchant::class);
+    }
+
+    /**
+     * plain_password is encrypted at rest; a value encrypted under a since-rotated
+     * APP_KEY can no longer be decrypted. Surface that as "unreadable" instead of
+     * throwing, so one bad legacy row doesn't crash an account listing page.
+     */
+    public function readablePlainPassword(): ?string
+    {
+        try {
+            return $this->plain_password;
+        } catch (DecryptException) {
+            return null;
+        }
     }
 
     /**
