@@ -198,17 +198,36 @@ Artisan::command('paygrid:maintenance-prune', function () {
     $failedDays = max(1, (int) config('paygrid.gateway_sync.failed_log_retention_days', 14));
     $failedJobDays = max(1, (int) config('paygrid.gateway_sync.failed_job_retention_days', 14));
 
-    $deletedSuccessLogs = \App\Models\GatewaySyncLog::query()
-        ->where('direction', 'pull')
-        ->where('status', 'success')
-        ->where('created_at', '<', now()->subHours($successHours))
-        ->delete();
+    // Delete in bounded batches (not a single unbounded DELETE) so a large backlog
+    // can't turn one prune run into one long-running, lock-heavy statement.
+    $deleteInBatches = function ($query, int $batchSize = 5000, int $maxBatches = 500): int {
+        $deleted = 0;
+        for ($i = 0; $i < $maxBatches; $i++) {
+            $affected = (clone $query)->limit($batchSize)->delete();
+            $deleted += $affected;
+            if ($affected < $batchSize) {
+                break;
+            }
+        }
 
-    $deletedFailedLogs = \App\Models\GatewaySyncLog::query()
-        ->where('direction', 'pull')
-        ->where('status', 'failed')
-        ->where('created_at', '<', now()->subDays($failedDays))
-        ->delete();
+        return $deleted;
+    };
+
+    // No `direction` filter here on purpose: 'pull', 'backfill', and 'callback' rows
+    // all count toward the same retention window -- a prior version of this command
+    // only matched direction='pull', which silently let ~3M 'backfill' rows accumulate
+    // forever (they're the vast majority of writes to this table).
+    $deletedSuccessLogs = $deleteInBatches(
+        \App\Models\GatewaySyncLog::query()
+            ->where('status', 'success')
+            ->where('created_at', '<', now()->subHours($successHours))
+    );
+
+    $deletedFailedLogs = $deleteInBatches(
+        \App\Models\GatewaySyncLog::query()
+            ->where('status', 'failed')
+            ->where('created_at', '<', now()->subDays($failedDays))
+    );
 
     $deletedFailedJobs = \Illuminate\Support\Facades\DB::table('failed_jobs')
         ->where('failed_at', '<', now()->subDays($failedJobDays))
