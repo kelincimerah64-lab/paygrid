@@ -259,23 +259,14 @@ class PayGridRoutingTest extends TestCase
             'contact' => '0812',
             'is_active' => 1,
             'password' => config('paygrid.demo_password'),
-            'base_hg_percent' => '0,80',
-            'connection_type' => 'cm',
-            'connection_fee_percent' => '0,05',
-            'settlement_method' => 'h_plus_1',
-            'settlement_fee_percent' => '0,05',
-            'ma_fee_percent' => '0,15',
+            'fee_menu' => 'h_plus_1_sc',
+            'ma_fee_percent' => '0,85',
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('users', ['email' => 'ma-baru@paygrid.local', 'role' => 'ma']);
 
         $this->post(route('superadmin.merchant-fee.update', $merchant), [
-            'base_mdr_percent' => '0.80',
-            'connection_fee_percent' => '0.05',
-            'settlement_method' => 'same_day',
-            'settlement_fee_percent' => '0.10',
-            'ma_fee_percent' => '0.15',
-            'agent_fee_percent' => '0.05',
-            'toko_fee_percent' => '0.20',
+            'fee_menu' => 'same_day',
+            'merchant_mdr_percent' => '1.35',
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertSame('1.3500', (string) $merchant->refresh()->merchant_mdr_percent);
 
@@ -284,12 +275,9 @@ class PayGridRoutingTest extends TestCase
             'name' => 'Group Baru',
             'email' => 'group@paygrid.local',
             'contact' => '0813',
-            'base_hg_percent' => '0.80',
-            'connection_fee_percent' => '0.05',
-            'settlement_method' => 'everyday',
-            'settlement_fee_percent' => '0.05',
-            'ma_fee_percent' => '0.15',
-            'default_agent_fee_percent' => '0.05',
+            'connection_type' => 'cm',
+            'fee_menu' => 'everyday',
+            'default_agent_fee_percent' => '1.10',
             'is_active' => 1,
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('agents', ['code' => 'AG-GROUP-BARU', 'name' => 'Group Baru']);
@@ -948,7 +936,9 @@ class PayGridRoutingTest extends TestCase
             'email' => 'agen-lokal@paygrid.local',
             'contact' => '0812',
             'status' => 'Active',
-            'default_agent_fee_percent' => '0,15',
+            'connection_type' => 'cm',
+            'fee_menu' => 'everyday',
+            'default_agent_fee_percent' => '1,10',
             'password' => config('paygrid.demo_password'),
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('agents', ['code' => 'AGN-AGEN-LOKAL', 'name' => 'Agen Lokal']);
@@ -971,13 +961,8 @@ class PayGridRoutingTest extends TestCase
             'transaction_callback_url' => 'http://topup.15.232.137.74.nip.io/api/callbacks/hilogate/transaction',
             'withdrawal_callback_url' => 'http://topup.15.232.137.74.nip.io/api/callbacks/hilogate/withdrawal',
             'api_ip_whitelist' => '15.232.137.74',
-            'settlement_method' => 'standard_h1',
-            'base_mdr_percent' => '0.8',
-            'connection_fee_percent' => '0.05',
-            'settlement_fee_percent' => '0.05',
-            'agent_fee_percent' => '0.15',
-            'ma_fee_percent' => '0.15',
-            'toko_fee_percent' => '0',
+            'fee_menu' => 'everyday',
+            'merchant_mdr_percent' => '1.2',
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('merchants', ['slug' => 'ma-store-local', 'name' => 'MA Store Local', 'approval_status' => 'approved', 'merchant_mdr_percent' => 1.2]);
         $this->assertDatabaseHas('users', ['email' => 'admin-ma-store@paygrid.local', 'role' => 'admin']);
@@ -1011,10 +996,8 @@ class PayGridRoutingTest extends TestCase
         $user = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
         $this->actingAs($user)
             ->post(route('api.merchant-registration.approve', $registration), [
+                'fee_menu' => 'everyday',
                 'merchant_mdr_percent' => 1.2,
-                'base_mdr_percent' => 0.8,
-                'ma_fee_percent' => 0.2,
-                'agent_fee_percent' => 0.1,
             ])
             ->assertRedirect();
 

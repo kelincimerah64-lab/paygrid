@@ -58,16 +58,16 @@
         <div class="qris-toolbar"><h2>Ringkasan Fee Per Merchant</h2></div>
         <div class="table-wrap">
             <table class="table qris-table">
-                <thead><tr><th>Merchant</th><th>Group</th><th>Base HG</th><th>MA</th><th>Agent</th><th>Toko</th><th>MDR Final</th></tr></thead>
+                <thead><tr><th>Merchant</th><th>Group</th><th>Menu Fee</th><th>MA</th><th>Agent</th><th>MDR Final</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
+                    @php($menuLabel = $merchant->fee_menu ? ($feeMenus->optionsFor('merchant', $feeMenus->typeCategory($merchant->merchant_type))[$merchant->fee_menu]['label'] ?? $merchant->fee_menu) : '-')
                     <tr>
                         <td><strong>{{ $merchant->name }}</strong><br><span class="muted">{{ strtoupper($merchant->merchant_type) }}</span></td>
                         <td>{{ $merchant->agent?->name ?: '-' }}</td>
-                        <td>{{ $pct($merchant->base_mdr_percent) }}</td>
-                        <td>{{ $pct($merchant->ma_fee_percent) }}</td>
-                        <td>{{ $pct($merchant->agent_fee_percent) }}</td>
-                        <td>{{ $pct($merchant->toko_fee_percent) }}</td>
+                        <td>{{ $menuLabel }}</td>
+                        <td>{{ $pct($merchant->agent?->ma?->ma_fee_percent) }}</td>
+                        <td>{{ $pct($merchant->agent?->default_agent_fee_percent) }}</td>
                         <td><strong>{{ $pct($merchant->computed_mdr) }}</strong></td>
                     </tr>
                 @endforeach
@@ -82,9 +82,11 @@
         <div class="qris-toolbar"><h2>Atur Fee Toko</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-fee-table">
-                <thead><tr><th>Merchant</th><th>Group</th><th>Base HG</th><th>Conn</th><th>Settle</th><th>MA</th><th>Agent</th><th>Toko</th><th>MDR</th><th>Aksi</th></tr></thead>
+                <thead><tr><th>Merchant</th><th>Group</th><th>Menu Fee</th><th>Fee (%)</th><th>MDR</th><th>Aksi</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
+                    @php($merchantTypeCategory = $feeMenus->typeCategory($merchant->merchant_type))
+                    @php($merchantMenuOptions = $feeMenus->optionsFor('merchant', $merchantTypeCategory))
                     <tr>
                         <td><strong>{{ $merchant->name }}</strong><br><span class="muted">{{ strtoupper($merchant->merchant_type) }}</span></td>
                         <td>{{ $merchant->agent?->name ?: '-' }}</td>
@@ -92,13 +94,13 @@
                             <form id="fee-{{ $merchant->id }}" method="post" action="{{ route('superadmin.merchant-fee.update', $merchant) }}">
                                 @csrf
                             </form>
-                            <input form="fee-{{ $merchant->id }}" name="base_mdr_percent" value="{{ old('base_mdr_percent', $pctInput($merchant->base_mdr_percent)) }}">
+                            <select form="fee-{{ $merchant->id }}" name="fee_menu">
+                                @foreach($merchantMenuOptions as $key => $option)
+                                    <option value="{{ $key }}" @selected(old('fee_menu', $merchant->fee_menu) === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                                @endforeach
+                            </select>
                         </td>
-                        <td><input form="fee-{{ $merchant->id }}" name="connection_fee_percent" value="{{ old('connection_fee_percent', $pctInput($merchant->connection_fee_percent)) }}"></td>
-                        <td><div class="settle-fee-field"><select form="fee-{{ $merchant->id }}" name="settlement_method"><option value="h_plus_1" @selected($merchant->settlement_method === 'h_plus_1')>H+1</option><option value="everyday" @selected($merchant->settlement_method === 'everyday')>Everyday</option><option value="same_day" @selected($merchant->settlement_method === 'same_day')>Same Day</option></select><input form="fee-{{ $merchant->id }}" name="settlement_fee_percent" value="{{ old('settlement_fee_percent', $pctInput($merchant->settlement_fee_percent)) }}"></div></td>
-                        <td><input form="fee-{{ $merchant->id }}" name="ma_fee_percent" value="{{ old('ma_fee_percent', $pctInput($merchant->ma_fee_percent)) }}"></td>
-                        <td><input form="fee-{{ $merchant->id }}" name="agent_fee_percent" value="{{ old('agent_fee_percent', $pctInput($merchant->agent_fee_percent)) }}"></td>
-                        <td><input form="fee-{{ $merchant->id }}" name="toko_fee_percent" value="{{ old('toko_fee_percent', $pctInput($merchant->toko_fee_percent)) }}"></td>
+                        <td><input form="fee-{{ $merchant->id }}" name="merchant_mdr_percent" value="{{ old('merchant_mdr_percent', $pctInput($merchant->merchant_mdr_percent)) }}"></td>
                         <td><strong>{{ $pct($merchant->computed_mdr) }}</strong></td>
                         <td><button form="fee-{{ $merchant->id }}" class="btn primary compact-btn">Simpan</button></td>
                     </tr>
@@ -114,7 +116,7 @@
         <div class="qris-toolbar"><h2>Create MA</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-create-table">
-                <thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Password</th><th>Base HG</th><th>Conn</th><th>Settle</th><th>Set Fee</th><th>MA Fee</th><th>Aksi</th></tr></thead>
+                <thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Password</th><th>Menu Fee</th><th>MA Fee (%)</th><th>Aksi</th></tr></thead>
                 <tbody>
                     <tr>
                         <td><form id="ma-create" method="post" action="{{ route('superadmin.ma.store') }}">@csrf</form><input form="ma-create" name="name" required></td>
@@ -122,11 +124,14 @@
                         <td><input form="ma-create" name="contact"></td>
                         <td><select form="ma-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
                         <td><input form="ma-create" name="password" required></td>
-                        <td><input form="ma-create" name="base_hg_percent" value="0.80" required></td>
-                        <td><input form="ma-create" name="connection_fee_percent" value="0.05" required></td>
-                        <td><select form="ma-create" name="settlement_method"><option value="h_plus_1">H+1</option><option value="everyday">Everyday</option><option value="same_day">Same Day</option></select></td>
-                        <td><input form="ma-create" name="settlement_fee_percent" value="0.05" required></td>
-                        <td><input form="ma-create" name="ma_fee_percent" value="0.00" required></td>
+                        <td>
+                            <select form="ma-create" name="fee_menu">
+                                @foreach($feeMenus->optionsFor('ma') as $key => $option)
+                                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                                @endforeach
+                            </select>
+                        </td>
+                        <td><input form="ma-create" name="ma_fee_percent" value="0.85" required></td>
                         <td><button form="ma-create" class="btn primary compact-btn">Buat</button></td>
                     </tr>
                 </tbody>
@@ -137,7 +142,8 @@
         <div class="qris-toolbar"><h2>Daftar MA</h2></div>
         <table class="table qris-table"><thead><tr><th>MA</th><th>Fee</th><th>MDR MA</th><th>Status</th></tr></thead><tbody>
             @foreach($mas as $ma)
-                <tr><td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td><td>Base {{ $pct($ma->base_hg_percent) }} / Conn {{ $pct($ma->connection_fee_percent) }} / Settle {{ $pct($ma->settlement_fee_percent) }} / MA {{ $pct($ma->ma_fee_percent) }}</td><td><strong>{{ $pct($ma->computed_mdr) }}</strong></td><td><span class="badge {{ $ma->is_active ? 'ok' : 'danger' }}">{{ $ma->is_active ? 'Aktif' : 'Nonaktif' }}</span></td></tr>
+                @php($maMenuLabel = $ma->fee_menu ? ($feeMenus->optionsFor('ma')[$ma->fee_menu]['label'] ?? $ma->fee_menu) : '-')
+                <tr><td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td><td>{{ $maMenuLabel }}</td><td><strong>{{ $pct($ma->computed_mdr) }}</strong></td><td><span class="badge {{ $ma->is_active ? 'ok' : 'danger' }}">{{ $ma->is_active ? 'Aktif' : 'Nonaktif' }}</span></td></tr>
             @endforeach
         </tbody></table>
     </section>
@@ -148,19 +154,36 @@
         <div class="qris-toolbar"><h2>Create Merchant Group</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-group-create-table">
-                <thead><tr><th>MA</th><th>Nama</th><th>Email</th><th>Kontak</th><th>Base HG</th><th>Conn</th><th>Settle</th><th>Set Fee</th><th>MA Fee</th><th>Agent Fee</th><th>Status</th><th>Aksi</th></tr></thead>
+                <thead><tr><th>MA</th><th>Nama</th><th>Email</th><th>Kontak</th><th>Tipe</th><th>Menu Fee</th><th>Agent Fee (%)</th><th>Status</th><th>Aksi</th></tr></thead>
                 <tbody>
                     <tr>
                         <td><form id="group-create" method="post" action="{{ route('superadmin.agent.store') }}">@csrf</form><select form="group-create" name="ma_user_id"><option value="">-</option>@foreach($mas as $ma)<option value="{{ $ma->id }}">{{ $ma->name }}</option>@endforeach</select></td>
                         <td><input form="group-create" name="name" required></td>
                         <td><input form="group-create" name="email" type="email"></td>
                         <td><input form="group-create" name="contact"></td>
-                        <td><input form="group-create" name="base_hg_percent" value="0.80" required></td>
-                        <td><input form="group-create" name="connection_fee_percent" value="0.05" required></td>
-                        <td><select form="group-create" name="settlement_method"><option value="h_plus_1">H+1</option><option value="everyday">Everyday</option><option value="same_day">Same Day</option></select></td>
-                        <td><input form="group-create" name="settlement_fee_percent" value="0.05" required></td>
-                        <td><input form="group-create" name="ma_fee_percent" value="0.15" required></td>
-                        <td><input form="group-create" name="default_agent_fee_percent" value="0.00" required></td>
+                        <td>
+                            <select form="group-create" name="connection_type" id="group-create-type" onchange="paygridToggleAgentFeeMenu(this)">
+                                <option value="cm">CM</option>
+                                <option value="script">Engine</option>
+                            </select>
+                            <select form="group-create" name="engine_type" id="group-create-engine-type" style="display:none" disabled>
+                                <option value="sc">Script</option>
+                                <option value="api">API</option>
+                            </select>
+                        </td>
+                        <td>
+                            <select form="group-create" name="fee_menu" id="group-create-fee-menu-cm">
+                                @foreach($feeMenus->optionsFor('agent', 'cm') as $key => $option)
+                                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                                @endforeach
+                            </select>
+                            <select form="group-create" name="fee_menu" id="group-create-fee-menu-engine" style="display:none" disabled>
+                                @foreach($feeMenus->optionsFor('agent', 'engine') as $key => $option)
+                                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                                @endforeach
+                            </select>
+                        </td>
+                        <td><input form="group-create" name="default_agent_fee_percent" value="1.00" required></td>
                         <td><select form="group-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
                         <td><button form="group-create" class="btn primary compact-btn">Buat</button></td>
                     </tr>
@@ -168,7 +191,7 @@
             </table>
         </div>
     </section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Fee Dasar</th><th>MDR Agen</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>Base {{ $pct($agent->base_hg_percent) }} / MA {{ $pct($agent->ma_fee_percent) }} / Agent {{ $pct($agent->default_agent_fee_percent) }}</td><td><strong>{{ $pct($agent->computed_mdr) }}</strong></td></tr>@endforeach</tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Menu Fee</th><th>MDR Agen</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>{{ $agent->fee_menu ? ($feeMenus->optionsFor('agent', $feeMenus->typeCategory($agent->connection_type))[$agent->fee_menu]['label'] ?? $agent->fee_menu) : '-' }}</td><td><strong>{{ $pct($agent->computed_mdr) }}</strong></td></tr>@endforeach</tbody></table></section>
 @endif
 
 @if($active === 'timer-ticket')
@@ -192,5 +215,24 @@
             @endforeach
         </tbody></table></div>
     </section>
+@endif
+
+@if($active === 'merchant-group')
+@push('scripts')
+<script>
+    function paygridToggleAgentFeeMenu(select) {
+        var isEngine = select.value !== 'cm';
+        var engineType = document.getElementById('group-create-engine-type');
+        var cmMenu = document.getElementById('group-create-fee-menu-cm');
+        var engineMenu = document.getElementById('group-create-fee-menu-engine');
+        engineType.style.display = isEngine ? '' : 'none';
+        engineType.disabled = !isEngine;
+        cmMenu.style.display = isEngine ? 'none' : '';
+        cmMenu.disabled = isEngine;
+        engineMenu.style.display = isEngine ? '' : 'none';
+        engineMenu.disabled = !isEngine;
+    }
+</script>
+@endpush
 @endif
 @endsection

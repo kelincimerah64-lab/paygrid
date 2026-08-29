@@ -84,7 +84,7 @@
 
 @if($active === 'fee')
     <section class="grid qris-metrics section"><div class="card pad qris-metric primary"><span>Total Fee MA</span><strong>{{ $money($summary['fee_ma']) }}</strong></div><div class="card pad qris-metric pending"><span>Total Fee Agen</span><strong>{{ $money($summary['fee_agent']) }}</strong></div><div class="card pad qris-metric"><span>Total Fee Merchant</span><strong>{{ $money($summary['fee_merchant']) }}</strong></div></section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Pembagian Fee Per Toko</h2></div><table class="table qris-table"><thead><tr><th>Toko</th><th>Merchant Fee</th><th>Base HG</th><th>Engine</th><th>Settlement</th><th>Agent</th><th>MA Fee</th></tr></thead><tbody>@foreach($merchants as $m)<tr><td><strong>{{ $m->name }}</strong></td><td>{{ $pct($m->merchant_mdr_percent) }}</td><td>{{ $pct($m->base_mdr_percent) }}</td><td>{{ $pct($m->connection_fee_percent) }}</td><td>{{ $pct($m->settlement_fee_percent) }}</td><td>{{ $pct($m->agent_fee_percent) }}</td><td><strong>{{ $pct($m->ma_fee_percent) }}</strong></td></tr>@endforeach</tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Pembagian Fee Per Toko</h2></div><table class="table qris-table"><thead><tr><th>Toko</th><th>Menu Fee</th><th>Merchant MDR</th><th>Agent</th><th>MA Fee</th></tr></thead><tbody>@foreach($merchants as $m)<tr><td><strong>{{ $m->name }}</strong></td><td>{{ $m->fee_menu ? ($feeMenus->optionsFor('merchant', $feeMenus->typeCategory($m->merchant_type))[$m->fee_menu]['label'] ?? $m->fee_menu) : '-' }}</td><td>{{ $pct($m->merchant_mdr_percent) }}</td><td>{{ $pct($m->agent?->default_agent_fee_percent) }}</td><td><strong>{{ $pct($m->agent?->ma?->ma_fee_percent) }}</strong></td></tr>@endforeach</tbody></table></section>
 @endif
 
 @if($active === 'approval')
@@ -101,11 +101,10 @@
             $adminName = $payload['admin_name'] ?? $payload['username'] ?? ($adminEmail !== '-' ? str($adminEmail)->before('@')->replace(['.', '_', '-'], ' ')->title()->toString() : '-');
             $adminPassword = $payload['admin_password'] ?? $payload['password'] ?? config('paygrid.demo_password');
             $merchantMdr = $merchant?->merchant_mdr_percent ?? ($payload['merchant_mdr_percent'] ?? 0);
-            $baseMdr = $merchant?->base_mdr_percent ?? ($payload['base_mdr_percent'] ?? 0);
             $payinFee = $merchant?->payin_fee_percent ?? ($payload['payin_fee_percent'] ?? $payload['engine_service_fee_percent'] ?? 0);
-            $maFee = $merchant?->ma_fee_percent ?? ($payload['ma_fee_percent'] ?? 0);
-            $agentFee = $merchant?->agent_fee_percent ?? ($payload['agent_fee_percent'] ?? 0);
-            $settlementFee = $merchant?->settlement_fee_percent ?? ($payload['settlement_fee_percent'] ?? 0);
+            $requestTypeCategory = $feeMenus->typeCategory($merchant?->merchant_type ?? $r->merchant_type);
+            $requestMenuOptions = $feeMenus->optionsFor('merchant', $requestTypeCategory);
+            $requestFeeMenu = $merchant?->fee_menu ?? $payload['fee_menu'] ?? null;
             $detailRows = [
                 'HG Merchant ID' => $merchant?->merchant_id ?? ($payload['merchant_id'] ?? $payload['hg_merchant_id'] ?? '-'),
                 'HG Merchant Key' => $payload['merchant_key'] ?? $payload['hg_merchant_key'] ?? '-',
@@ -129,18 +128,20 @@
             <div class="approval-store-cell"><div class="initial">{{ $initial }}</div><div><div class="label">Toko</div><h2 class="truncate">{{ $r->store_name }}</h2><div class="muted">Agen: {{ $r->agent?->name ?: '-' }}</div><div class="muted truncate">{{ $payload['topup_url'] ?? $merchant?->topup_url ?? $r->engine_name ?? '-' }}</div></div></div>
             <div><div class="label">Merchant</div><div class="merchant-id-box">ID</div><h2 class="truncate">{{ $payload['merchant_group_name'] ?? $r->agent?->name ?? strtoupper($r->gateway) }}</h2><div class="muted truncate">{{ $merchant?->merchant_id ?? ($payload['merchant_id'] ?? 'Pending MA') }}</div></div>
             <div><div class="label">Data User</div><div class="user-access-card"><strong>ADMIN</strong><h2>{{ $adminName }}</h2><div class="muted truncate">{{ $adminEmail }}</div><b>PW: {{ $adminPassword }}</b></div></div>
-            <div><div class="label">Structure Fee</div><div class="fee-row"><span>Agen Pemegang Toko</span><strong>{{ $r->agent?->name ?: '-' }}</strong></div><div class="fee-row"><span>Payment Gateway</span><strong>{{ ucfirst($r->gateway) }}</strong></div><div class="fee-pill wide"><span>Merchant MDR</span><strong>{{ $pct($merchantMdr) }}</strong></div><div class="mini-grid"><div class="fee-pill"><span>Agent Fee</span><strong>{{ $pct($agentFee) }}</strong></div><div class="fee-pill"><span>{{ $r->settlement_method ?: 'Standard H+1' }}</span><strong>{{ $pct($settlementFee) }}</strong></div><div class="fee-pill metric-line green"><span>Base MDR</span><strong>{{ $pct($baseMdr) }}</strong></div><div class="fee-pill metric-line blue"><span>MA</span><strong>{{ $pct($maFee) }}</strong></div><div class="fee-pill"><span>Pay In Fee</span><strong>{{ $pct($payinFee) }}</strong></div><div class="fee-pill"><span>Disbursement Fee</span><strong>{{ $payload['withdrawal_fee'] ?? '-' }}</strong></div></div><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="approval-detail-{{ $r->id }}">View Details</button></div>
+            <div><div class="label">Structure Fee</div><div class="fee-row"><span>Agen Pemegang Toko</span><strong>{{ $r->agent?->name ?: '-' }}</strong></div><div class="fee-row"><span>Payment Gateway</span><strong>{{ ucfirst($r->gateway) }}</strong></div><div class="fee-pill wide"><span>Merchant MDR</span><strong>{{ $pct($merchantMdr) }}</strong></div><div class="mini-grid"><div class="fee-pill"><span>Menu Fee</span><strong>{{ $requestFeeMenu ? ($requestMenuOptions[$requestFeeMenu]['label'] ?? $requestFeeMenu) : '-' }}</strong></div><div class="fee-pill"><span>Pay In Fee</span><strong>{{ $pct($payinFee) }}</strong></div><div class="fee-pill"><span>Disbursement Fee</span><strong>{{ $payload['withdrawal_fee'] ?? '-' }}</strong></div></div><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="approval-detail-{{ $r->id }}">View Details</button></div>
             <div>
                 <div class="label">Decision</div>
                 <div style="margin:12px 0"><span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></div>
                 @if(!in_array($r->status, ['approved', 'rejected'], true))
-                    <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}">
+                    <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form">
                         @csrf
-                        <input type="hidden" name="merchant_mdr_percent" value="{{ $merchantMdr }}">
-                        <input type="hidden" name="base_mdr_percent" value="{{ $baseMdr }}">
+                        <select name="fee_menu" required>
+                            @foreach($requestMenuOptions as $key => $option)
+                                <option value="{{ $key }}" @selected($requestFeeMenu === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                            @endforeach
+                        </select>
+                        <input name="merchant_mdr_percent" value="{{ $pctInput($merchantMdr) }}" placeholder="Merchant MDR %" required>
                         <input type="hidden" name="payin_fee_percent" value="{{ $payinFee }}">
-                        <input type="hidden" name="ma_fee_percent" value="{{ $maFee }}">
-                        <input type="hidden" name="agent_fee_percent" value="{{ $agentFee }}">
                         <button class="btn primary compact-btn" style="width:100%; margin-bottom:8px">Approve</button>
                     </form>
                     <form method="post" action="{{ route('api.merchant-registration.reject', $r) }}">
@@ -199,9 +200,11 @@
                     'Provisioning Status' => $m->provisioning_status ?: '-',
                 ];
             @endphp
-            <tr><td><strong>{{ $m->name }}</strong><br><span class="muted">{{ $m->slug }}</span></td><td>{{ $m->merchant_id ?: '-' }}</td><td>{{ $m->agent?->name ?: '-' }}</td><td><span class="badge {{ $m->merchant_type === 'cm' ? 'ok' : 'warn' }}">{{ strtoupper($m->merchant_type) }}</span></td><td>MDR {{ $pct($m->merchant_mdr_percent) }}<br><span class="muted">MA {{ $pct($m->ma_fee_percent) }} / Agent {{ $pct($m->agent_fee_percent) }}</span></td><td><span class="badge {{ $badge($m->approval_status) }}">{{ $m->approval_status }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="store-detail-{{ $m->id }}">Details</button><button class="btn primary compact-btn approval-detail-open" type="button" data-approval-detail="store-fee-{{ $m->id }}">Edit Fee</button>
+            @php($storeTypeCategory = $feeMenus->typeCategory($m->merchant_type))
+            @php($storeMenuOptions = $feeMenus->optionsFor('merchant', $storeTypeCategory))
+            <tr><td><strong>{{ $m->name }}</strong><br><span class="muted">{{ $m->slug }}</span></td><td>{{ $m->merchant_id ?: '-' }}</td><td>{{ $m->agent?->name ?: '-' }}</td><td><span class="badge {{ $m->merchant_type === 'cm' ? 'ok' : 'warn' }}">{{ strtoupper($m->merchant_type) }}</span></td><td>MDR {{ $pct($m->merchant_mdr_percent) }}<br><span class="muted">MA {{ $pct($m->agent?->ma?->ma_fee_percent) }} / Agent {{ $pct($m->agent?->default_agent_fee_percent) }}</span></td><td><span class="badge {{ $badge($m->approval_status) }}">{{ $m->approval_status }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="store-detail-{{ $m->id }}">Details</button><button class="btn primary compact-btn approval-detail-open" type="button" data-approval-detail="store-fee-{{ $m->id }}">Edit Fee</button>
             <div class="approval-modal" id="store-detail-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Toko</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><div class="approval-detail-grid">@foreach($detailRows as $label => $value)<div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>@endforeach</div></div></div>
-            <div class="approval-modal" id="store-fee-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Edit Fee</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><form method="post" action="{{ route('ma.stores.fee.update', $m) }}" class="form-grid pad">@csrf<label>Base HG %<input name="base_mdr_percent" value="{{ $pctInput($m->base_mdr_percent) }}" required></label><label>Pay In Fee %<input name="payin_fee_percent" value="{{ $pctInput($m->payin_fee_percent) }}" required></label><label>Settlement/Disbursement %<input name="settlement_fee_percent" value="{{ $pctInput($m->settlement_fee_percent) }}" required></label><label>Agent Fee %<input name="agent_fee_percent" value="{{ $pctInput($m->agent_fee_percent) }}" required></label><label>MA Fee %<input name="ma_fee_percent" value="{{ $pctInput($m->ma_fee_percent) }}" required></label><label>Merchant MDR otomatis<input value="{{ $pctInput($m->merchant_mdr_percent) }}" disabled><span class="muted">Dihitung dari Base + Pay In + Settlement + Agent + MA.</span></label><div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
+            <div class="approval-modal" id="store-fee-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Edit Fee</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><form method="post" action="{{ route('ma.stores.fee.update', $m) }}" class="form-grid pad">@csrf<label>Menu Fee<select name="fee_menu">@foreach($storeMenuOptions as $key => $option)<option value="{{ $key }}" @selected($m->fee_menu === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>@endforeach</select></label><label>Merchant MDR %<input name="merchant_mdr_percent" value="{{ $pctInput($m->merchant_mdr_percent) }}" required></label><label>Pay In Fee %<input name="payin_fee_percent" value="{{ $pctInput($m->payin_fee_percent) }}" required></label><div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
         @empty
             <tr><td colspan="7" class="empty">Belum ada toko.</td></tr>
         @endforelse
@@ -210,12 +213,78 @@
 @endif
 
 @if($active === 'agents')
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Agen</h2></div><table class="table qris-table super-create-table"><thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Fee Agen</th><th>Password</th><th>Aksi</th></tr></thead><tbody><tr><td><form id="agent-create" method="post" action="{{ route('ma.agents.store') }}">@csrf</form><input form="agent-create" name="name" required></td><td><input form="agent-create" name="email" type="email" required></td><td><input form="agent-create" name="contact"></td><td><select form="agent-create" name="status"><option>Active</option><option>Review</option><option>Suspended</option></select></td><td><input form="agent-create" name="default_agent_fee_percent" value="0.15" required></td><td><input form="agent-create" name="password" value="{{ config('paygrid.demo_password') }}"></td><td><button form="agent-create" class="btn primary compact-btn">Buat</button></td></tr></tbody></table></section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Agen</h2></div><table class="table qris-table"><thead><tr><th>Agen</th><th>Email</th><th>Kontak</th><th>Fee</th><th>Status</th></tr></thead><tbody>@foreach($agents as $a)<tr><td><strong>{{ $a->name }}</strong><br><span class="muted">{{ $a->code }}</span></td><td>{{ $a->email ?: '-' }}</td><td>{{ $a->contact ?: '-' }}</td><td>{{ $pct($a->default_agent_fee_percent) }}</td><td><span class="badge {{ $a->is_active ? 'ok' : 'danger' }}">{{ $a->is_active ? 'Active' : 'Suspended' }}</span></td></tr>@endforeach</tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Agen</h2></div><table class="table qris-table super-create-table"><thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Tipe</th><th>Menu Fee</th><th>Fee Agen (%)</th><th>Password</th><th>Aksi</th></tr></thead><tbody><tr>
+        <td><form id="agent-create" method="post" action="{{ route('ma.agents.store') }}">@csrf</form><input form="agent-create" name="name" required></td>
+        <td><input form="agent-create" name="email" type="email" required></td>
+        <td><input form="agent-create" name="contact"></td>
+        <td><select form="agent-create" name="status"><option>Active</option><option>Review</option><option>Suspended</option></select></td>
+        <td>
+            <select form="agent-create" name="connection_type" id="agent-create-type" onchange="paygridToggleAgentFeeMenu(this)">
+                <option value="cm">CM</option>
+                <option value="script">Engine</option>
+            </select>
+            <select form="agent-create" name="engine_type" id="agent-create-engine-type" style="display:none" disabled>
+                <option value="sc">Script</option>
+                <option value="api">API</option>
+            </select>
+        </td>
+        <td>
+            <select form="agent-create" name="fee_menu" id="agent-create-fee-menu-cm">
+                @foreach($feeMenus->optionsFor('agent', 'cm') as $key => $option)
+                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                @endforeach
+            </select>
+            <select form="agent-create" name="fee_menu" id="agent-create-fee-menu-engine" style="display:none" disabled>
+                @foreach($feeMenus->optionsFor('agent', 'engine') as $key => $option)
+                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                @endforeach
+            </select>
+        </td>
+        <td><input form="agent-create" name="default_agent_fee_percent" value="1.00" required></td>
+        <td><input form="agent-create" name="password" value="{{ config('paygrid.demo_password') }}"></td>
+        <td><button form="agent-create" class="btn primary compact-btn">Buat</button></td>
+    </tr></tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Agen</h2></div><table class="table qris-table"><thead><tr><th>Agen</th><th>Email</th><th>Kontak</th><th>Menu Fee</th><th>Fee</th><th>Status</th></tr></thead><tbody>@foreach($agents as $a)<tr><td><strong>{{ $a->name }}</strong><br><span class="muted">{{ $a->code }}</span></td><td>{{ $a->email ?: '-' }}</td><td>{{ $a->contact ?: '-' }}</td><td>{{ $a->fee_menu ? ($feeMenus->optionsFor('agent', $feeMenus->typeCategory($a->connection_type))[$a->fee_menu]['label'] ?? $a->fee_menu) : '-' }}</td><td>{{ $pct($a->default_agent_fee_percent) }}</td><td><span class="badge {{ $a->is_active ? 'ok' : 'danger' }}">{{ $a->is_active ? 'Active' : 'Suspended' }}</span></td></tr>@endforeach</tbody></table></section>
+@push('scripts')
+<script>
+    function paygridToggleAgentFeeMenu(select) {
+        var isEngine = select.value !== 'cm';
+        var engineType = document.getElementById('agent-create-engine-type');
+        var cmMenu = document.getElementById('agent-create-fee-menu-cm');
+        var engineMenu = document.getElementById('agent-create-fee-menu-engine');
+        engineType.style.display = isEngine ? '' : 'none';
+        engineType.disabled = !isEngine;
+        cmMenu.style.display = isEngine ? 'none' : '';
+        cmMenu.disabled = isEngine;
+        engineMenu.style.display = isEngine ? '' : 'none';
+        engineMenu.disabled = !isEngine;
+    }
+</script>
+@endpush
 @endif
 
 @if($active === 'create-store')
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Toko</h2></div><form method="post" action="{{ route('ma.create-store.store') }}" class="form-grid pad">@csrf<label>Nama Toko<input name="name" required></label><label>Username<input name="username"></label><label>Engine Name<input name="engine_name"></label><label>Agen<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label><label>Email PIC<input name="pic_email" type="email"></label><label>Telegram PIC<input name="pic_telegram"></label><label>Email Admin<input name="admin_email" type="email" required></label><label>Nomor Kontak<input name="phone"></label><label>Environment<select name="environment"><option>Production</option><option>Sandbox</option></select></label><label>Payment Gateway<select name="gateway"><option value="hilogate">hilogate</option><option value="artageto">artageto</option></select></label><label>Merchant ID<input name="merchant_id" placeholder="Kosongkan jika belum real"></label><label>Merchant Key<input name="merchant_key" placeholder="Kosongkan jika belum real"></label><label>Callback URL<input name="transaction_callback_url" value="{{ url('/api/callbacks/hilogate/transaction') }}"></label><label>Withdrawal Callback<input name="withdrawal_callback_url" value="{{ url('/api/callbacks/hilogate/withdrawal') }}"></label><label>API IP Whitelist<input name="api_ip_whitelist" value="15.232.137.74"></label><label>Tipe Toko<select name="merchant_type"><option value="cm">CM</option><option value="script">Script</option></select></label><label>Settlement Method<select name="settlement_method"><option value="standard_h1">standard_h1</option><option value="everyday_1x">everyday_1x</option><option value="sameday_3x">sameday_3x</option></select></label><label>Base Fee HG %<input name="base_mdr_percent" value="0.80" required></label><label>Engine Fee %<input name="connection_fee_percent" value="0.05" required></label><label>Settlement Fee %<input name="settlement_fee_percent" value="0.05" required></label><label>Agent Fee %<input name="agent_fee_percent" value="0.15" required></label><label>MA Fee %<input name="ma_fee_percent" value="0.15" required></label><label>Toko Fee %<input name="toko_fee_percent" value="0.00"></label><label>Catatan<input name="note"></label><p class="muted" style="grid-column:1/-1; margin:0">Merchant MDR dihitung otomatis: Base + Engine + Settlement + Agent + MA + Toko Fee.</p><button class="btn primary">Buat Toko</button></form></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Toko</h2></div><form method="post" action="{{ route('ma.create-store.store') }}" class="form-grid pad">@csrf<label>Nama Toko<input name="name" required></label><label>Username<input name="username"></label><label>Engine Name<input name="engine_name"></label><label>Agen<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label><label>Email PIC<input name="pic_email" type="email"></label><label>Telegram PIC<input name="pic_telegram"></label><label>Email Admin<input name="admin_email" type="email" required></label><label>Nomor Kontak<input name="phone"></label><label>Environment<select name="environment"><option>Production</option><option>Sandbox</option></select></label><label>Payment Gateway<select name="gateway"><option value="hilogate">hilogate</option><option value="artageto">artageto</option></select></label><label>Merchant ID<input name="merchant_id" placeholder="Kosongkan jika belum real"></label><label>Merchant Key<input name="merchant_key" placeholder="Kosongkan jika belum real"></label><label>Callback URL<input name="transaction_callback_url" value="{{ url('/api/callbacks/hilogate/transaction') }}"></label><label>Withdrawal Callback<input name="withdrawal_callback_url" value="{{ url('/api/callbacks/hilogate/withdrawal') }}"></label><label>API IP Whitelist<input name="api_ip_whitelist" value="15.232.137.74"></label>
+        <label>Tipe Toko<select name="merchant_type" id="create-store-type" onchange="paygridToggleStoreFeeMenu(this)"><option value="cm">CM</option><option value="script">Engine</option></select></label>
+        <label>Engine Type<select name="engine_type" id="create-store-engine-type" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
+        <label>Menu Fee (CM)<select name="fee_menu" id="create-store-fee-menu-cm">@foreach($feeMenus->optionsFor('merchant', 'cm') as $key => $option)<option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>@endforeach</select></label>
+        <label>Menu Fee (Engine)<select name="fee_menu" id="create-store-fee-menu-engine" style="display:none" disabled>@foreach($feeMenus->optionsFor('merchant', 'engine') as $key => $option)<option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>@endforeach</select></label>
+        <label>Merchant MDR %<input name="merchant_mdr_percent" value="0.85" required></label>
+        <label>Catatan<input name="note"></label><button class="btn primary">Buat Toko</button></form></section>
+@push('scripts')
+<script>
+    function paygridToggleStoreFeeMenu(select) {
+        var isEngine = select.value !== 'cm';
+        document.getElementById('create-store-engine-type').disabled = !isEngine;
+        var cmMenu = document.getElementById('create-store-fee-menu-cm');
+        var engineMenu = document.getElementById('create-store-fee-menu-engine');
+        cmMenu.closest('label').style.display = isEngine ? 'none' : '';
+        cmMenu.disabled = isEngine;
+        engineMenu.style.display = isEngine ? '' : 'none';
+        engineMenu.disabled = !isEngine;
+    }
+</script>
+@endpush
 @endif
 
 @if($active === 'bot-monitoring')

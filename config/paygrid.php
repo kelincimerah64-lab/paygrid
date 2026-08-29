@@ -66,4 +66,45 @@ return [
         'cache_ttl_seconds' => (int) env('TELEGRAM_BOT_SHEET_CACHE_TTL', 45),
         'reminder_threshold_minutes' => (int) env('TELEGRAM_BOT_REMINDER_THRESHOLD_MINUTES', 15),
     ],
+
+    'fee_menus' => [
+        'ma' => [
+            'h_plus_1_sc' => ['label' => 'H+1 + Script', 'floor' => 0.85],
+            'h_plus_1_api' => ['label' => 'H+1 + API', 'floor' => 0.80],
+            'everyday_sc' => ['label' => 'Everyday + Script', 'floor' => 0.90],
+            'everyday_api' => ['label' => 'Everyday + API', 'floor' => 0.85],
+            'same_day_sc' => ['label' => 'Sameday + Script', 'floor' => 0.90],
+            'same_day_api' => ['label' => 'Sameday + API', 'floor' => 0.85],
+        ],
+        'agent' => [
+            'cm' => [
+                'h_plus_1' => ['label' => 'H+1', 'floor' => 1.00],
+                'everyday' => ['label' => 'Everyday', 'floor' => 1.10],
+                'same_day' => ['label' => 'Sameday', 'floor' => 1.15],
+            ],
+            'engine' => [
+                'h_plus_1_sc' => ['label' => 'H+1 + Script', 'floor' => 0.95],
+                'h_plus_1_api' => ['label' => 'H+1 + API', 'floor' => 0.85],
+                'everyday_sc' => ['label' => 'Everyday + Script', 'floor' => 1.05],
+                'everyday_api' => ['label' => 'Everyday + API', 'floor' => 0.95],
+                'same_day_sc' => ['label' => 'Sameday + Script', 'floor' => 1.10],
+                'same_day_api' => ['label' => 'Sameday + API', 'floor' => 1.00],
+            ],
+        ],
+        'merchant' => [
+            'cm' => [
+                'h_plus_1' => ['label' => 'H+1', 'floor' => 0.85],
+                'everyday' => ['label' => 'Everyday', 'floor' => 0.85],
+                'same_day' => ['label' => 'Sameday', 'floor' => 0.85],
+            ],
+            'engine' => [
+                'h_plus_1_sc' => ['label' => 'H+1 + Script', 'floor' => 0.00],
+                'h_plus_1_api' => ['label' => 'H+1 + API', 'floor' => 0.00],
+                'everyday_sc' => ['label' => 'Everyday + Script', 'floor' => 0.00],
+                'everyday_api' => ['label' => 'Everyday + API', 'floor' => 0.00],
+                'same_day_sc' => ['label' => 'Sameday + Script', 'floor' => 0.00],
+                'same_day_api' => ['label' => 'Sameday + API', 'floor' => 0.00],
+            ],
+        ],
+    ],
 ];

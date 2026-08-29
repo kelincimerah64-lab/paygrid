@@ -18,11 +18,13 @@ class Agent extends Model
         'hg_group_id',
         'base_hg_percent',
         'connection_type',
+        'engine_type',
         'connection_fee_percent',
         'settlement_method',
         'settlement_fee_percent',
         'ma_fee_percent',
         'default_agent_fee_percent',
+        'fee_menu',
         'is_active',
     ];
 

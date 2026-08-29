@@ -2,63 +2,27 @@
 
 namespace Tests\Unit\Fees;
 
+use App\Models\Agent;
+use App\Models\User;
 use App\Services\FeeCalculator;
 use PHPUnit\Framework\TestCase;
 
 class FeeCalculatorTest extends TestCase
 {
-    public function test_cascade_matches_prd_worked_example(): void
+    public function test_ma_price_reads_ma_fee_percent_directly(): void
     {
         $calculator = new FeeCalculator();
+        $ma = new User(['ma_fee_percent' => 0.85]);
 
-        $maPrice = $calculator->cascade(base: 0.80, connection: 0.05, settlement: 0.05, maMargin: 0.05, agentMargin: 0);
-        $this->assertEqualsWithDelta(0.95, $maPrice, 0.0001);
-
-        $agentPrice = $calculator->cascade(base: 0.80, connection: 0.05, settlement: 0.05, maMargin: 0.05, agentMargin: 0.10);
-        $this->assertEqualsWithDelta(1.05, $agentPrice, 0.0001);
-
-        $tokoPrice = $calculator->cascade(base: 0.80, connection: 0.05, settlement: 0.05, maMargin: 0.05, agentMargin: 0.10, tokoSpread: 0.15);
-        $this->assertEqualsWithDelta(1.20, $tokoPrice, 0.0001);
+        $this->assertEqualsWithDelta(0.85, $calculator->maPrice($ma), 0.0001);
     }
 
-    public function test_cascade_matches_pak_fernando_wa_example(): void
+    public function test_agent_price_reads_default_agent_fee_percent_directly(): void
     {
         $calculator = new FeeCalculator();
+        $agent = new Agent(['default_agent_fee_percent' => 1.10]);
 
-        $agentPrice = $calculator->cascade(base: 0.85, connection: 0, settlement: 0, maMargin: 0.25, agentMargin: 0);
-        $this->assertEqualsWithDelta(1.10, $agentPrice, 0.0001);
-
-        $tokoPrice = $calculator->cascade(base: 0.85, connection: 0, settlement: 0, maMargin: 0.25, agentMargin: 0.05);
-        $this->assertEqualsWithDelta(1.15, $tokoPrice, 0.0001);
-    }
-
-    public function test_merchant_price_sums_all_six_components(): void
-    {
-        $calculator = new FeeCalculator();
-
-        $result = $calculator->merchantPrice([
-            'base_mdr_percent' => 0.80,
-            'connection_fee_percent' => 0.05,
-            'settlement_fee_percent' => 0.05,
-            'ma_fee_percent' => 0.05,
-            'agent_fee_percent' => 0.10,
-            'toko_fee_percent' => 0.15,
-        ]);
-
-        $this->assertEqualsWithDelta(1.20, $result, 0.0001);
-    }
-
-    public function test_merchant_price_defaults_missing_components_to_zero(): void
-    {
-        $calculator = new FeeCalculator();
-
-        $result = $calculator->merchantPrice([
-            'base_mdr_percent' => 0.85,
-            'ma_fee_percent' => 0.25,
-            'agent_fee_percent' => 0.05,
-        ]);
-
-        $this->assertEqualsWithDelta(1.15, $result, 0.0001);
+        $this->assertEqualsWithDelta(1.10, $calculator->agentPrice($agent), 0.0001);
     }
 
     public function test_toko_residual_is_never_negative(): void

@@ -7,10 +7,13 @@ use App\Models\MerchantRegistration;
 use App\Models\Agent;
 use App\Notifications\MerchantRegistrationSubmittedToMa;
 use App\Jobs\ProvisionMerchantOnGateway;
+use App\Rules\FeeAboveMenuFloor;
 use App\Services\AuditLogService;
+use App\Services\FeeMenuCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class MerchantRegistrationWorkflowController extends Controller
 {
@@ -39,26 +42,21 @@ class MerchantRegistrationWorkflowController extends Controller
     {
         $this->authorizeMaRegistration($request, $registration);
         abort_unless(in_array($registration->status, ['pending_ma', 'pending_agent'], true), 422);
+        $feeMenus = app(FeeMenuCatalog::class);
+        $typeCategory = $feeMenus->typeCategory((string) ($request->input('merchant_type') ?? $registration->merchant_type));
         $data = $request->validate([
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
             'merchant_type' => ['nullable', 'in:cm,script'],
-            'merchant_mdr_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'base_mdr_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('merchant', $typeCategory)))],
+            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('merchant', $typeCategory, $request->input('fee_menu'))],
             'payin_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'settlement_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'ma_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'agent_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $payload = (array) ($registration->payload ?? []);
-        $merchantMdr = (float) ($data['merchant_mdr_percent'] ?? $payload['merchant_mdr_percent'] ?? 0);
-        $base = (float) ($data['base_mdr_percent'] ?? $payload['base_mdr_percent'] ?? 0);
+        $merchantMdr = (float) $data['merchant_mdr_percent'];
         $payin = (float) ($data['payin_fee_percent'] ?? $payload['payin_fee_percent'] ?? 0);
-        $settlement = (float) ($data['settlement_fee_percent'] ?? $payload['settlement_fee_percent'] ?? $payload['withdrawal_fee_percentage'] ?? 0);
-        $ma = (float) ($data['ma_fee_percent'] ?? $payload['ma_fee_percent'] ?? 0);
-        $agentFee = (float) ($data['agent_fee_percent'] ?? $payload['agent_fee_percent'] ?? 0);
-
-        abort_if($merchantMdr < $base + $payin + $settlement + $ma + $agentFee, 422, 'Merchant MDR tidak boleh di bawah total cost fee.');
+        $settlementMethod = $feeMenus->settlementMethod($data['fee_menu']);
 
         $slug = Str::slug($registration->store_name);
         if (Merchant::query()->where('slug', $slug)->where('id', '<>', $registration->merchant_id)->exists()) {
@@ -79,6 +77,7 @@ class MerchantRegistrationWorkflowController extends Controller
             'merchant_group_name' => $payload['merchant_group_name'] ?? $ownerAgent?->name ?? $merchant->merchant_group_name,
             'merchant_group_id' => $payload['merchant_group_id'] ?? $payload['hg_group_id'] ?? $ownerAgent?->hg_group_id ?? $merchant->merchant_group_id,
             'merchant_type' => $type,
+            'engine_type' => $data['engine_type'] ?? $merchant->engine_type,
             'gateway' => $data['gateway'] ?? $registration->gateway,
             'approval_status' => 'approved',
             'topup_enabled' => $type === 'cm',
@@ -93,14 +92,9 @@ class MerchantRegistrationWorkflowController extends Controller
             'cs_email' => $payload['cs_email'] ?? $merchant->cs_email,
             'cs_telegram' => $payload['cs_telegram'] ?? $merchant->cs_telegram,
             'merchant_mdr_percent' => $merchantMdr,
-            'base_mdr_percent' => $base,
-            'connection_fee_percent' => (float) ($payload['connection_fee_percent'] ?? 0),
-            'settlement_method' => $registration->settlement_method ?? $payload['settlement_method'] ?? $merchant->settlement_method,
-            'settlement_fee_percent' => $settlement,
+            'fee_menu' => $data['fee_menu'],
+            'settlement_method' => $settlementMethod,
             'payin_fee_percent' => $payin,
-            'ma_fee_percent' => $ma,
-            'agent_fee_percent' => $agentFee,
-            'toko_fee_percent' => (float) ($payload['toko_fee_percent'] ?? 0),
             'disbursement_fee_fixed' => (int) ($payload['disbursement_fee_fixed'] ?? $payload['withdrawal_fee'] ?? 0),
             'onboarding_payload' => $payload,
             'approved_at' => now(),

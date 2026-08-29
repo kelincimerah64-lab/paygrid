@@ -7,17 +7,20 @@ use App\Models\Merchant;
 use App\Models\PaygridSetting;
 use App\Models\TopupRequest;
 use App\Models\User;
+use App\Rules\FeeAboveMenuFloor;
 use App\Services\AuditLogService;
 use App\Services\FeeCalculator;
+use App\Services\FeeMenuCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class SuperadminController extends Controller
 {
-    public function page(FeeCalculator $feeCalculator, string $page = 'dashboard-fee'): View
+    public function page(FeeCalculator $feeCalculator, FeeMenuCatalog $feeMenus, string $page = 'dashboard-fee'): View
     {
         abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'timer-ticket', 'accounts'], true), 404);
 
@@ -62,9 +65,7 @@ class SuperadminController extends Controller
             ->orderBy('name')
             ->get();
 
-        $merchants->each(fn ($merchant) => $merchant->computed_mdr = (float) $merchant->merchant_mdr_percent ?: $feeCalculator->merchantPrice($merchant->only([
-            'base_mdr_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent', 'toko_fee_percent',
-        ])));
+        $merchants->each(fn ($merchant) => $merchant->computed_mdr = (float) $merchant->merchant_mdr_percent);
         $mas->each(fn ($ma) => $ma->computed_mdr = $feeCalculator->maPrice($ma));
         $agents->each(fn ($agent) => $agent->computed_mdr = $feeCalculator->agentPrice($agent));
 
@@ -87,6 +88,7 @@ class SuperadminController extends Controller
             'timerMinutes' => (int) PaygridSetting::value('ticket_pending_minutes', '40'),
             'summary' => $this->summary(),
             'filters' => compact('search', 'type', 'status', 'role', 'maId', 'agentId'),
+            'feeMenus' => $feeMenus,
         ]);
     }
 
@@ -125,19 +127,15 @@ class SuperadminController extends Controller
         return back()->with('status', 'MA berhasil diupdate. MDR MA: '.$this->fmt($feeCalculator->maPrice($user->refresh())).'%.');
     }
 
-    public function updateMerchantFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
+    public function updateMerchantFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
     {
-        $this->normalizePercentInputs($request, ['base_mdr_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent', 'toko_fee_percent']);
+        $this->normalizePercentInputs($request, ['merchant_mdr_percent']);
+        $typeCategory = $feeMenus->typeCategory($merchant->merchant_type);
         $data = $request->validate([
-            'base_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'connection_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'settlement_method' => ['required', 'in:h_plus_1,everyday,same_day'],
-            'settlement_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'toko_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('merchant', $typeCategory)))],
+            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('merchant', $typeCategory, $request->input('fee_menu'))],
         ]);
-        $data['merchant_mdr_percent'] = $feeCalculator->merchantPrice($data);
+        $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
         $before = $merchant->only(array_keys($data));
         $merchant->forceFill($data)->save();
         $audit->record('superadmin.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($data)));
@@ -145,25 +143,24 @@ class SuperadminController extends Controller
         return back()->with('status', 'Fee toko berhasil disimpan. MDR Toko: '.$this->fmt($data['merchant_mdr_percent']).'%.');
     }
 
-    public function storeAgent(Request $request, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
+    public function storeAgent(Request $request, AuditLogService $audit, FeeCalculator $feeCalculator, FeeMenuCatalog $feeMenus): RedirectResponse
     {
         $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
-        $this->normalizePercentInputs($request, ['base_hg_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'default_agent_fee_percent']);
+        $this->normalizePercentInputs($request, ['default_agent_fee_percent']);
+        $typeCategory = $feeMenus->typeCategory((string) $request->input('connection_type'));
         $data = $request->validate([
             'ma_user_id' => ['nullable', 'exists:users,id'],
             'code' => ['nullable', 'string', 'max:40', 'unique:agents,code'],
             'name' => ['required', 'string', 'max:120'],
             'email' => ['nullable', 'email', 'max:160'],
             'contact' => ['nullable', 'string', 'max:80'],
-            'base_hg_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'connection_type' => ['required', 'in:cm,script'],
-            'connection_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'settlement_method' => ['required', 'in:h_plus_1,everyday,same_day'],
-            'settlement_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'default_agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('agent', $typeCategory)))],
+            'default_agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('agent', $typeCategory, $request->input('fee_menu'))],
             'is_active' => ['required', 'boolean'],
         ]);
+        $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
         abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create merchant group ke HG masih dinonaktifkan.');
         $data['code'] = ($data['code'] ?? null) ?: $this->uniqueAgentCode($data['name']);
         $data['hg_group_id'] = null;
@@ -211,22 +208,21 @@ class SuperadminController extends Controller
 
     private function validateMa(Request $request, ?User $user = null): array
     {
-        $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
-        $this->normalizePercentInputs($request, ['base_hg_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent']);
+        $this->normalizePercentInputs($request, ['ma_fee_percent']);
+        $feeMenus = app(FeeMenuCatalog::class);
 
-        return $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:160', 'unique:users,email'.($user ? ','.$user->id : '')],
             'contact' => ['nullable', 'string', 'max:80'],
             'is_active' => ['required', 'boolean'],
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:6', 'max:120'],
-            'base_hg_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'connection_type' => ['required', 'in:cm,script'],
-            'connection_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'settlement_method' => ['required', 'in:h_plus_1,everyday,same_day'],
-            'settlement_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('ma')))],
+            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('ma', null, $request->input('fee_menu'))],
         ]);
+        $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
+
+        return $data;
     }
 
     private function summary(): array

@@ -10,8 +10,9 @@ use App\Models\MerchantSettlement;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
+use App\Rules\FeeAboveMenuFloor;
 use App\Services\AuditLogService;
-use App\Services\FeeCalculator;
+use App\Services\FeeMenuCatalog;
 use App\Services\TelegramBotMonitoringService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -19,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class MaController extends Controller
@@ -33,6 +35,7 @@ class MaController extends Controller
      */
     public function page(string $page = 'overview'): View
     {
+        $feeMenus = app(FeeMenuCatalog::class);
         abort_unless(in_array($page, ['overview', 'report', 'fee', 'approval', 'mapping', 'stores', 'agents', 'create-store', 'bot-monitoring'], true), 404);
 
         $filters = $this->filters();
@@ -80,6 +83,7 @@ class MaController extends Controller
             'botMonitoring' => $page === 'bot-monitoring'
                 ? app(TelegramBotMonitoringService::class)->data($this->botMonitoringFilters(), request()->boolean('refresh'))
                 : null,
+            'feeMenus' => $feeMenus,
         ]);
     }
 
@@ -110,15 +114,20 @@ class MaController extends Controller
         ]);
     }
 
-    public function storeAgent(Request $request, AuditLogService $audit): RedirectResponse
+    public function storeAgent(Request $request, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
     {
+        $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
         $this->normalizePercentInputs($request, ['default_agent_fee_percent']);
+        $typeCategory = $feeMenus->typeCategory((string) $request->input('connection_type'));
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:160'],
             'contact' => ['nullable', 'string', 'max:80'],
             'status' => ['required', 'in:Active,Review,Suspended'],
-            'default_agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'connection_type' => ['required', 'in:cm,script'],
+            'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('agent', $typeCategory)))],
+            'default_agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('agent', $typeCategory, $request->input('fee_menu'))],
             'password' => ['nullable', 'string', 'min:6', 'max:120'],
         ]);
         abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create agen ke HG masih dinonaktifkan.');
@@ -132,6 +141,10 @@ class MaController extends Controller
             'email' => $data['email'],
             'contact' => $data['contact'] ?? null,
             'hg_group_id' => null,
+            'connection_type' => $data['connection_type'],
+            'engine_type' => $data['engine_type'] ?? null,
+            'fee_menu' => $data['fee_menu'],
+            'settlement_method' => $feeMenus->settlementMethod($data['fee_menu']),
             'default_agent_fee_percent' => $data['default_agent_fee_percent'],
             'is_active' => $isActive,
             'password_plain' => $password,
@@ -151,36 +164,27 @@ class MaController extends Controller
         return back()->with('status', 'Agen lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG.');
     }
 
-    public function mapAgent(Request $request, Merchant $merchant, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
+    public function mapAgent(Request $request, Merchant $merchant, AuditLogService $audit): RedirectResponse
     {
         abort_unless($this->canUseMerchant($merchant), 403);
         $data = $request->validate(['agent_id' => ['required', 'exists:agents,id']]);
         $agent = Agent::query()->findOrFail($data['agent_id']);
         abort_unless($this->canUseAgent($agent), 403);
-        $before = $merchant->only(['agent_id', 'agent_fee_percent', 'ma_fee_percent', 'merchant_mdr_percent']);
-        $agentFee = (float) $agent->default_agent_fee_percent;
+        $before = $merchant->only(['agent_id', 'merchant_group_name', 'merchant_group_id']);
         $merchant->forceFill([
             'agent_id' => $agent->id,
             'merchant_group_name' => $agent->name,
             'merchant_group_id' => $agent->hg_group_id,
-            'agent_fee_percent' => $agentFee,
-            'merchant_mdr_percent' => $feeCalculator->merchantPrice([
-                'base_mdr_percent' => (float) $merchant->base_mdr_percent,
-                'connection_fee_percent' => (float) $merchant->connection_fee_percent,
-                'settlement_fee_percent' => (float) $merchant->settlement_fee_percent,
-                'ma_fee_percent' => (float) $merchant->ma_fee_percent,
-                'agent_fee_percent' => $agentFee,
-                'toko_fee_percent' => (float) $merchant->toko_fee_percent,
-            ]),
         ])->save();
         $audit->record('ma.merchant_agent_mapped', $merchant, $before, $merchant->only(array_keys($before)));
 
         return back()->with('status', 'Agen toko berhasil disimpan.');
     }
 
-    public function storeMerchant(Request $request, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
+    public function storeMerchant(Request $request, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
     {
-        $this->normalizePercentInputs($request, ['base_mdr_percent', 'connection_fee_percent', 'settlement_fee_percent', 'agent_fee_percent', 'ma_fee_percent', 'toko_fee_percent']);
+        $this->normalizePercentInputs($request, ['merchant_mdr_percent']);
+        $typeCategory = $feeMenus->typeCategory((string) $request->input('merchant_type'));
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'username' => ['nullable', 'string', 'max:80'],
@@ -193,20 +197,17 @@ class MaController extends Controller
             'environment' => ['required', 'in:Sandbox,Production'],
             'gateway' => ['required', 'in:hilogate,artageto,alpha,kingspay'],
             'merchant_type' => ['required', 'in:cm,script'],
+            'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
             'merchant_id' => ['nullable', 'string', 'max:160'],
             'merchant_key' => ['nullable', 'string', 'max:255'],
             'transaction_callback_url' => ['nullable', 'url', 'max:255'],
             'withdrawal_callback_url' => ['nullable', 'url', 'max:255'],
             'api_ip_whitelist' => ['nullable', 'string', 'max:255'],
-            'settlement_method' => ['required', 'in:standard_h1,everyday_1x,sameday_3x,h_plus_1,everyday,same_day'],
-            'base_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'connection_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'settlement_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'toko_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('merchant', $typeCategory)))],
+            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('merchant', $typeCategory, $request->input('fee_menu'))],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
+        $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
         $slug = $this->uniqueMerchantSlug($data['name']);
         $agent = Agent::query()->findOrFail($data['agent_id']);
         abort_unless($this->canUseAgent($agent), 403);
@@ -219,6 +220,7 @@ class MaController extends Controller
             'merchant_group_name' => $agent->name,
             'merchant_group_id' => $agent->hg_group_id,
             'merchant_type' => $data['merchant_type'],
+            'engine_type' => $data['engine_type'] ?? null,
             'gateway' => $data['gateway'],
             'approval_status' => 'approved',
             'topup_enabled' => $data['merchant_type'] === 'cm',
@@ -227,21 +229,9 @@ class MaController extends Controller
             'withdrawal_callback_url' => $data['withdrawal_callback_url'] ?? null,
             'pic_email' => $data['pic_email'] ?? null,
             'pic_telegram' => $data['pic_telegram'] ?? null,
-            'merchant_mdr_percent' => $feeCalculator->merchantPrice([
-                'base_mdr_percent' => $data['base_mdr_percent'],
-                'connection_fee_percent' => $data['connection_fee_percent'],
-                'settlement_fee_percent' => $data['settlement_fee_percent'],
-                'ma_fee_percent' => $data['ma_fee_percent'],
-                'agent_fee_percent' => $data['agent_fee_percent'],
-                'toko_fee_percent' => $data['toko_fee_percent'] ?? 0,
-            ]),
-            'base_mdr_percent' => $data['base_mdr_percent'],
-            'connection_fee_percent' => $data['connection_fee_percent'],
+            'merchant_mdr_percent' => $data['merchant_mdr_percent'],
+            'fee_menu' => $data['fee_menu'],
             'settlement_method' => $data['settlement_method'],
-            'settlement_fee_percent' => $data['settlement_fee_percent'],
-            'agent_fee_percent' => $data['agent_fee_percent'],
-            'toko_fee_percent' => $data['toko_fee_percent'] ?? 0,
-            'ma_fee_percent' => $data['ma_fee_percent'],
             'onboarding_payload' => $data + ['api_ip_whitelist' => $data['api_ip_whitelist'] ?: '15.232.137.74'],
             'approved_at' => now(),
         ]);
@@ -259,28 +249,18 @@ class MaController extends Controller
         return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admin->email.' / '.config('paygrid.demo_password').'.');
     }
 
-    public function updateStoreFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
+    public function updateStoreFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
     {
         abort_unless($this->canUseMerchant($merchant), 403);
-        $this->normalizePercentInputs($request, ['base_mdr_percent', 'payin_fee_percent', 'settlement_fee_percent', 'agent_fee_percent', 'ma_fee_percent']);
+        $this->normalizePercentInputs($request, ['payin_fee_percent', 'merchant_mdr_percent']);
+        $typeCategory = $feeMenus->typeCategory($merchant->merchant_type);
         $data = $request->validate([
-            'base_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'payin_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'settlement_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('merchant', $typeCategory)))],
+            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('merchant', $typeCategory, $request->input('fee_menu'))],
         ]);
-
-        $data['connection_fee_percent'] = $data['payin_fee_percent'];
-        $data['merchant_mdr_percent'] = $feeCalculator->merchantPrice([
-            'base_mdr_percent' => $data['base_mdr_percent'],
-            'connection_fee_percent' => $data['connection_fee_percent'],
-            'settlement_fee_percent' => $data['settlement_fee_percent'],
-            'ma_fee_percent' => $data['ma_fee_percent'],
-            'agent_fee_percent' => $data['agent_fee_percent'],
-            'toko_fee_percent' => (float) $merchant->toko_fee_percent,
-        ]);
-        $before = $merchant->only(['merchant_mdr_percent', 'base_mdr_percent', 'payin_fee_percent', 'connection_fee_percent', 'settlement_fee_percent', 'ma_fee_percent', 'agent_fee_percent']);
+        $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
+        $before = $merchant->only(['merchant_mdr_percent', 'payin_fee_percent', 'fee_menu', 'settlement_method']);
         $merchant->forceFill($data)->save();
         $audit->record('ma.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($before)));
 
@@ -357,7 +337,7 @@ class MaController extends Controller
 
     private function merchants(array $filters)
     {
-        return Merchant::query()->with('agent')
+        return Merchant::query()->with('agent.ma')
             ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('agent', 'ma_user_id', $maId))
             ->when($filters['q'] !== '', fn ($query) => $query->where(fn ($nested) => $nested->where('name', 'like', $filters['q'].'%')->orWhere('slug', 'like', $filters['q'].'%')->orWhere('merchant_id', 'like', $filters['q'].'%')->orWhereRelation('agent', 'name', 'like', $filters['q'].'%')))
             ->when($filters['status'] !== 'all', fn ($query) => $query->where('approval_status', $filters['status']))
