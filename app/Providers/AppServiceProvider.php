@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -29,6 +30,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if (! $this->app->environment('local', 'testing')) {
+            URL::forceScheme('https');
+        }
+
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute(30)->by(strtolower((string) $request->input('email')).'|'.$request->ip()));
         RateLimiter::for('dashboard-writes', fn (Request $request) => Limit::perMinute(60)->by(($request->user()?->id ?: $request->ip()).'|'.$request->route()?->getName()));
         RateLimiter::for('topup-submit', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
