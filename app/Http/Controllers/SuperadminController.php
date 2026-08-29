@@ -200,7 +200,8 @@ class SuperadminController extends Controller
         $data = $request->validate(['password' => ['nullable', 'string', 'min:6', 'max:120']]);
         $password = $data['password'] ?: Str::password(10, true, true, false, false);
         $before = $user->only(['id', 'email', 'role']);
-        $user->forceFill(['password' => Hash::make($password), 'plain_password' => $password, 'is_active' => true])->save();
+        $user->resetCredentials($password);
+        $user->forceFill(['is_active' => true])->save();
         $audit->record('superadmin.account_reset', $user, $before, $user->only(['id', 'email', 'role', 'is_active']));
 
         return back()->with('status', 'Akses user berhasil direset. Password: '.$password);

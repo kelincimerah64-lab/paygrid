@@ -25,4 +25,16 @@ class UserReadablePlainPasswordTest extends TestCase
 
         $this->assertNull($user->fresh()->readablePlainPassword());
     }
+
+    public function test_reset_credentials_succeeds_even_when_existing_plain_password_is_undecryptable(): void
+    {
+        $user = User::factory()->create(['plain_password' => 'demo-password']);
+        DB::table('users')->where('id', $user->id)->update(['plain_password' => 'not-a-valid-encrypted-payload']);
+        $user->refresh();
+
+        $user->resetCredentials('brand-new-password');
+
+        $this->assertSame('brand-new-password', $user->readablePlainPassword());
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('brand-new-password', $user->password));
+    }
 }

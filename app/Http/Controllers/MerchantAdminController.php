@@ -124,10 +124,7 @@ class MerchantAdminController extends Controller
         abort_unless((int) $user->merchant_id === (int) $merchant->id && in_array($user->role, ['admin', 'finance', 'cs', 'readonly_admin', 'readonly_cs'], true), 403);
         $data = $request->validate(['password' => ['required', 'string', 'min:6', 'max:120']]);
         $before = $user->only(['id', 'email', 'role']);
-        $user->forceFill([
-            'password' => Hash::make($data['password']),
-            'plain_password' => $data['password'],
-        ])->save();
+        $user->resetCredentials($data['password']);
         $audit->record('admin.user_password_reset', $user, $before, $user->only(['id', 'email', 'role']));
 
         return back()->with('status', 'Password user berhasil direset.');
