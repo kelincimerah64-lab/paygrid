@@ -208,7 +208,7 @@
 @endif
 
 @if($active === 'agents')
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Agen</h2></div><table class="table qris-table super-create-table"><thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Tipe</th><th>Fee per Menu</th><th>Password</th><th>Aksi</th></tr></thead><tbody><tr>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Agen</h2></div><table class="table qris-table super-create-table"><thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Tipe</th><th class="fee-menu-col">Fee per Menu</th><th>Password</th><th>Aksi</th></tr></thead><tbody><tr>
         <td><form id="agent-create" method="post" action="{{ route('ma.agents.store') }}">@csrf</form><input form="agent-create" name="name" required></td>
         <td><input form="agent-create" name="email" type="email" required></td>
         <td><input form="agent-create" name="contact"></td>

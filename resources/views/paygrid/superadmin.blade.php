@@ -82,7 +82,7 @@
         <div class="qris-toolbar"><h2>Atur Fee Toko</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-fee-table">
-                <thead><tr><th>Merchant</th><th>Group</th><th>Fee per Menu</th><th>MDR</th><th>Aksi</th></tr></thead>
+                <thead><tr><th>Merchant</th><th>Group</th><th class="fee-menu-col">Fee per Menu</th><th>MDR</th><th>Aksi</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
                     <tr>
@@ -112,7 +112,7 @@
         <div class="qris-toolbar"><h2>Create MA</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-create-table">
-                <thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Password</th><th>Fee per Menu</th><th>Aksi</th></tr></thead>
+                <thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Password</th><th class="fee-menu-col">Fee per Menu</th><th>Aksi</th></tr></thead>
                 <tbody>
                     <tr>
                         <td><form id="ma-create" method="post" action="{{ route('superadmin.ma.store') }}">@csrf</form><input form="ma-create" name="name" required></td>
@@ -142,7 +142,7 @@
         <div class="qris-toolbar"><h2>Create Merchant Group</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-group-create-table">
-                <thead><tr><th>MA</th><th>Nama</th><th>Email</th><th>Kontak</th><th>Tipe</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead>
+                <thead><tr><th>MA</th><th>Nama</th><th>Email</th><th>Kontak</th><th>Tipe</th><th class="fee-menu-col">Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead>
                 <tbody>
                     <tr>
                         <td><form id="group-create" method="post" action="{{ route('superadmin.agent.store') }}">@csrf</form><select form="group-create" name="ma_user_id"><option value="">-</option>@foreach($mas as $ma)<option value="{{ $ma->id }}">{{ $ma->name }}</option>@endforeach</select></td>

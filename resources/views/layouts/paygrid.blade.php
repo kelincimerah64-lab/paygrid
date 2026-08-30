@@ -210,12 +210,13 @@
         .qris-table .btn { min-height:30px; padding:5px 12px; font-size:13px; border-radius:7px; }
         .qris-table .btn:disabled { min-width:96px; color:#607087; border-color:#d8e2f2; background:#f7faff; cursor:not-allowed; }
         .qris-table button:not(:disabled) { cursor:pointer; }
-        .fee-rate-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(78px, 1fr)); gap:0 6px; max-height:168px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:5px 6px; background:#fbfdff; }
+        .fee-menu-col { width:320px; }
+        .fee-rate-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:0 8px; max-height:150px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px 8px; background:#fbfdff; }
         .fee-rate-row { display:flex; flex-direction:column; gap:2px; padding:4px 0; border-bottom:1px solid #e7edf6; min-width:0; }
         .fee-rate-row:last-child { border-bottom:0; }
-        .fee-rate-label { font-size:9.5px; line-height:1.15; color:#33415a; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+        .fee-rate-label { font-size:10px; line-height:1.15; color:#33415a; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
         .fee-rate-label small { display:block; font-weight:500; color:var(--muted); }
-        .fee-rate-input { width:100%; box-sizing:border-box; padding:3px 5px; font-size:11px; min-width:0; }
+        .fee-rate-input { width:100%; box-sizing:border-box; padding:4px 6px; font-size:12px; min-width:0; }
         .fee-rate-row .field-hint { font-size:9px; color:var(--danger); line-height:1.1; }
         .ticket-table { min-width:0; table-layout:fixed; }
         .ticket-table th:nth-child(1) { width:9%; }
