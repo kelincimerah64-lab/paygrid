@@ -7,10 +7,10 @@ use App\Models\Merchant;
 use App\Models\PaygridSetting;
 use App\Models\TopupRequest;
 use App\Models\User;
-use App\Rules\FeeAboveMenuFloor;
+use App\Rules\FeeMenuRatesAboveFloor;
 use App\Services\AuditLogService;
-use App\Services\FeeCalculator;
 use App\Services\FeeMenuCatalog;
+use App\Services\FeeSyncService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -20,7 +20,7 @@ use Illuminate\View\View;
 
 class SuperadminController extends Controller
 {
-    public function page(FeeCalculator $feeCalculator, FeeMenuCatalog $feeMenus, string $page = 'dashboard-fee'): View
+    public function page(FeeMenuCatalog $feeMenus, string $page = 'dashboard-fee'): View
     {
         abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'timer-ticket', 'accounts'], true), 404);
 
@@ -65,10 +65,6 @@ class SuperadminController extends Controller
             ->orderBy('name')
             ->get();
 
-        $merchants->each(fn ($merchant) => $merchant->computed_mdr = (float) $merchant->merchant_mdr_percent);
-        $mas->each(fn ($ma) => $ma->computed_mdr = $feeCalculator->maPrice($ma));
-        $agents->each(fn ($agent) => $agent->computed_mdr = $feeCalculator->agentPrice($agent));
-
         return view('paygrid.superadmin', [
             'roleLabel' => 'Superadmin',
             'menus' => $this->menus(),
@@ -92,7 +88,7 @@ class SuperadminController extends Controller
         ]);
     }
 
-    public function storeMa(Request $request, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
+    public function storeMa(Request $request, AuditLogService $audit): RedirectResponse
     {
         $data = $this->validateMa($request);
         $password = $data['password'];
@@ -105,10 +101,10 @@ class SuperadminController extends Controller
         ]);
         $audit->record('superadmin.ma_created', $user, null, $user->only(['name', 'email', 'contact', 'is_active']));
 
-        return back()->with('status', 'MA berhasil dibuat. MDR MA: '.$this->fmt($feeCalculator->maPrice($user)).'%.');
+        return back()->with('status', 'MA berhasil dibuat.');
     }
 
-    public function updateMa(Request $request, User $user, AuditLogService $audit, FeeCalculator $feeCalculator): RedirectResponse
+    public function updateMa(Request $request, User $user, AuditLogService $audit, FeeSyncService $feeSync): RedirectResponse
     {
         abort_unless($user->role === 'ma', 404);
         $data = $this->validateMa($request, $user);
@@ -122,20 +118,26 @@ class SuperadminController extends Controller
         }
 
         $user->forceFill($data)->save();
+        $feeSync->resyncMa($user);
         $audit->record('superadmin.ma_updated', $user, $before, $user->only(array_keys($before)));
 
-        return back()->with('status', 'MA berhasil diupdate. MDR MA: '.$this->fmt($feeCalculator->maPrice($user->refresh())).'%.');
+        return back()->with('status', 'MA berhasil diupdate.');
     }
 
-    public function updateMerchantFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
+    public function updateMerchantFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse
     {
-        $this->normalizePercentInputs($request, ['merchant_mdr_percent']);
         $typeCategory = $feeMenus->typeCategory($merchant->merchant_type);
+        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant', $typeCategory);
+        $request->merge(['fee_menu_rates' => $rates]);
         $data = $request->validate([
-            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('merchant', $typeCategory)))],
-            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('merchant', $typeCategory, $request->input('fee_menu'))],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', $typeCategory)],
+            'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
         ]);
+        $data['fee_menu'] = $data['active_fee_menu'];
         $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
+        $agent = $merchant->agent()->with('ma')->firstOrFail();
+        $data = array_merge($data, $feeSync->snapshotFor($agent, $data['fee_menu'], $rates[$data['fee_menu']]));
+        unset($data['active_fee_menu']);
         $before = $merchant->only(array_keys($data));
         $merchant->forceFill($data)->save();
         $audit->record('superadmin.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($data)));
@@ -143,11 +145,11 @@ class SuperadminController extends Controller
         return back()->with('status', 'Fee toko berhasil disimpan. MDR Toko: '.$this->fmt($data['merchant_mdr_percent']).'%.');
     }
 
-    public function storeAgent(Request $request, AuditLogService $audit, FeeCalculator $feeCalculator, FeeMenuCatalog $feeMenus): RedirectResponse
+    public function storeAgent(Request $request, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
     {
         $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
-        $this->normalizePercentInputs($request, ['default_agent_fee_percent']);
         $typeCategory = $feeMenus->typeCategory((string) $request->input('connection_type'));
+        $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent', $typeCategory)]);
         $data = $request->validate([
             'ma_user_id' => ['nullable', 'exists:users,id'],
             'code' => ['nullable', 'string', 'max:40', 'unique:agents,code'],
@@ -156,11 +158,9 @@ class SuperadminController extends Controller
             'contact' => ['nullable', 'string', 'max:80'],
             'connection_type' => ['required', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
-            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('agent', $typeCategory)))],
-            'default_agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('agent', $typeCategory, $request->input('fee_menu'))],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', $typeCategory)],
             'is_active' => ['required', 'boolean'],
         ]);
-        $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
         abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create merchant group ke HG masih dinonaktifkan.');
         $data['code'] = ($data['code'] ?? null) ?: $this->uniqueAgentCode($data['name']);
         $data['hg_group_id'] = null;
@@ -180,7 +180,7 @@ class SuperadminController extends Controller
         $audit->record('superadmin.agent_created', $agent, null, $agent->toArray());
         $audit->record('superadmin.agent_account_created', $agentUser, null, $agentUser->only(['name', 'email', 'username', 'role']));
 
-        return back()->with('status', 'Merchant Group lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. MDR Agen: '.$this->fmt($feeCalculator->agentPrice($agent)).'%. Belum dikirim ke HG.');
+        return back()->with('status', 'Merchant Group lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG.');
     }
 
     public function updateTimer(Request $request, AuditLogService $audit): RedirectResponse
@@ -209,21 +209,17 @@ class SuperadminController extends Controller
 
     private function validateMa(Request $request, ?User $user = null): array
     {
-        $this->normalizePercentInputs($request, ['ma_fee_percent']);
         $feeMenus = app(FeeMenuCatalog::class);
+        $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'ma')]);
 
-        $data = $request->validate([
+        return $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:160', 'unique:users,email'.($user ? ','.$user->id : '')],
             'contact' => ['nullable', 'string', 'max:80'],
             'is_active' => ['required', 'boolean'],
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:6', 'max:120'],
-            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('ma')))],
-            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('ma', null, $request->input('fee_menu'))],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('ma', null)],
         ]);
-        $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
-
-        return $data;
     }
 
     private function summary(): array
@@ -256,17 +252,6 @@ class SuperadminController extends Controller
     private function fmt(float $value): string
     {
         return number_format($value, 2, ',', '.');
-    }
-
-    private function normalizePercentInputs(Request $request, array $fields): void
-    {
-        $values = [];
-        foreach ($fields as $field) {
-            if ($request->has($field)) {
-                $values[$field] = str_replace(',', '.', (string) $request->input($field));
-            }
-        }
-        $request->merge($values);
     }
 
     private function uniqueAgentCode(string $name): string

@@ -7,9 +7,10 @@ use App\Models\MerchantRegistration;
 use App\Models\Agent;
 use App\Notifications\MerchantRegistrationSubmittedToMa;
 use App\Jobs\ProvisionMerchantOnGateway;
-use App\Rules\FeeAboveMenuFloor;
+use App\Rules\FeeMenuRatesAboveFloor;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
+use App\Services\FeeSyncService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -38,25 +39,27 @@ class MerchantRegistrationWorkflowController extends Controller
         return back()->with('status', 'Request toko berhasil dikirim ke MA.');
     }
 
-    public function approve(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse
+    public function approve(Request $request, MerchantRegistration $registration, AuditLogService $audit, FeeSyncService $feeSync): RedirectResponse
     {
         $this->authorizeMaRegistration($request, $registration);
         abort_unless(in_array($registration->status, ['pending_ma', 'pending_agent'], true), 422);
         $feeMenus = app(FeeMenuCatalog::class);
         $typeCategory = $feeMenus->typeCategory((string) ($request->input('merchant_type') ?? $registration->merchant_type));
+        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant', $typeCategory);
+        $request->merge(['fee_menu_rates' => $rates]);
         $data = $request->validate([
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
             'merchant_type' => ['nullable', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
-            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('merchant', $typeCategory)))],
-            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('merchant', $typeCategory, $request->input('fee_menu'))],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', $typeCategory)],
+            'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
             'payin_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $payload = (array) ($registration->payload ?? []);
-        $merchantMdr = (float) $data['merchant_mdr_percent'];
+        $merchantMdr = (float) $rates[$data['active_fee_menu']];
         $payin = (float) ($data['payin_fee_percent'] ?? $payload['payin_fee_percent'] ?? 0);
-        $settlementMethod = $feeMenus->settlementMethod($data['fee_menu']);
+        $settlementMethod = $feeMenus->settlementMethod($data['active_fee_menu']);
 
         $slug = Str::slug($registration->store_name);
         if (Merchant::query()->where('slug', $slug)->where('id', '<>', $registration->merchant_id)->exists()) {
@@ -67,7 +70,10 @@ class MerchantRegistrationWorkflowController extends Controller
             ? Merchant::query()->findOrFail($registration->merchant_id)
             : new Merchant;
         $type = $data['merchant_type'] ?? $registration->merchant_type;
-        $ownerAgent = $registration->agent_id ? Agent::query()->find($registration->agent_id) : null;
+        $ownerAgent = $registration->agent_id ? Agent::query()->with('ma')->find($registration->agent_id) : null;
+        $feeSnapshot = $ownerAgent
+            ? $feeSync->snapshotFor($ownerAgent, $data['active_fee_menu'], $merchantMdr)
+            : ['merchant_mdr_percent' => $merchantMdr, 'agent_fee_percent' => 0.0, 'ma_fee_percent' => 0.0];
         $merchant->fill([
             'agent_id' => $registration->agent_id,
             'slug' => $slug,
@@ -91,10 +97,11 @@ class MerchantRegistrationWorkflowController extends Controller
             'finance_telegram' => $payload['finance_telegram'] ?? $merchant->finance_telegram,
             'cs_email' => $payload['cs_email'] ?? $merchant->cs_email,
             'cs_telegram' => $payload['cs_telegram'] ?? $merchant->cs_telegram,
-            'merchant_mdr_percent' => $merchantMdr,
-            'fee_menu' => $data['fee_menu'],
+            'fee_menu' => $data['active_fee_menu'],
+            'fee_menu_rates' => $data['fee_menu_rates'],
             'settlement_method' => $settlementMethod,
             'payin_fee_percent' => $payin,
+            ...$feeSnapshot,
             'disbursement_fee_fixed' => (int) ($payload['disbursement_fee_fixed'] ?? $payload['withdrawal_fee'] ?? 0),
             'onboarding_payload' => $payload,
             'approved_at' => now(),

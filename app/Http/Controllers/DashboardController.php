@@ -83,14 +83,14 @@ class DashboardController extends Controller
             ->latest()
             ->limit(30)
             ->get();
-        $feeVolume = (int) TopupRequest::query()
+        $feeTotal = (int) round((float) TopupRequest::query()
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
             ->where('merchants.agent_id', $agent->id)
             ->where('topup_requests.status', 'success')
             ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()))
             ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()))
-            ->sum('topup_requests.amount');
-        $feeTotal = (int) round($feeVolume * (float) $agent->default_agent_fee_percent / 100);
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as fee')
+            ->value('fee'));
 
         return view('paygrid.agent-overview', [
             'roleLabel' => $agent->name,
@@ -114,7 +114,6 @@ class DashboardController extends Controller
             'to' => (string) request('to', ''),
         ];
 
-        $agentFeePercent = (float) $agent->default_agent_fee_percent;
         $rows = TopupRequest::query()
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
             ->where('merchants.agent_id', $agent->id)
@@ -122,12 +121,12 @@ class DashboardController extends Controller
             ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()))
             ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()))
             ->when($filters['q'] !== '', fn ($query) => $query->where('merchants.name', 'like', '%'.$filters['q'].'%'))
-            ->selectRaw('merchants.id as merchant_id, merchants.name, merchants.slug, merchants.merchant_id as merchant_code, COUNT(*) as trx, COALESCE(SUM(topup_requests.amount), 0) as volume')
-            ->groupBy('merchants.id', 'merchants.name', 'merchants.slug', 'merchants.merchant_id')
+            ->selectRaw('merchants.id as merchant_id, merchants.name, merchants.slug, merchants.merchant_id as merchant_code, merchants.agent_fee_percent, COUNT(*) as trx, COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->groupBy('merchants.id', 'merchants.name', 'merchants.slug', 'merchants.merchant_id', 'merchants.agent_fee_percent')
             ->get()
-            ->each(function ($row) use ($agentFeePercent) {
-                $row->agent_fee_percent = $agentFeePercent;
-                $row->fee_amount = (int) round($row->volume * $agentFeePercent / 100);
+            ->each(function ($row) {
+                $row->agent_fee_percent = (float) $row->agent_fee_percent;
+                $row->fee_amount = (int) round($row->volume * $row->agent_fee_percent / 100);
             })
             ->sortByDesc('fee_amount')
             ->values();

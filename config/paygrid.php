@@ -69,12 +69,16 @@ return [
 
     'fee_menus' => [
         'ma' => [
+            'based' => ['label' => 'Based', 'floor' => 0.80],
+            'h_plus_1' => ['label' => 'Based + H+1', 'floor' => 0.80],
+            'everyday' => ['label' => 'Based + Everyday', 'floor' => 0.85],
+            'same_day' => ['label' => 'Based + Sameday', 'floor' => 0.90],
             'h_plus_1_sc' => ['label' => 'H+1 + Script', 'floor' => 0.85],
-            'h_plus_1_api' => ['label' => 'H+1 + API', 'floor' => 0.80],
             'everyday_sc' => ['label' => 'Everyday + Script', 'floor' => 0.90],
+            'same_day_sc' => ['label' => 'Sameday + Script', 'floor' => 0.95],
+            'h_plus_1_api' => ['label' => 'H+1 + API', 'floor' => 0.80],
             'everyday_api' => ['label' => 'Everyday + API', 'floor' => 0.85],
-            'same_day_sc' => ['label' => 'Sameday + Script', 'floor' => 0.90],
-            'same_day_api' => ['label' => 'Sameday + API', 'floor' => 0.85],
+            'same_day_api' => ['label' => 'Sameday + API', 'floor' => 0.90],
         ],
         'agent' => [
             'cm' => [

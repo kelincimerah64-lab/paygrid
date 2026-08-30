@@ -259,14 +259,13 @@ class PayGridRoutingTest extends TestCase
             'contact' => '0812',
             'is_active' => 1,
             'password' => config('paygrid.demo_password'),
-            'fee_menu' => 'h_plus_1_sc',
-            'ma_fee_percent' => '0,85',
+            'fee_menu_rates' => ['h_plus_1_sc' => '0,85'],
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('users', ['email' => 'ma-baru@paygrid.local', 'role' => 'ma']);
 
         $this->post(route('superadmin.merchant-fee.update', $merchant), [
-            'fee_menu' => 'same_day',
-            'merchant_mdr_percent' => '1.35',
+            'fee_menu_rates' => ['same_day' => '1.35'],
+            'active_fee_menu' => 'same_day',
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertSame('1.3500', (string) $merchant->refresh()->merchant_mdr_percent);
 
@@ -276,8 +275,7 @@ class PayGridRoutingTest extends TestCase
             'email' => 'group@paygrid.local',
             'contact' => '0813',
             'connection_type' => 'cm',
-            'fee_menu' => 'everyday',
-            'default_agent_fee_percent' => '1.10',
+            'fee_menu_rates' => ['everyday' => '1.10'],
             'is_active' => 1,
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('agents', ['code' => 'AG-GROUP-BARU', 'name' => 'Group Baru']);
@@ -937,8 +935,7 @@ class PayGridRoutingTest extends TestCase
             'contact' => '0812',
             'status' => 'Active',
             'connection_type' => 'cm',
-            'fee_menu' => 'everyday',
-            'default_agent_fee_percent' => '1,10',
+            'fee_menu_rates' => ['everyday' => '1,10'],
             'password' => config('paygrid.demo_password'),
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('agents', ['code' => 'AGN-AGEN-LOKAL', 'name' => 'Agen Lokal']);
@@ -961,8 +958,8 @@ class PayGridRoutingTest extends TestCase
             'transaction_callback_url' => 'http://topup.15.232.137.74.nip.io/api/callbacks/hilogate/transaction',
             'withdrawal_callback_url' => 'http://topup.15.232.137.74.nip.io/api/callbacks/hilogate/withdrawal',
             'api_ip_whitelist' => '15.232.137.74',
-            'fee_menu' => 'everyday',
-            'merchant_mdr_percent' => '1.2',
+            'fee_menu_rates' => ['everyday' => '1.2'],
+            'active_fee_menu' => 'everyday',
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('merchants', ['slug' => 'ma-store-local', 'name' => 'MA Store Local', 'approval_status' => 'approved', 'merchant_mdr_percent' => 1.2]);
         $this->assertDatabaseHas('users', ['email' => 'admin-ma-store@paygrid.local', 'role' => 'admin']);
@@ -996,8 +993,8 @@ class PayGridRoutingTest extends TestCase
         $user = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
         $this->actingAs($user)
             ->post(route('api.merchant-registration.approve', $registration), [
-                'fee_menu' => 'everyday',
-                'merchant_mdr_percent' => 1.2,
+                'fee_menu_rates' => ['everyday' => 1.2],
+                'active_fee_menu' => 'everyday',
             ])
             ->assertRedirect();
 

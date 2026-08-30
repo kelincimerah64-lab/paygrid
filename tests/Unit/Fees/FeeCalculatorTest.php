@@ -2,29 +2,11 @@
 
 namespace Tests\Unit\Fees;
 
-use App\Models\Agent;
-use App\Models\User;
 use App\Services\FeeCalculator;
 use PHPUnit\Framework\TestCase;
 
 class FeeCalculatorTest extends TestCase
 {
-    public function test_ma_price_reads_ma_fee_percent_directly(): void
-    {
-        $calculator = new FeeCalculator();
-        $ma = new User(['ma_fee_percent' => 0.85]);
-
-        $this->assertEqualsWithDelta(0.85, $calculator->maPrice($ma), 0.0001);
-    }
-
-    public function test_agent_price_reads_default_agent_fee_percent_directly(): void
-    {
-        $calculator = new FeeCalculator();
-        $agent = new Agent(['default_agent_fee_percent' => 1.10]);
-
-        $this->assertEqualsWithDelta(1.10, $calculator->agentPrice($agent), 0.0001);
-    }
-
     public function test_toko_residual_is_never_negative(): void
     {
         $calculator = new FeeCalculator();

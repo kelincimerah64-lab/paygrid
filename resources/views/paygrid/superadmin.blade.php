@@ -66,9 +66,9 @@
                         <td><strong>{{ $merchant->name }}</strong><br><span class="muted">{{ strtoupper($merchant->merchant_type) }}</span></td>
                         <td>{{ $merchant->agent?->name ?: '-' }}</td>
                         <td>{{ $menuLabel }}</td>
-                        <td>{{ $pct($merchant->agent?->ma?->ma_fee_percent) }}</td>
-                        <td>{{ $pct($merchant->agent?->default_agent_fee_percent) }}</td>
-                        <td><strong>{{ $pct($merchant->computed_mdr) }}</strong></td>
+                        <td>{{ $pct($merchant->ma_fee_percent) }}</td>
+                        <td>{{ $pct($merchant->agent_fee_percent) }}</td>
+                        <td><strong>{{ $pct($merchant->merchant_mdr_percent) }}</strong></td>
                     </tr>
                 @endforeach
                 </tbody>
@@ -82,7 +82,7 @@
         <div class="qris-toolbar"><h2>Atur Fee Toko</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-fee-table">
-                <thead><tr><th>Merchant</th><th>Group</th><th>Menu Fee</th><th>Fee (%)</th><th>MDR</th><th>Aksi</th></tr></thead>
+                <thead><tr><th>Merchant</th><th>Group</th><th>Fee per Menu</th><th>MDR</th><th>Aksi</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
                     @php($merchantTypeCategory = $feeMenus->typeCategory($merchant->merchant_type))
@@ -94,14 +94,13 @@
                             <form id="fee-{{ $merchant->id }}" method="post" action="{{ route('superadmin.merchant-fee.update', $merchant) }}">
                                 @csrf
                             </form>
-                            <select form="fee-{{ $merchant->id }}" name="fee_menu" onchange="paygridSyncFeeFloor(this, 'merchant_mdr_percent')">
-                                @foreach($merchantMenuOptions as $key => $option)
-                                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}" @selected(old('fee_menu', $merchant->fee_menu) === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
-                                @endforeach
-                            </select>
+                            <details>
+                                <summary>Atur fee ({{ $feeMenus->ratesSummary($merchant->fee_menu_rates ?? [], 'merchant', $merchantTypeCategory) }})</summary>
+                                @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => $merchantTypeCategory, 'feeMenus' => $feeMenus, 'currentRates' => $merchant->fee_menu_rates ?? [], 'formId' => 'fee-'.$merchant->id])
+                                <label>Menu Aktif<select form="fee-{{ $merchant->id }}" name="active_fee_menu" required>@foreach($merchantMenuOptions as $key => $option)<option value="{{ $key }}" @selected(old('active_fee_menu', $merchant->fee_menu) === $key)>{{ $option['label'] }}</option>@endforeach</select></label>
+                            </details>
                         </td>
-                        <td><input form="fee-{{ $merchant->id }}" name="merchant_mdr_percent" value="{{ old('merchant_mdr_percent', $pctInput($merchant->merchant_mdr_percent)) }}"></td>
-                        <td><strong>{{ $pct($merchant->computed_mdr) }}</strong></td>
+                        <td><strong>{{ $pct($merchant->merchant_mdr_percent) }}</strong></td>
                         <td><button form="fee-{{ $merchant->id }}" class="btn primary compact-btn">Simpan</button></td>
                     </tr>
                 @endforeach
@@ -109,18 +108,6 @@
             </table>
         </div>
     </section>
-    @push('scripts')
-    <script>
-        function paygridSyncFeeFloor(select, inputName) {
-            var option = select.options[select.selectedIndex];
-            var floor = option && option.getAttribute('data-floor');
-            if (!floor) return;
-            var scope = select.closest('tr') || select.closest('form') || document;
-            var input = scope.querySelector('[name="' + inputName + '"]');
-            if (input) input.value = floor;
-        }
-    </script>
-    @endpush
 @endif
 
 @if($active === 'ma')
@@ -128,7 +115,7 @@
         <div class="qris-toolbar"><h2>Create MA</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-create-table">
-                <thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Password</th><th>Menu Fee</th><th>MA Fee (%)</th><th>Aksi</th></tr></thead>
+                <thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Password</th><th>Fee per Menu</th><th>Aksi</th></tr></thead>
                 <tbody>
                     <tr>
                         <td><form id="ma-create" method="post" action="{{ route('superadmin.ma.store') }}">@csrf</form><input form="ma-create" name="name" required></td>
@@ -136,14 +123,7 @@
                         <td><input form="ma-create" name="contact"></td>
                         <td><select form="ma-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
                         <td><input form="ma-create" name="password" required></td>
-                        <td>
-                            <select form="ma-create" name="fee_menu" onchange="paygridSyncFeeFloor(this, 'ma_fee_percent')">
-                                @foreach($feeMenus->optionsFor('ma') as $key => $option)
-                                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
-                                @endforeach
-                            </select>
-                        </td>
-                        <td><input form="ma-create" name="ma_fee_percent" value="0.85" required></td>
+                        <td>@include('paygrid.partials.fee-menu-rates', ['role' => 'ma', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'ma-create'])</td>
                         <td><button form="ma-create" class="btn primary compact-btn">Buat</button></td>
                     </tr>
                 </tbody>
@@ -152,25 +132,12 @@
     </section>
     <section class="card qris-panel section">
         <div class="qris-toolbar"><h2>Daftar MA</h2></div>
-        <table class="table qris-table"><thead><tr><th>MA</th><th>Fee</th><th>MDR MA</th><th>Status</th></tr></thead><tbody>
+        <table class="table qris-table"><thead><tr><th>MA</th><th>Fee per Menu</th><th>Status</th></tr></thead><tbody>
             @foreach($mas as $ma)
-                @php($maMenuLabel = $ma->fee_menu ? ($feeMenus->optionsFor('ma')[$ma->fee_menu]['label'] ?? $ma->fee_menu) : '-')
-                <tr><td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td><td>{{ $maMenuLabel }}</td><td><strong>{{ $pct($ma->computed_mdr) }}</strong></td><td><span class="badge {{ $ma->is_active ? 'ok' : 'danger' }}">{{ $ma->is_active ? 'Aktif' : 'Nonaktif' }}</span></td></tr>
+                <tr><td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td><td>{{ $feeMenus->ratesSummary($ma->fee_menu_rates ?? [], 'ma') }}</td><td><span class="badge {{ $ma->is_active ? 'ok' : 'danger' }}">{{ $ma->is_active ? 'Aktif' : 'Nonaktif' }}</span></td></tr>
             @endforeach
         </tbody></table>
     </section>
-    @push('scripts')
-    <script>
-        function paygridSyncFeeFloor(select, inputName) {
-            var option = select.options[select.selectedIndex];
-            var floor = option && option.getAttribute('data-floor');
-            if (!floor) return;
-            var scope = select.closest('tr') || select.closest('form') || document;
-            var input = scope.querySelector('[name="' + inputName + '"]');
-            if (input) input.value = floor;
-        }
-    </script>
-    @endpush
 @endif
 
 @if($active === 'merchant-group')
@@ -178,7 +145,7 @@
         <div class="qris-toolbar"><h2>Create Merchant Group</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-group-create-table">
-                <thead><tr><th>MA</th><th>Nama</th><th>Email</th><th>Kontak</th><th>Tipe</th><th>Menu Fee</th><th>Agent Fee (%)</th><th>Status</th><th>Aksi</th></tr></thead>
+                <thead><tr><th>MA</th><th>Nama</th><th>Email</th><th>Kontak</th><th>Tipe</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead>
                 <tbody>
                     <tr>
                         <td><form id="group-create" method="post" action="{{ route('superadmin.agent.store') }}">@csrf</form><select form="group-create" name="ma_user_id"><option value="">-</option>@foreach($mas as $ma)<option value="{{ $ma->id }}">{{ $ma->name }}</option>@endforeach</select></td>
@@ -196,18 +163,9 @@
                             </select>
                         </td>
                         <td>
-                            <select form="group-create" name="fee_menu" id="group-create-fee-menu-cm" onchange="paygridSyncFeeFloor(this, 'default_agent_fee_percent')">
-                                @foreach($feeMenus->optionsFor('agent', 'cm') as $key => $option)
-                                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
-                                @endforeach
-                            </select>
-                            <select form="group-create" name="fee_menu" id="group-create-fee-menu-engine" style="display:none" disabled onchange="paygridSyncFeeFloor(this, 'default_agent_fee_percent')">
-                                @foreach($feeMenus->optionsFor('agent', 'engine') as $key => $option)
-                                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
-                                @endforeach
-                            </select>
+                            <div id="group-create-rates-cm">@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => 'cm', 'feeMenus' => $feeMenus, 'formId' => 'group-create'])</div>
+                            <div id="group-create-rates-engine" hidden>@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => 'engine', 'feeMenus' => $feeMenus, 'formId' => 'group-create'])</div>
                         </td>
-                        <td><input form="group-create" name="default_agent_fee_percent" value="1.00" required></td>
                         <td><select form="group-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
                         <td><button form="group-create" class="btn primary compact-btn">Buat</button></td>
                     </tr>
@@ -215,7 +173,7 @@
             </table>
         </div>
     </section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Menu Fee</th><th>MDR Agen</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>{{ $agent->fee_menu ? ($feeMenus->optionsFor('agent', $feeMenus->typeCategory($agent->connection_type))[$agent->fee_menu]['label'] ?? $agent->fee_menu) : '-' }}</td><td><strong>{{ $pct($agent->computed_mdr) }}</strong></td></tr>@endforeach</tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Fee per Menu</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>{{ $feeMenus->ratesSummary($agent->fee_menu_rates ?? [], 'agent', $feeMenus->typeCategory($agent->connection_type)) }}</td></tr>@endforeach</tbody></table></section>
 @endif
 
 @if($active === 'timer-ticket')
@@ -244,26 +202,33 @@
 @if($active === 'merchant-group')
 @push('scripts')
 <script>
-    function paygridSyncFeeFloor(select, inputName) {
-        var option = select.options[select.selectedIndex];
-        var floor = option && option.getAttribute('data-floor');
-        if (!floor) return;
-        var scope = select.closest('tr') || select.closest('form') || document;
-        var input = scope.querySelector('[name="' + inputName + '"]');
-        if (input) input.value = floor;
-    }
     function paygridToggleAgentFeeMenu(select) {
         var isEngine = select.value !== 'cm';
         var engineType = document.getElementById('group-create-engine-type');
-        var cmMenu = document.getElementById('group-create-fee-menu-cm');
-        var engineMenu = document.getElementById('group-create-fee-menu-engine');
         engineType.style.display = isEngine ? '' : 'none';
         engineType.disabled = !isEngine;
-        cmMenu.style.display = isEngine ? 'none' : '';
-        cmMenu.disabled = isEngine;
-        engineMenu.style.display = isEngine ? '' : 'none';
-        engineMenu.disabled = !isEngine;
+        document.getElementById('group-create-rates-cm').hidden = isEngine;
+        document.getElementById('group-create-rates-engine').hidden = !isEngine;
     }
+</script>
+@endpush
+@endif
+
+@if(in_array($active, ['add-fee', 'ma', 'merchant-group'], true))
+@push('scripts')
+<script>
+    function paygridWarnBelowFloor(input) {
+        var floor = parseFloat(input.getAttribute('data-floor'));
+        var value = parseFloat(String(input.value).replace(',', '.'));
+        var hint = input.parentElement.querySelector('.field-hint');
+        if (!hint) return;
+        hint.hidden = !(value > 0 && !isNaN(floor) && value < floor);
+    }
+    document.addEventListener('input', function (e) {
+        if (e.target.matches && e.target.matches('[data-floor]')) {
+            paygridWarnBelowFloor(e.target);
+        }
+    });
 </script>
 @endpush
 @endif

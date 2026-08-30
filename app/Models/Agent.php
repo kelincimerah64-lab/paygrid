@@ -25,6 +25,7 @@ class Agent extends Model
         'ma_fee_percent',
         'default_agent_fee_percent',
         'fee_menu',
+        'fee_menu_rates',
         'is_active',
     ];
 
@@ -35,6 +36,7 @@ class Agent extends Model
         'settlement_fee_percent' => 'decimal:4',
         'ma_fee_percent' => 'decimal:4',
         'default_agent_fee_percent' => 'decimal:4',
+        'fee_menu_rates' => 'array',
     ];
 
     public function ma(): BelongsTo

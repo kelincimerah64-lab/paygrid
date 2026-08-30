@@ -31,4 +31,34 @@ class FeeMenuCatalog
     {
         return preg_replace('/_(sc|api)$/', '', $menuKey);
     }
+
+    public function normalizeRates(array $raw, string $role, ?string $typeCategory = null): array
+    {
+        $catalog = $this->optionsFor($role, $typeCategory);
+
+        $rates = [];
+        foreach (array_keys($catalog) as $menuKey) {
+            $value = $raw[$menuKey] ?? null;
+            $rates[$menuKey] = $value === null || $value === ''
+                ? 0.0
+                : (float) str_replace(',', '.', (string) $value);
+        }
+
+        return $rates;
+    }
+
+    public function ratesSummary(array $rates, string $role, ?string $typeCategory = null): string
+    {
+        $catalog = $this->optionsFor($role, $typeCategory);
+        $parts = [];
+        foreach ($rates as $key => $value) {
+            if ((float) $value <= 0) {
+                continue;
+            }
+            $label = $catalog[$key]['label'] ?? $key;
+            $parts[] = "{$label}: ".number_format((float) $value, 2).'%';
+        }
+
+        return $parts === [] ? '-' : implode(', ', $parts);
+    }
 }
