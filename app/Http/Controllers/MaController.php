@@ -121,7 +121,7 @@ class MaController extends Controller
     {
         $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
         $typeCategory = $feeMenus->typeCategory((string) $request->input('connection_type'));
-        $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent', $typeCategory)]);
+        $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent')]);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:160'],
@@ -129,7 +129,7 @@ class MaController extends Controller
             'status' => ['required', 'in:Active,Review,Suspended'],
             'connection_type' => ['required', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', $typeCategory)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null)],
             'password' => ['nullable', 'string', 'min:6', 'max:120'],
         ]);
         abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create agen ke HG masih dinonaktifkan.');
@@ -189,7 +189,7 @@ class MaController extends Controller
     public function storeMerchant(Request $request, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse
     {
         $typeCategory = $feeMenus->typeCategory((string) $request->input('merchant_type'));
-        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant', $typeCategory);
+        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -209,7 +209,7 @@ class MaController extends Controller
             'transaction_callback_url' => ['nullable', 'url', 'max:255'],
             'withdrawal_callback_url' => ['nullable', 'url', 'max:255'],
             'api_ip_whitelist' => ['nullable', 'string', 'max:255'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', $typeCategory)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null)],
             'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
@@ -261,10 +261,9 @@ class MaController extends Controller
     public function updateAgentFee(Request $request, Agent $agent, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse
     {
         abort_unless($this->canUseAgent($agent), 403);
-        $typeCategory = $feeMenus->typeCategory($agent->connection_type);
-        $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent', $typeCategory)]);
+        $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent')]);
         $data = $request->validate([
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', $typeCategory)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null)],
         ]);
         $before = $agent->only(['fee_menu_rates']);
         $agent->forceFill($data)->save();
@@ -278,12 +277,11 @@ class MaController extends Controller
     {
         abort_unless($this->canUseMerchant($merchant), 403);
         $this->normalizePercentInputs($request, ['payin_fee_percent']);
-        $typeCategory = $feeMenus->typeCategory($merchant->merchant_type);
-        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant', $typeCategory);
+        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
         $data = $request->validate([
             'payin_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', $typeCategory)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null)],
             'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
         ]);
         $data['fee_menu'] = $data['active_fee_menu'];

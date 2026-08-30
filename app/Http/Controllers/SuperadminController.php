@@ -126,11 +126,10 @@ class SuperadminController extends Controller
 
     public function updateMerchantFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse
     {
-        $typeCategory = $feeMenus->typeCategory($merchant->merchant_type);
-        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant', $typeCategory);
+        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
         $data = $request->validate([
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', $typeCategory)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null)],
             'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
         ]);
         $data['fee_menu'] = $data['active_fee_menu'];
@@ -149,7 +148,7 @@ class SuperadminController extends Controller
     {
         $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
         $typeCategory = $feeMenus->typeCategory((string) $request->input('connection_type'));
-        $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent', $typeCategory)]);
+        $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent')]);
         $data = $request->validate([
             'ma_user_id' => ['nullable', 'exists:users,id'],
             'code' => ['nullable', 'string', 'max:40', 'unique:agents,code'],
@@ -158,7 +157,7 @@ class SuperadminController extends Controller
             'contact' => ['nullable', 'string', 'max:80'],
             'connection_type' => ['required', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', $typeCategory)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null)],
             'is_active' => ['required', 'boolean'],
         ]);
         abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create merchant group ke HG masih dinonaktifkan.');

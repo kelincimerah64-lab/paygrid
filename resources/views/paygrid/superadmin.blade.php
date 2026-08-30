@@ -85,8 +85,7 @@
                 <thead><tr><th>Merchant</th><th>Group</th><th>Fee per Menu</th><th>MDR</th><th>Aksi</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
-                    @php($merchantTypeCategory = $feeMenus->typeCategory($merchant->merchant_type))
-                    @php($merchantMenuOptions = $feeMenus->optionsFor('merchant', $merchantTypeCategory))
+                    @php($merchantMenuOptions = $feeMenus->optionsFor('merchant'))
                     <tr>
                         <td><strong>{{ $merchant->name }}</strong><br><span class="muted">{{ strtoupper($merchant->merchant_type) }}</span></td>
                         <td>{{ $merchant->agent?->name ?: '-' }}</td>
@@ -95,8 +94,8 @@
                                 @csrf
                             </form>
                             <details>
-                                <summary>Atur fee ({{ $feeMenus->ratesSummary($merchant->fee_menu_rates ?? [], 'merchant', $merchantTypeCategory) }})</summary>
-                                @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => $merchantTypeCategory, 'feeMenus' => $feeMenus, 'currentRates' => $merchant->fee_menu_rates ?? [], 'formId' => 'fee-'.$merchant->id])
+                                <summary>Atur fee ({{ $feeMenus->ratesSummary($merchant->fee_menu_rates ?? [], 'merchant') }})</summary>
+                                @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $merchant->fee_menu_rates ?? [], 'formId' => 'fee-'.$merchant->id])
                                 <label>Menu Aktif<select form="fee-{{ $merchant->id }}" name="active_fee_menu" required>@foreach($merchantMenuOptions as $key => $option)<option value="{{ $key }}" @selected(old('active_fee_menu', $merchant->fee_menu) === $key)>{{ $option['label'] }}</option>@endforeach</select></label>
                             </details>
                         </td>
@@ -153,7 +152,7 @@
                         <td><input form="group-create" name="email" type="email"></td>
                         <td><input form="group-create" name="contact"></td>
                         <td>
-                            <select form="group-create" name="connection_type" id="group-create-type" onchange="paygridToggleAgentFeeMenu(this)">
+                            <select form="group-create" name="connection_type" id="group-create-type" onchange="paygridToggleEngineType(this, 'group-create-engine-type')">
                                 <option value="cm">CM</option>
                                 <option value="script">Engine</option>
                             </select>
@@ -162,10 +161,7 @@
                                 <option value="api">API</option>
                             </select>
                         </td>
-                        <td>
-                            <div id="group-create-rates-cm">@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => 'cm', 'feeMenus' => $feeMenus, 'formId' => 'group-create'])</div>
-                            <div id="group-create-rates-engine" hidden>@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => 'engine', 'feeMenus' => $feeMenus, 'formId' => 'group-create'])</div>
-                        </td>
+                        <td>@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'group-create'])</td>
                         <td><select form="group-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
                         <td><button form="group-create" class="btn primary compact-btn">Buat</button></td>
                     </tr>
@@ -173,7 +169,7 @@
             </table>
         </div>
     </section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Fee per Menu</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>{{ $feeMenus->ratesSummary($agent->fee_menu_rates ?? [], 'agent', $feeMenus->typeCategory($agent->connection_type)) }}</td></tr>@endforeach</tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Fee per Menu</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>{{ $feeMenus->ratesSummary($agent->fee_menu_rates ?? [], 'agent') }}</td></tr>@endforeach</tbody></table></section>
 @endif
 
 @if($active === 'timer-ticket')
@@ -199,24 +195,15 @@
     </section>
 @endif
 
-@if($active === 'merchant-group')
-@push('scripts')
-<script>
-    function paygridToggleAgentFeeMenu(select) {
-        var isEngine = select.value !== 'cm';
-        var engineType = document.getElementById('group-create-engine-type');
-        engineType.style.display = isEngine ? '' : 'none';
-        engineType.disabled = !isEngine;
-        document.getElementById('group-create-rates-cm').hidden = isEngine;
-        document.getElementById('group-create-rates-engine').hidden = !isEngine;
-    }
-</script>
-@endpush
-@endif
-
 @if(in_array($active, ['add-fee', 'ma', 'merchant-group'], true))
 @push('scripts')
 <script>
+    function paygridToggleEngineType(select, engineTypeId) {
+        var isEngine = select.value !== 'cm';
+        var engineType = document.getElementById(engineTypeId);
+        engineType.style.display = isEngine ? '' : 'none';
+        engineType.disabled = !isEngine;
+    }
     function paygridWarnBelowFloor(input) {
         var floor = parseFloat(input.getAttribute('data-floor'));
         var value = parseFloat(String(input.value).replace(',', '.'));

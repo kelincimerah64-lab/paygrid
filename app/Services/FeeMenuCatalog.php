@@ -9,6 +9,13 @@ class FeeMenuCatalog
         return $rawType === 'cm' ? 'cm' : 'engine';
     }
 
+    /**
+     * $typeCategory === null returns every menu for the role: for roles that split
+     * by cm/engine (agent, merchant) that means cm + engine merged into one flat
+     * list, since Agent/Merchant fee editing shows every menu regardless of the
+     * entity's current connection type. Pass 'cm'/'engine' explicitly only when you
+     * need just that one category (e.g. deriving a label for an already-set menu).
+     */
     public function optionsFor(string $role, ?string $typeCategory = null): array
     {
         $menus = config("paygrid.fee_menus.{$role}");
@@ -17,7 +24,13 @@ class FeeMenuCatalog
             return [];
         }
 
-        return $typeCategory === null ? $menus : (array) ($menus[$typeCategory] ?? []);
+        if ($typeCategory !== null) {
+            return (array) ($menus[$typeCategory] ?? []);
+        }
+
+        return isset($menus['cm']) || isset($menus['engine'])
+            ? array_merge($menus['cm'] ?? [], $menus['engine'] ?? [])
+            : $menus;
     }
 
     public function floor(string $role, ?string $typeCategory, string $menuKey): ?float

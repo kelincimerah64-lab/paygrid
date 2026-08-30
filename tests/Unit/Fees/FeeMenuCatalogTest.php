@@ -60,6 +60,17 @@ class FeeMenuCatalogTest extends TestCase
         $this->assertEqualsWithDelta(0.00, $catalog->floor('merchant', 'engine', 'h_plus_1_sc'), 0.0001);
     }
 
+    public function test_options_for_merges_cm_and_engine_when_no_type_category_given(): void
+    {
+        $catalog = new FeeMenuCatalog();
+
+        $combined = $catalog->optionsFor('agent');
+
+        $this->assertArrayHasKey('h_plus_1', $combined); // cm menu
+        $this->assertArrayHasKey('h_plus_1_sc', $combined); // engine menu
+        $this->assertCount(9, $combined);
+    }
+
     public function test_floor_returns_null_for_unknown_combination(): void
     {
         $catalog = new FeeMenuCatalog();

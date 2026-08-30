@@ -45,13 +45,13 @@ class MerchantRegistrationWorkflowController extends Controller
         abort_unless(in_array($registration->status, ['pending_ma', 'pending_agent'], true), 422);
         $feeMenus = app(FeeMenuCatalog::class);
         $typeCategory = $feeMenus->typeCategory((string) ($request->input('merchant_type') ?? $registration->merchant_type));
-        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant', $typeCategory);
+        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
         $data = $request->validate([
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
             'merchant_type' => ['nullable', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', $typeCategory)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null)],
             'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
             'payin_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
