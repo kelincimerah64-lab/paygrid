@@ -7,6 +7,7 @@ use App\Models\MerchantRegistration;
 use App\Models\Agent;
 use App\Notifications\MerchantRegistrationSubmittedToMa;
 use App\Jobs\ProvisionMerchantOnGateway;
+use App\Rules\ExactlyOneFeeMenuFilled;
 use App\Rules\FeeMenuRatesAboveFloor;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
@@ -51,15 +52,15 @@ class MerchantRegistrationWorkflowController extends Controller
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
             'merchant_type' => ['nullable', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null)],
-            'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled()],
             'payin_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
+        $activeMenu = array_key_first(array_filter($rates));
 
         $payload = (array) ($registration->payload ?? []);
-        $merchantMdr = (float) $rates[$data['active_fee_menu']];
+        $merchantMdr = (float) $rates[$activeMenu];
         $payin = (float) ($data['payin_fee_percent'] ?? $payload['payin_fee_percent'] ?? 0);
-        $settlementMethod = $feeMenus->settlementMethod($data['active_fee_menu']);
+        $settlementMethod = $feeMenus->settlementMethod($activeMenu);
 
         $slug = Str::slug($registration->store_name);
         if (Merchant::query()->where('slug', $slug)->where('id', '<>', $registration->merchant_id)->exists()) {
@@ -72,7 +73,7 @@ class MerchantRegistrationWorkflowController extends Controller
         $type = $data['merchant_type'] ?? $registration->merchant_type;
         $ownerAgent = $registration->agent_id ? Agent::query()->with('ma')->find($registration->agent_id) : null;
         $feeSnapshot = $ownerAgent
-            ? $feeSync->snapshotFor($ownerAgent, $data['active_fee_menu'], $merchantMdr)
+            ? $feeSync->snapshotFor($ownerAgent, $activeMenu, $merchantMdr)
             : ['merchant_mdr_percent' => $merchantMdr, 'agent_fee_percent' => 0.0, 'ma_fee_percent' => 0.0];
         $merchant->fill([
             'agent_id' => $registration->agent_id,
@@ -97,7 +98,7 @@ class MerchantRegistrationWorkflowController extends Controller
             'finance_telegram' => $payload['finance_telegram'] ?? $merchant->finance_telegram,
             'cs_email' => $payload['cs_email'] ?? $merchant->cs_email,
             'cs_telegram' => $payload['cs_telegram'] ?? $merchant->cs_telegram,
-            'fee_menu' => $data['active_fee_menu'],
+            'fee_menu' => $activeMenu,
             'fee_menu_rates' => $data['fee_menu_rates'],
             'settlement_method' => $settlementMethod,
             'payin_fee_percent' => $payin,

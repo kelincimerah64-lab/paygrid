@@ -136,11 +136,6 @@
                     <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form">
                         @csrf
                         @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $requestRates])
-                        <label>Menu Aktif<select name="active_fee_menu" required>
-                            @foreach($requestMenuOptions as $key => $option)
-                                <option value="{{ $key }}" @selected($requestFeeMenu === $key)>{{ $option['label'] }}</option>
-                            @endforeach
-                        </select></label>
                         <input type="hidden" name="payin_fee_percent" value="{{ $payinFee }}">
                         <button class="btn primary compact-btn" style="width:100%; margin-bottom:8px">Approve</button>
                     </form>
@@ -200,12 +195,10 @@
                     'Provisioning Status' => $m->provisioning_status ?: '-',
                 ];
             @endphp
-            @php($storeMenuOptions = $feeMenus->optionsFor('merchant'))
             <tr><td><strong>{{ $m->name }}</strong><br><span class="muted">{{ $m->slug }}</span></td><td>{{ $m->merchant_id ?: '-' }}</td><td>{{ $m->agent?->name ?: '-' }}</td><td><span class="badge {{ $m->merchant_type === 'cm' ? 'ok' : 'warn' }}">{{ strtoupper($m->merchant_type) }}</span></td><td>MDR {{ $pct($m->merchant_mdr_percent) }}<br><span class="muted">MA {{ $pct($m->ma_fee_percent) }} / Agent {{ $pct($m->agent_fee_percent) }}</span></td><td><span class="badge {{ $badge($m->approval_status) }}">{{ $m->approval_status }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="store-detail-{{ $m->id }}">Details</button><button class="btn primary compact-btn approval-detail-open" type="button" data-approval-detail="store-fee-{{ $m->id }}">Edit Fee</button>
             <div class="approval-modal" id="store-detail-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Toko</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><div class="approval-detail-grid">@foreach($detailRows as $label => $value)<div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>@endforeach</div></div></div>
             <div class="approval-modal" id="store-fee-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Edit Fee</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><form method="post" action="{{ route('ma.stores.fee.update', $m) }}" class="form-grid pad">@csrf
                 @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $m->fee_menu_rates ?? []])
-                <label>Menu Aktif<select name="active_fee_menu" required>@foreach($storeMenuOptions as $key => $option)<option value="{{ $key }}" @selected($m->fee_menu === $key)>{{ $option['label'] }}</option>@endforeach</select></label>
                 <label>Pay In Fee %<input name="payin_fee_percent" value="{{ $pctInput($m->payin_fee_percent) }}" required></label><div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
         @empty
             <tr><td colspan="7" class="empty">Belum ada toko.</td></tr>
@@ -247,7 +240,6 @@
         <label>Tipe Toko<select name="merchant_type" id="create-store-type" onchange="paygridToggleEngineType(this, 'create-store-engine-type')"><option value="cm">CM</option><option value="script">Engine</option></select></label>
         <label>Engine Type<select name="engine_type" id="create-store-engine-type" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
         @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus])
-        <label>Menu Aktif<select name="active_fee_menu" required>@foreach($feeMenus->optionsFor('merchant') as $key => $option)<option value="{{ $key }}">{{ $option['label'] }}</option>@endforeach</select></label>
         <label>Catatan<input name="note"></label><button class="btn primary">Buat Toko</button></form></section>
 @endif
 

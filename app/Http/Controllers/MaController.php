@@ -10,6 +10,7 @@ use App\Models\MerchantSettlement;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
+use App\Rules\ExactlyOneFeeMenuFilled;
 use App\Rules\FeeMenuRatesAboveFloor;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
@@ -209,12 +210,11 @@ class MaController extends Controller
             'transaction_callback_url' => ['nullable', 'url', 'max:255'],
             'withdrawal_callback_url' => ['nullable', 'url', 'max:255'],
             'api_ip_whitelist' => ['nullable', 'string', 'max:255'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null)],
-            'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled()],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
-        $data['fee_menu'] = $data['active_fee_menu'];
-        $data['merchant_mdr_percent'] = $rates[$data['active_fee_menu']];
+        $data['fee_menu'] = array_key_first(array_filter($rates));
+        $data['merchant_mdr_percent'] = $rates[$data['fee_menu']];
         $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
         $slug = $this->uniqueMerchantSlug($data['name']);
         $agent = Agent::query()->with('ma')->findOrFail($data['agent_id']);
@@ -281,14 +281,12 @@ class MaController extends Controller
         $request->merge(['fee_menu_rates' => $rates]);
         $data = $request->validate([
             'payin_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null)],
-            'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled()],
         ]);
-        $data['fee_menu'] = $data['active_fee_menu'];
+        $data['fee_menu'] = array_key_first(array_filter($rates));
         $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
         $agent = $merchant->agent()->with('ma')->firstOrFail();
         $data = array_merge($data, $feeSync->snapshotFor($agent, $data['fee_menu'], $rates[$data['fee_menu']]));
-        unset($data['active_fee_menu']);
         $before = $merchant->only(['merchant_mdr_percent', 'payin_fee_percent', 'fee_menu', 'fee_menu_rates', 'settlement_method']);
         $merchant->forceFill($data)->save();
         $audit->record('ma.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($before)));

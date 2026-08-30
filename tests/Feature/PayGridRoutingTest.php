@@ -265,7 +265,6 @@ class PayGridRoutingTest extends TestCase
 
         $this->post(route('superadmin.merchant-fee.update', $merchant), [
             'fee_menu_rates' => ['same_day' => '1.35'],
-            'active_fee_menu' => 'same_day',
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertSame('1.3500', (string) $merchant->refresh()->merchant_mdr_percent);
 
@@ -959,7 +958,6 @@ class PayGridRoutingTest extends TestCase
             'withdrawal_callback_url' => 'http://topup.15.232.137.74.nip.io/api/callbacks/hilogate/withdrawal',
             'api_ip_whitelist' => '15.232.137.74',
             'fee_menu_rates' => ['everyday' => '1.2'],
-            'active_fee_menu' => 'everyday',
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('merchants', ['slug' => 'ma-store-local', 'name' => 'MA Store Local', 'approval_status' => 'approved', 'merchant_mdr_percent' => 1.2]);
         $this->assertDatabaseHas('users', ['email' => 'admin-ma-store@paygrid.local', 'role' => 'admin']);
@@ -994,7 +992,6 @@ class PayGridRoutingTest extends TestCase
         $this->actingAs($user)
             ->post(route('api.merchant-registration.approve', $registration), [
                 'fee_menu_rates' => ['everyday' => 1.2],
-                'active_fee_menu' => 'everyday',
             ])
             ->assertRedirect();
 

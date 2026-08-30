@@ -85,7 +85,6 @@
                 <thead><tr><th>Merchant</th><th>Group</th><th>Fee per Menu</th><th>MDR</th><th>Aksi</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
-                    @php($merchantMenuOptions = $feeMenus->optionsFor('merchant'))
                     <tr>
                         <td><strong>{{ $merchant->name }}</strong><br><span class="muted">{{ strtoupper($merchant->merchant_type) }}</span></td>
                         <td>{{ $merchant->agent?->name ?: '-' }}</td>
@@ -96,7 +95,6 @@
                             <details>
                                 <summary>Atur fee ({{ $feeMenus->ratesSummary($merchant->fee_menu_rates ?? [], 'merchant') }})</summary>
                                 @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $merchant->fee_menu_rates ?? [], 'formId' => 'fee-'.$merchant->id])
-                                <label>Menu Aktif<select form="fee-{{ $merchant->id }}" name="active_fee_menu" required>@foreach($merchantMenuOptions as $key => $option)<option value="{{ $key }}" @selected(old('active_fee_menu', $merchant->fee_menu) === $key)>{{ $option['label'] }}</option>@endforeach</select></label>
                             </details>
                         </td>
                         <td><strong>{{ $pct($merchant->merchant_mdr_percent) }}</strong></td>

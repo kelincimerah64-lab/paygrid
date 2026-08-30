@@ -7,6 +7,7 @@ use App\Models\Merchant;
 use App\Models\PaygridSetting;
 use App\Models\TopupRequest;
 use App\Models\User;
+use App\Rules\ExactlyOneFeeMenuFilled;
 use App\Rules\FeeMenuRatesAboveFloor;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
@@ -129,14 +130,12 @@ class SuperadminController extends Controller
         $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
         $data = $request->validate([
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null)],
-            'active_fee_menu' => ['required', Rule::in(array_keys(array_filter($rates)))],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled()],
         ]);
-        $data['fee_menu'] = $data['active_fee_menu'];
+        $data['fee_menu'] = array_key_first(array_filter($rates));
         $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
         $agent = $merchant->agent()->with('ma')->firstOrFail();
         $data = array_merge($data, $feeSync->snapshotFor($agent, $data['fee_menu'], $rates[$data['fee_menu']]));
-        unset($data['active_fee_menu']);
         $before = $merchant->only(array_keys($data));
         $merchant->forceFill($data)->save();
         $audit->record('superadmin.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($data)));
