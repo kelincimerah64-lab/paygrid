@@ -32,50 +32,30 @@ class FeeMenuCatalogTest extends TestCase
         $this->assertEqualsWithDelta(0.90, $catalog->floor('ma', null, 'same_day_api'), 0.0001);
     }
 
-    public function test_agent_floors_match_the_agreed_fee_scheme(): void
+    /**
+     * Agent and Merchant menus are free-form (no minimum) - only MA enforces a floor.
+     * Every menu key still exists so the rate table renders the same 10 menus everywhere.
+     */
+    public function test_agent_and_merchant_menus_share_ma_labels_with_no_floor(): void
     {
         $catalog = new FeeMenuCatalog();
 
-        $this->assertEqualsWithDelta(1.00, $catalog->floor('agent', 'cm', 'h_plus_1'), 0.0001);
-        $this->assertEqualsWithDelta(1.10, $catalog->floor('agent', 'cm', 'everyday'), 0.0001);
-        $this->assertEqualsWithDelta(1.15, $catalog->floor('agent', 'cm', 'same_day'), 0.0001);
+        foreach (['agent', 'merchant'] as $role) {
+            $options = $catalog->optionsFor($role);
 
-        $this->assertEqualsWithDelta(0.95, $catalog->floor('agent', 'engine', 'h_plus_1_sc'), 0.0001);
-        $this->assertEqualsWithDelta(0.85, $catalog->floor('agent', 'engine', 'h_plus_1_api'), 0.0001);
-        $this->assertEqualsWithDelta(1.05, $catalog->floor('agent', 'engine', 'everyday_sc'), 0.0001);
-        $this->assertEqualsWithDelta(0.95, $catalog->floor('agent', 'engine', 'everyday_api'), 0.0001);
-        $this->assertEqualsWithDelta(1.10, $catalog->floor('agent', 'engine', 'same_day_sc'), 0.0001);
-        $this->assertEqualsWithDelta(1.00, $catalog->floor('agent', 'engine', 'same_day_api'), 0.0001);
-    }
-
-    public function test_merchant_floors_match_the_agreed_fee_scheme(): void
-    {
-        $catalog = new FeeMenuCatalog();
-
-        $this->assertEqualsWithDelta(0.85, $catalog->floor('merchant', 'cm', 'h_plus_1'), 0.0001);
-        $this->assertEqualsWithDelta(0.85, $catalog->floor('merchant', 'cm', 'everyday'), 0.0001);
-        $this->assertEqualsWithDelta(0.85, $catalog->floor('merchant', 'cm', 'same_day'), 0.0001);
-
-        // Engine-type merchant floors are still 0.00 in the source scheme (business hasn't filled them in yet).
-        $this->assertEqualsWithDelta(0.00, $catalog->floor('merchant', 'engine', 'h_plus_1_sc'), 0.0001);
-    }
-
-    public function test_options_for_merges_cm_and_engine_when_no_type_category_given(): void
-    {
-        $catalog = new FeeMenuCatalog();
-
-        $combined = $catalog->optionsFor('agent');
-
-        $this->assertArrayHasKey('h_plus_1', $combined); // cm menu
-        $this->assertArrayHasKey('h_plus_1_sc', $combined); // engine menu
-        $this->assertCount(9, $combined);
+            $this->assertSame(array_keys($catalog->optionsFor('ma')), array_keys($options));
+            foreach ($options as $key => $option) {
+                $this->assertSame($catalog->optionsFor('ma')[$key]['label'], $option['label']);
+                $this->assertEqualsWithDelta(0.0, $option['floor'], 0.0001);
+            }
+        }
     }
 
     public function test_floor_returns_null_for_unknown_combination(): void
     {
         $catalog = new FeeMenuCatalog();
 
-        $this->assertNull($catalog->floor('merchant', 'cm', 'not_a_real_menu'));
+        $this->assertNull($catalog->floor('merchant', null, 'not_a_real_menu'));
     }
 
     public function test_settlement_method_strips_engine_suffix(): void
@@ -91,16 +71,18 @@ class FeeMenuCatalogTest extends TestCase
     {
         $catalog = new FeeMenuCatalog();
 
-        $rates = $catalog->normalizeRates(['h_plus_1' => '1,10'], 'agent', 'cm');
+        $rates = $catalog->normalizeRates(['h_plus_1' => '1,10'], 'agent');
 
-        $this->assertSame(['h_plus_1' => 1.10, 'everyday' => 0.0, 'same_day' => 0.0], $rates);
+        $this->assertSame(1.10, $rates['h_plus_1']);
+        $this->assertSame(0.0, $rates['everyday']);
+        $this->assertSame(0.0, $rates['based']);
     }
 
     public function test_normalize_rates_drops_keys_outside_the_catalog(): void
     {
         $catalog = new FeeMenuCatalog();
 
-        $rates = $catalog->normalizeRates(['h_plus_1' => '1.20', 'not_a_real_menu' => '5'], 'agent', 'cm');
+        $rates = $catalog->normalizeRates(['h_plus_1' => '1.20', 'not_a_real_menu' => '5'], 'agent');
 
         $this->assertArrayNotHasKey('not_a_real_menu', $rates);
         $this->assertEqualsWithDelta(1.20, $rates['h_plus_1'], 0.0001);
@@ -110,15 +92,15 @@ class FeeMenuCatalogTest extends TestCase
     {
         $catalog = new FeeMenuCatalog();
 
-        $summary = $catalog->ratesSummary(['h_plus_1' => 1.05, 'everyday' => 0, 'same_day' => 0], 'agent', 'cm');
+        $summary = $catalog->ratesSummary(['h_plus_1' => 1.05, 'everyday' => 0, 'same_day' => 0], 'agent');
 
-        $this->assertSame('H+1: 1.05%', $summary);
+        $this->assertSame('Based + H+1: 1.05%', $summary);
     }
 
     public function test_rates_summary_returns_dash_when_nothing_is_set(): void
     {
         $catalog = new FeeMenuCatalog();
 
-        $this->assertSame('-', $catalog->ratesSummary(['h_plus_1' => 0], 'agent', 'cm'));
+        $this->assertSame('-', $catalog->ratesSummary(['h_plus_1' => 0], 'agent'));
     }
 }

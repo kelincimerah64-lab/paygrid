@@ -61,7 +61,7 @@
                 <thead><tr><th>Merchant</th><th>Group</th><th>Menu Fee</th><th>MA</th><th>Agent</th><th>MDR Final</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
-                    @php($menuLabel = $merchant->fee_menu ? ($feeMenus->optionsFor('merchant', $feeMenus->typeCategory($merchant->merchant_type))[$merchant->fee_menu]['label'] ?? $merchant->fee_menu) : '-')
+                    @php($menuLabel = $merchant->fee_menu ? ($feeMenus->optionsFor('merchant')[$merchant->fee_menu]['label'] ?? $merchant->fee_menu) : '-')
                     <tr>
                         <td><strong>{{ $merchant->name }}</strong><br><span class="muted">{{ strtoupper($merchant->merchant_type) }}</span></td>
                         <td>{{ $merchant->agent?->name ?: '-' }}</td>

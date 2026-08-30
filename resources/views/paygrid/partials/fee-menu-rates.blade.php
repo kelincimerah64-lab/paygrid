@@ -3,24 +3,21 @@
     $__feeRateInputName = $inputName ?? 'fee_menu_rates';
     $__feeRateCurrent = $currentRates ?? [];
     $__feeRateFormId = $formId ?? null;
+    $__feeRateShowFloor = $role === 'ma';
 @endphp
-<table class="table qris-table fee-rate-table">
-    <thead><tr><th>Menu</th><th>Floor</th><th>Fee (%)</th></tr></thead>
-    <tbody>
+<div class="fee-rate-grid">
     @foreach($__feeRateOptions as $__feeRateKey => $__feeRateOption)
-        <tr>
-            <td>{{ $__feeRateOption['label'] }}</td>
-            <td>{{ $__feeRateOption['floor'] }}%</td>
-            <td>
-                <input type="text" inputmode="decimal" autocomplete="off"
-                    @if($__feeRateFormId) form="{{ $__feeRateFormId }}" @endif
-                    name="{{ $__feeRateInputName }}[{{ $__feeRateKey }}]"
-                    value="{{ old($__feeRateInputName.'.'.$__feeRateKey, $__feeRateCurrent[$__feeRateKey] ?? '') }}"
-                    data-floor="{{ $__feeRateOption['floor'] }}"
-                    placeholder="0">
+        <div class="fee-rate-row">
+            <span class="fee-rate-label">{{ $__feeRateOption['label'] }}@if($__feeRateShowFloor)<small> (min {{ $__feeRateOption['floor'] }}%)</small>@endif</span>
+            <input type="text" inputmode="decimal" autocomplete="off" class="fee-rate-input"
+                @if($__feeRateFormId) form="{{ $__feeRateFormId }}" @endif
+                name="{{ $__feeRateInputName }}[{{ $__feeRateKey }}]"
+                value="{{ old($__feeRateInputName.'.'.$__feeRateKey, $__feeRateCurrent[$__feeRateKey] ?? '') }}"
+                @if($__feeRateShowFloor) data-floor="{{ $__feeRateOption['floor'] }}" @endif
+                placeholder="0">
+            @if($__feeRateShowFloor)
                 <small class="field-hint warn" hidden>min {{ $__feeRateOption['floor'] }}%</small>
-            </td>
-        </tr>
+            @endif
+        </div>
     @endforeach
-    </tbody>
-</table>
+</div>

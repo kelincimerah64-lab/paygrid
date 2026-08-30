@@ -210,6 +210,13 @@
         .qris-table .btn { min-height:30px; padding:5px 12px; font-size:13px; border-radius:7px; }
         .qris-table .btn:disabled { min-width:96px; color:#607087; border-color:#d8e2f2; background:#f7faff; cursor:not-allowed; }
         .qris-table button:not(:disabled) { cursor:pointer; }
+        .fee-rate-grid { display:flex; flex-direction:column; gap:0; max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:4px 8px; background:#fbfdff; min-width:220px; }
+        .fee-rate-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 0; border-top:1px solid #e7edf6; position:relative; }
+        .fee-rate-row:first-child { border-top:0; }
+        .fee-rate-label { font-size:12px; color:#001634; font-weight:700; white-space:normal; }
+        .fee-rate-label small { display:block; font-weight:500; color:var(--muted); }
+        .fee-rate-input { width:78px; flex:0 0 auto; padding:5px 6px; }
+        .fee-rate-row .field-hint { position:absolute; right:0; bottom:-2px; font-size:10px; color:var(--danger); }
         .ticket-table { min-width:0; table-layout:fixed; }
         .ticket-table th:nth-child(1) { width:9%; }
         .ticket-table th:nth-child(2) { width:24%; }
