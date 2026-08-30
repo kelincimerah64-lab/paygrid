@@ -94,9 +94,9 @@
                             <form id="fee-{{ $merchant->id }}" method="post" action="{{ route('superadmin.merchant-fee.update', $merchant) }}">
                                 @csrf
                             </form>
-                            <select form="fee-{{ $merchant->id }}" name="fee_menu">
+                            <select form="fee-{{ $merchant->id }}" name="fee_menu" onchange="paygridSyncFeeFloor(this, 'merchant_mdr_percent')">
                                 @foreach($merchantMenuOptions as $key => $option)
-                                    <option value="{{ $key }}" @selected(old('fee_menu', $merchant->fee_menu) === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}" @selected(old('fee_menu', $merchant->fee_menu) === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
                                 @endforeach
                             </select>
                         </td>
@@ -109,6 +109,18 @@
             </table>
         </div>
     </section>
+    @push('scripts')
+    <script>
+        function paygridSyncFeeFloor(select, inputName) {
+            var option = select.options[select.selectedIndex];
+            var floor = option && option.getAttribute('data-floor');
+            if (!floor) return;
+            var scope = select.closest('tr') || select.closest('form') || document;
+            var input = scope.querySelector('[name="' + inputName + '"]');
+            if (input) input.value = floor;
+        }
+    </script>
+    @endpush
 @endif
 
 @if($active === 'ma')
@@ -125,9 +137,9 @@
                         <td><select form="ma-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
                         <td><input form="ma-create" name="password" required></td>
                         <td>
-                            <select form="ma-create" name="fee_menu">
+                            <select form="ma-create" name="fee_menu" onchange="paygridSyncFeeFloor(this, 'ma_fee_percent')">
                                 @foreach($feeMenus->optionsFor('ma') as $key => $option)
-                                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
                                 @endforeach
                             </select>
                         </td>
@@ -147,6 +159,18 @@
             @endforeach
         </tbody></table>
     </section>
+    @push('scripts')
+    <script>
+        function paygridSyncFeeFloor(select, inputName) {
+            var option = select.options[select.selectedIndex];
+            var floor = option && option.getAttribute('data-floor');
+            if (!floor) return;
+            var scope = select.closest('tr') || select.closest('form') || document;
+            var input = scope.querySelector('[name="' + inputName + '"]');
+            if (input) input.value = floor;
+        }
+    </script>
+    @endpush
 @endif
 
 @if($active === 'merchant-group')
@@ -172,14 +196,14 @@
                             </select>
                         </td>
                         <td>
-                            <select form="group-create" name="fee_menu" id="group-create-fee-menu-cm">
+                            <select form="group-create" name="fee_menu" id="group-create-fee-menu-cm" onchange="paygridSyncFeeFloor(this, 'default_agent_fee_percent')">
                                 @foreach($feeMenus->optionsFor('agent', 'cm') as $key => $option)
-                                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
                                 @endforeach
                             </select>
-                            <select form="group-create" name="fee_menu" id="group-create-fee-menu-engine" style="display:none" disabled>
+                            <select form="group-create" name="fee_menu" id="group-create-fee-menu-engine" style="display:none" disabled onchange="paygridSyncFeeFloor(this, 'default_agent_fee_percent')">
                                 @foreach($feeMenus->optionsFor('agent', 'engine') as $key => $option)
-                                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
                                 @endforeach
                             </select>
                         </td>
@@ -220,6 +244,14 @@
 @if($active === 'merchant-group')
 @push('scripts')
 <script>
+    function paygridSyncFeeFloor(select, inputName) {
+        var option = select.options[select.selectedIndex];
+        var floor = option && option.getAttribute('data-floor');
+        if (!floor) return;
+        var scope = select.closest('tr') || select.closest('form') || document;
+        var input = scope.querySelector('[name="' + inputName + '"]');
+        if (input) input.value = floor;
+    }
     function paygridToggleAgentFeeMenu(select) {
         var isEngine = select.value !== 'cm';
         var engineType = document.getElementById('group-create-engine-type');

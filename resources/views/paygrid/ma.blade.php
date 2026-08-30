@@ -135,9 +135,9 @@
                 @if(!in_array($r->status, ['approved', 'rejected'], true))
                     <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form">
                         @csrf
-                        <select name="fee_menu" required>
+                        <select name="fee_menu" required onchange="paygridSyncFeeFloor(this, 'merchant_mdr_percent')">
                             @foreach($requestMenuOptions as $key => $option)
-                                <option value="{{ $key }}" @selected($requestFeeMenu === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                                <option value="{{ $key }}" data-floor="{{ $option['floor'] }}" @selected($requestFeeMenu === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
                             @endforeach
                         </select>
                         <input name="merchant_mdr_percent" value="{{ $pctInput($merchantMdr) }}" placeholder="Merchant MDR %" required>
@@ -204,7 +204,7 @@
             @php($storeMenuOptions = $feeMenus->optionsFor('merchant', $storeTypeCategory))
             <tr><td><strong>{{ $m->name }}</strong><br><span class="muted">{{ $m->slug }}</span></td><td>{{ $m->merchant_id ?: '-' }}</td><td>{{ $m->agent?->name ?: '-' }}</td><td><span class="badge {{ $m->merchant_type === 'cm' ? 'ok' : 'warn' }}">{{ strtoupper($m->merchant_type) }}</span></td><td>MDR {{ $pct($m->merchant_mdr_percent) }}<br><span class="muted">MA {{ $pct($m->agent?->ma?->ma_fee_percent) }} / Agent {{ $pct($m->agent?->default_agent_fee_percent) }}</span></td><td><span class="badge {{ $badge($m->approval_status) }}">{{ $m->approval_status }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="store-detail-{{ $m->id }}">Details</button><button class="btn primary compact-btn approval-detail-open" type="button" data-approval-detail="store-fee-{{ $m->id }}">Edit Fee</button>
             <div class="approval-modal" id="store-detail-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Toko</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><div class="approval-detail-grid">@foreach($detailRows as $label => $value)<div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>@endforeach</div></div></div>
-            <div class="approval-modal" id="store-fee-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Edit Fee</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><form method="post" action="{{ route('ma.stores.fee.update', $m) }}" class="form-grid pad">@csrf<label>Menu Fee<select name="fee_menu">@foreach($storeMenuOptions as $key => $option)<option value="{{ $key }}" @selected($m->fee_menu === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>@endforeach</select></label><label>Merchant MDR %<input name="merchant_mdr_percent" value="{{ $pctInput($m->merchant_mdr_percent) }}" required></label><label>Pay In Fee %<input name="payin_fee_percent" value="{{ $pctInput($m->payin_fee_percent) }}" required></label><div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
+            <div class="approval-modal" id="store-fee-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Edit Fee</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><form method="post" action="{{ route('ma.stores.fee.update', $m) }}" class="form-grid pad">@csrf<label>Menu Fee<select name="fee_menu" onchange="paygridSyncFeeFloor(this, 'merchant_mdr_percent')">@foreach($storeMenuOptions as $key => $option)<option value="{{ $key }}" data-floor="{{ $option['floor'] }}" @selected($m->fee_menu === $key)>{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>@endforeach</select></label><label>Merchant MDR %<input name="merchant_mdr_percent" value="{{ $pctInput($m->merchant_mdr_percent) }}" required></label><label>Pay In Fee %<input name="payin_fee_percent" value="{{ $pctInput($m->payin_fee_percent) }}" required></label><div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
         @empty
             <tr><td colspan="7" class="empty">Belum ada toko.</td></tr>
         @endforelse
@@ -229,14 +229,14 @@
             </select>
         </td>
         <td>
-            <select form="agent-create" name="fee_menu" id="agent-create-fee-menu-cm">
+            <select form="agent-create" name="fee_menu" id="agent-create-fee-menu-cm" onchange="paygridSyncFeeFloor(this, 'default_agent_fee_percent')">
                 @foreach($feeMenus->optionsFor('agent', 'cm') as $key => $option)
-                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
                 @endforeach
             </select>
-            <select form="agent-create" name="fee_menu" id="agent-create-fee-menu-engine" style="display:none" disabled>
+            <select form="agent-create" name="fee_menu" id="agent-create-fee-menu-engine" style="display:none" disabled onchange="paygridSyncFeeFloor(this, 'default_agent_fee_percent')">
                 @foreach($feeMenus->optionsFor('agent', 'engine') as $key => $option)
-                    <option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
+                    <option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>
                 @endforeach
             </select>
         </td>
@@ -267,8 +267,8 @@
     <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Toko</h2></div><form method="post" action="{{ route('ma.create-store.store') }}" class="form-grid pad">@csrf<label>Nama Toko<input name="name" required></label><label>Username<input name="username"></label><label>Engine Name<input name="engine_name"></label><label>Agen<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label><label>Email PIC<input name="pic_email" type="email"></label><label>Telegram PIC<input name="pic_telegram"></label><label>Email Admin<input name="admin_email" type="email" required></label><label>Nomor Kontak<input name="phone"></label><label>Environment<select name="environment"><option>Production</option><option>Sandbox</option></select></label><label>Payment Gateway<select name="gateway"><option value="hilogate">hilogate</option><option value="artageto">artageto</option></select></label><label>Merchant ID<input name="merchant_id" placeholder="Kosongkan jika belum real"></label><label>Merchant Key<input name="merchant_key" placeholder="Kosongkan jika belum real"></label><label>Callback URL<input name="transaction_callback_url" value="{{ url('/api/callbacks/hilogate/transaction') }}"></label><label>Withdrawal Callback<input name="withdrawal_callback_url" value="{{ url('/api/callbacks/hilogate/withdrawal') }}"></label><label>API IP Whitelist<input name="api_ip_whitelist" value="15.232.137.74"></label>
         <label>Tipe Toko<select name="merchant_type" id="create-store-type" onchange="paygridToggleStoreFeeMenu(this)"><option value="cm">CM</option><option value="script">Engine</option></select></label>
         <label>Engine Type<select name="engine_type" id="create-store-engine-type" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
-        <label>Menu Fee (CM)<select name="fee_menu" id="create-store-fee-menu-cm">@foreach($feeMenus->optionsFor('merchant', 'cm') as $key => $option)<option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>@endforeach</select></label>
-        <label>Menu Fee (Engine)<select name="fee_menu" id="create-store-fee-menu-engine" style="display:none" disabled>@foreach($feeMenus->optionsFor('merchant', 'engine') as $key => $option)<option value="{{ $key }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>@endforeach</select></label>
+        <label>Menu Fee (CM)<select name="fee_menu" id="create-store-fee-menu-cm" onchange="paygridSyncFeeFloor(this, 'merchant_mdr_percent')">@foreach($feeMenus->optionsFor('merchant', 'cm') as $key => $option)<option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>@endforeach</select></label>
+        <label>Menu Fee (Engine)<select name="fee_menu" id="create-store-fee-menu-engine" style="display:none" disabled onchange="paygridSyncFeeFloor(this, 'merchant_mdr_percent')">@foreach($feeMenus->optionsFor('merchant', 'engine') as $key => $option)<option value="{{ $key }}" data-floor="{{ $option['floor'] }}">{{ $option['label'] }} (min {{ $option['floor'] }}%)</option>@endforeach</select></label>
         <label>Merchant MDR %<input name="merchant_mdr_percent" value="0.85" required></label>
         <label>Catatan<input name="note"></label><button class="btn primary">Buat Toko</button></form></section>
 @push('scripts')
@@ -293,6 +293,14 @@
 
 @push('scripts')
 <script>
+function paygridSyncFeeFloor(select, inputName) {
+    var option = select.options[select.selectedIndex];
+    var floor = option && option.getAttribute('data-floor');
+    if (!floor) return;
+    var scope = select.closest('tr') || select.closest('form') || document;
+    var input = scope.querySelector('[name="' + inputName + '"]');
+    if (input) input.value = floor;
+}
 document.addEventListener('DOMContentLoaded', () => {
     const money = (value) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0));
     const badgeClass = (status) => ['approved', 'success', 'Active', 'active', 'done'].includes(String(status)) ? 'ok' : (['rejected', 'failed', 'expired', 'Suspended'].includes(String(status)) ? 'danger' : 'warn');
