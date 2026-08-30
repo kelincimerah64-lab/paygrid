@@ -210,7 +210,11 @@
         .qris-table .btn { min-height:30px; padding:5px 12px; font-size:13px; border-radius:7px; }
         .qris-table .btn:disabled { min-width:96px; color:#607087; border-color:#d8e2f2; background:#f7faff; cursor:not-allowed; }
         .qris-table button:not(:disabled) { cursor:pointer; }
-        .fee-menu-col { width:320px; }
+        /* !important: these compact-table classes (.super-create-table etc) are reused across
+           tables with different column counts, with legacy nth-child width rules sized for the
+           old multi-field fee layout - overriding by selector specificity/order isn't reliable
+           across all of them, so this column's width is pinned directly. */
+        .fee-menu-col { width:320px !important; }
         .fee-rate-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:0 8px; max-height:150px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px 8px; background:#fbfdff; }
         .fee-rate-row { display:flex; flex-direction:column; gap:2px; padding:4px 0; border-bottom:1px solid #e7edf6; min-width:0; }
         .fee-rate-row:last-child { border-bottom:0; }
