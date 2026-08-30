@@ -34,6 +34,7 @@ Route::get('/ma/stores', fn (MaController $controller) => $controller->page('sto
 Route::post('/ma/stores/{merchant}/fee', [MaController::class, 'updateStoreFee'])->middleware('throttle:dashboard-writes')->name('ma.stores.fee.update');
 Route::get('/ma/agents', fn (MaController $controller) => $controller->page('agents'))->name('ma.agents');
 Route::post('/ma/agents', [MaController::class, 'storeAgent'])->middleware('throttle:dashboard-writes')->name('ma.agents.store');
+Route::post('/ma/agents/{agent}/fee', [MaController::class, 'updateAgentFee'])->middleware('throttle:dashboard-writes')->name('ma.agents.fee.update');
 Route::get('/ma/create-store', fn (MaController $controller) => $controller->page('create-store'))->name('ma.create-store');
 Route::post('/ma/create-store', [MaController::class, 'storeMerchant'])->middleware('throttle:dashboard-writes')->name('ma.create-store.store');
 Route::get('/ma/bot-monitoring', fn (MaController $controller) => $controller->page('bot-monitoring'))->name('ma.bot-monitoring');

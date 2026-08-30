@@ -62,7 +62,9 @@ class MaController extends Controller
             'filters' => $filters,
             'dataFilters' => $dataFilters,
             'periodLabel' => $this->periodLabel($dataFilters),
-            'agents' => $page === 'agents' ? $this->agents($filters)->get() : collect(),
+            'agents' => $page === 'agents'
+                ? $this->agents($filters)->when($filters['status'] === 'all', fn ($query) => $query->where('is_active', true))->get()
+                : collect(),
             'allAgents' => in_array($page, ['report', 'fee', 'stores', 'mapping', 'create-store'], true)
                 ? $this->agents($this->blankFilters())->get()
                 : collect(),
@@ -247,6 +249,23 @@ class MaController extends Controller
         $audit->record('ma.merchant_admin_created', $admin, null, $admin->only(['email', 'role', 'merchant_id']));
 
         return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admin->email.' / '.config('paygrid.demo_password').'.');
+    }
+
+    public function updateAgentFee(Request $request, Agent $agent, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
+    {
+        abort_unless($this->canUseAgent($agent), 403);
+        $this->normalizePercentInputs($request, ['default_agent_fee_percent']);
+        $typeCategory = $feeMenus->typeCategory($agent->connection_type);
+        $data = $request->validate([
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('agent', $typeCategory)))],
+            'default_agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100', new FeeAboveMenuFloor('agent', $typeCategory, $request->input('fee_menu'))],
+        ]);
+        $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
+        $before = $agent->only(['default_agent_fee_percent', 'fee_menu', 'settlement_method']);
+        $agent->forceFill($data)->save();
+        $audit->record('ma.agent_fee_updated', $agent, $before, $agent->only(array_keys($before)));
+
+        return back()->with('status', 'Fee agen berhasil disimpan.');
     }
 
     public function updateStoreFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
