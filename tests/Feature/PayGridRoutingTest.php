@@ -1030,7 +1030,7 @@ class PayGridRoutingTest extends TestCase
             'engine_name' => 'GENESIS DIGITAL',
             'merchant_type' => 'cm',
             'gateway' => 'hilogate',
-            'settlement_method' => 'standard_h1',
+            'fee_menu' => 'h_plus_1',
             'finance_email' => 'finance-link@paygrid.local',
             'cs_email' => 'cs-link@paygrid.local',
         ])->assertRedirect()->assertSessionHas('status');

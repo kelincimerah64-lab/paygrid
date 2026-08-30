@@ -7,38 +7,42 @@ use App\Models\AgentOnboardingLink;
 use App\Models\Merchant;
 use App\Models\MerchantRegistration;
 use App\Services\AuditLogService;
+use App\Services\FeeMenuCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class MerchantRegistrationController extends Controller
 {
-    public function form(Request $request): View
+    public function form(Request $request, FeeMenuCatalog $feeMenus): View
     {
         return view('paygrid.onboarding-form', [
             'agent' => Agent::query()->where('code', $request->query('agent', 'AG-EPC'))->first(),
             'link' => null,
+            'feeMenuOptions' => $this->feeMenuOptionsExcludingBased($feeMenus),
         ]);
     }
 
-    public function tokenForm(AgentOnboardingLink $link): View
+    public function tokenForm(AgentOnboardingLink $link, FeeMenuCatalog $feeMenus): View
     {
         return view('paygrid.onboarding-form', [
             'agent' => $link->agent,
             'link' => $link,
+            'feeMenuOptions' => $this->feeMenuOptionsExcludingBased($feeMenus),
         ]);
     }
 
-    public function store(Request $request, AuditLogService $audit): RedirectResponse
+    public function store(Request $request, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
     {
         $data = $request->validate([
             'store_name' => ['required', 'string', 'max:120'],
             'engine_name' => ['nullable', 'string', 'max:120'],
             'merchant_type' => ['nullable', 'in:cm,script'],
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
-            'settlement_method' => ['nullable', 'string', 'max:120'],
+            'fee_menu' => ['nullable', Rule::in(array_keys($this->feeMenuOptionsExcludingBased($feeMenus)))],
         ]);
 
         $agent = Agent::query()->where('code', $request->input('agent_code', 'AG-EPC'))->firstOrFail();
@@ -50,7 +54,7 @@ class MerchantRegistrationController extends Controller
             'engine_name' => $data['engine_name'] ?? null,
             'merchant_type' => $data['merchant_type'] ?? 'cm',
             'gateway' => $data['gateway'] ?? 'hilogate',
-            'settlement_method' => $data['settlement_method'] ?? null,
+            'settlement_method' => isset($data['fee_menu']) ? $feeMenus->settlementMethod($data['fee_menu']) : null,
             'payload' => $request->except('_token'),
             'status' => 'pending_agent',
         ]);
@@ -61,18 +65,18 @@ class MerchantRegistrationController extends Controller
         return back()->with('status', 'Toko berhasil didaftarkan dan masuk ke request agen.');
     }
 
-    public function tokenStore(Request $request, AgentOnboardingLink $link, AuditLogService $audit): RedirectResponse
+    public function tokenStore(Request $request, AgentOnboardingLink $link, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
     {
         $data = $request->validate([
             'store_name' => ['required', 'string', 'max:120'],
             'engine_name' => ['nullable', 'string', 'max:120'],
             'merchant_type' => ['nullable', 'in:cm,script'],
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
-            'settlement_method' => ['nullable', 'string', 'max:120'],
+            'fee_menu' => ['nullable', Rule::in(array_keys($this->feeMenuOptionsExcludingBased($feeMenus)))],
         ]);
 
         $payload = $request->except('_token');
-        $registration = DB::transaction(function () use ($link, $data, $payload) {
+        $registration = DB::transaction(function () use ($link, $data, $payload, $feeMenus) {
             $lockedLink = AgentOnboardingLink::query()->whereKey($link->id)->lockForUpdate()->firstOrFail();
 
             if ($lockedLink->status === 'active' && $lockedLink->expires_at?->isPast()) {
@@ -88,7 +92,7 @@ class MerchantRegistrationController extends Controller
                 'engine_name' => $data['engine_name'] ?? null,
                 'merchant_type' => $data['merchant_type'] ?? 'cm',
                 'gateway' => $data['gateway'] ?? 'hilogate',
-                'settlement_method' => $data['settlement_method'] ?? null,
+                'settlement_method' => isset($data['fee_menu']) ? $feeMenus->settlementMethod($data['fee_menu']) : null,
                 'payload' => $payload + [
                     'agent_onboarding_link_id' => $lockedLink->id,
                     'recipient_email' => $lockedLink->recipient_email,
@@ -117,5 +121,13 @@ class MerchantRegistrationController extends Controller
         return view('paygrid.topup', [
             'merchant' => $merchant ?? Merchant::query()->where('merchant_type', 'cm')->first(),
         ]);
+    }
+
+    private function feeMenuOptionsExcludingBased(FeeMenuCatalog $feeMenus): array
+    {
+        $options = $feeMenus->optionsFor('merchant');
+        unset($options['based']);
+
+        return $options;
     }
 }

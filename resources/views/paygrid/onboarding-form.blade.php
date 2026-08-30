@@ -66,7 +66,7 @@
         <label>Engine Name<input name="engine_name" placeholder="contoh: GENESIS DIGITAL"></label>
         <label>Tipe Merchant<select name="merchant_type"><option value="cm">CM</option><option value="script">Script</option></select></label>
         <label>Payment Gateway<select name="gateway"><option value="hilogate">Hilogate</option><option value="alpha">Alpha</option><option value="artageto">Artageto</option><option value="kingspay">KingsPay</option></select></label>
-        <label>Settlement Method<select name="settlement_method"><option value="">Belum dipilih</option><option>Standard H+1</option><option>Everyday 1x settle / 1x WS</option><option>Sameday 3x settle / 3x WS</option></select></label>
+        <label>Menu Fee<select name="fee_menu"><option value="">Belum dipilih</option>@foreach($feeMenuOptions as $key => $option)<option value="{{ $key }}">{{ $option['label'] }}</option>@endforeach</select></label>
         <label>Settlement Type ID<input name="settlement_type_id" placeholder="diisi MA jika belum tahu"></label>
     </div>
 
