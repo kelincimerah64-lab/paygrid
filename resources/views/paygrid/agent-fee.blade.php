@@ -31,10 +31,15 @@
 </section>
 
 <section class="card qris-panel section">
-    <div class="qris-toolbar"><div><h2>Fee per Toko</h2><p class="muted" style="margin:4px 0 0">Estimasi fee agen per toko sesuai periode filter.</p></div><span class="badge ok">{{ $num($rows->count()) }} toko</span></div>
+    <div class="qris-toolbar"><h2>Fee Saya (Agent)</h2></div>
+    @include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'agent', 'feeMenus' => $feeMenus, 'rates' => $agent->fee_menu_rates ?? []])
+</section>
+
+<section class="card qris-panel section">
+    <div class="qris-toolbar"><div><h2>Fee per Toko</h2><p class="muted" style="margin:4px 0 0">Estimasi fee agen per toko sesuai periode filter, plus detail menu fee toko masing-masing.</p></div><span class="badge ok">{{ $num($rows->count()) }} toko</span></div>
     <div class="table-wrap">
         <table class="table qris-table">
-            <thead><tr><th>Toko</th><th>Kode Merchant</th><th>TRX Sukses</th><th>Volume Sukses</th><th>% Fee Agen</th><th>Estimasi Fee</th></tr></thead>
+            <thead><tr><th>Toko</th><th>Kode Merchant</th><th>TRX Sukses</th><th>Volume Sukses</th><th>% Fee Agen</th><th>Estimasi Fee</th><th>Fee Menu Toko</th></tr></thead>
             <tbody>
             @forelse($rows as $row)
                 <tr>
@@ -44,9 +49,10 @@
                     <td>{{ $money($row->volume) }}</td>
                     <td>{{ $pct($row->agent_fee_percent) }}</td>
                     <td><strong>{{ $money($row->fee_amount) }}</strong></td>
+                    <td>{{ $row->fee_menu_summary }}</td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="empty">Belum ada transaksi sukses untuk filter ini.</td></tr>
+                <tr><td colspan="7" class="empty">Belum ada transaksi sukses untuk filter ini.</td></tr>
             @endforelse
             </tbody>
         </table>

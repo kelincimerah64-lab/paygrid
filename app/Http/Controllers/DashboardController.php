@@ -11,6 +11,7 @@ use App\Models\MerchantSettlement;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Services\AuditLogService;
+use App\Services\FeeMenuCatalog;
 use App\Services\MetricsService;
 use App\Services\Navigation\MenuBuilder;
 use Carbon\CarbonImmutable;
@@ -105,7 +106,7 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function agentFee(MenuBuilder $menus): View
+    public function agentFee(MenuBuilder $menus, FeeMenuCatalog $feeMenus): View
     {
         $agent = $this->currentAgent();
         $filters = [
@@ -113,6 +114,8 @@ class DashboardController extends Controller
             'from' => (string) request('from', ''),
             'to' => (string) request('to', ''),
         ];
+
+        $merchantRates = Merchant::query()->where('agent_id', $agent->id)->get(['id', 'fee_menu_rates'])->pluck('fee_menu_rates', 'id');
 
         $rows = TopupRequest::query()
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
@@ -124,9 +127,10 @@ class DashboardController extends Controller
             ->selectRaw('merchants.id as merchant_id, merchants.name, merchants.slug, merchants.merchant_id as merchant_code, merchants.agent_fee_percent, COUNT(*) as trx, COALESCE(SUM(topup_requests.amount), 0) as volume')
             ->groupBy('merchants.id', 'merchants.name', 'merchants.slug', 'merchants.merchant_id', 'merchants.agent_fee_percent')
             ->get()
-            ->each(function ($row) {
+            ->each(function ($row) use ($merchantRates, $feeMenus) {
                 $row->agent_fee_percent = (float) $row->agent_fee_percent;
                 $row->fee_amount = (int) round($row->volume * $row->agent_fee_percent / 100);
+                $row->fee_menu_summary = $feeMenus->ratesSummary($merchantRates[$row->merchant_id] ?? [], 'merchant');
             })
             ->sortByDesc('fee_amount')
             ->values();
@@ -136,6 +140,7 @@ class DashboardController extends Controller
             'menus' => $menus->agent(),
             'active' => 'fee',
             'agent' => $agent,
+            'feeMenus' => $feeMenus,
             'rows' => $rows,
             'total' => (int) round((float) $rows->sum('fee_amount')),
             'reportFilters' => $filters,

@@ -84,6 +84,7 @@
 
 @if($active === 'fee')
     <section class="grid qris-metrics section"><div class="card pad qris-metric primary"><span>Total Fee MA</span><strong>{{ $money($summary['fee_ma']) }}</strong></div><div class="card pad qris-metric pending"><span>Total Fee Agen</span><strong>{{ $money($summary['fee_agent']) }}</strong></div><div class="card pad qris-metric"><span>Total Fee Merchant</span><strong>{{ $money($summary['fee_merchant']) }}</strong></div></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Fee Saya (MA)</h2></div>@include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'ma', 'feeMenus' => $feeMenus, 'rates' => auth()->user()->fee_menu_rates ?? []])</section>
     <section class="card qris-panel section"><div class="qris-toolbar"><h2>Pembagian Fee Per Toko</h2></div><table class="table qris-table"><thead><tr><th>Toko</th><th>Menu Fee</th><th>Merchant MDR</th><th>Agent</th><th>MA Fee</th></tr></thead><tbody>@foreach($merchants as $m)<tr><td><strong>{{ $m->name }}</strong></td><td>{{ $m->fee_menu ? ($feeMenus->optionsFor('merchant')[$m->fee_menu]['label'] ?? $m->fee_menu) : '-' }}</td><td>{{ $pct($m->merchant_mdr_percent) }}</td><td>{{ $pct($m->agent_fee_percent) }}</td><td><strong>{{ $pct($m->ma_fee_percent) }}</strong></td></tr>@endforeach</tbody></table></section>
 @endif
 
