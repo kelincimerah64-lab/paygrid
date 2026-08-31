@@ -320,6 +320,7 @@ class PayGridRoutingTest extends TestCase
         $payload = [];
         foreach (FeeMenu::query()->get() as $row) {
             $payload[$row->id] = [
+                'label' => $row->key === 'h_plus_1' ? 'Base H1 Renamed' : $row->label,
                 'ma_enabled' => '1',
                 'ma_floor' => (string) $row->ma_floor,
                 'agent_enabled' => $row->key === 'everyday' ? '0' : '1',
@@ -336,6 +337,8 @@ class PayGridRoutingTest extends TestCase
         $this->assertArrayNotHasKey('everyday', $feeMenus->optionsFor('agent'));
         $this->assertArrayHasKey('everyday', $feeMenus->optionsFor('merchant'));
         $this->assertEqualsWithDelta(2.50, $feeMenus->floor('merchant', null, 'same_day'), 0.0001);
+        $this->assertSame('Base H1 Renamed', FeeMenu::query()->where('key', 'h_plus_1')->firstOrFail()->label);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'superadmin.fee_menu_settings_updated']);
 
         $this->post(route('superadmin.merchant-fee.update', $merchant), [
             'fee_menu_rates' => ['h_plus_1' => '1.00'],

@@ -217,7 +217,7 @@
                     <tbody>
                     @foreach($feeMenuRows as $menu)
                         <tr>
-                            <td><strong>{{ $menu->label }}</strong><br><span class="muted">{{ $menu->key }}</span></td>
+                            <td><input type="text" name="menus[{{ $menu->id }}][label]" value="{{ $menu->label }}" required maxlength="80"><br><span class="muted">{{ $menu->key }}</span></td>
                             <td><input type="checkbox" name="menus[{{ $menu->id }}][ma_enabled]" value="1" @checked($menu->ma_enabled)></td>
                             <td><input type="text" inputmode="decimal" name="menus[{{ $menu->id }}][ma_floor]" value="{{ $pctInput($menu->ma_floor) }}"></td>
                             <td><input type="checkbox" name="menus[{{ $menu->id }}][agent_enabled]" value="1" @checked($menu->agent_enabled)></td>

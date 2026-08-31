@@ -247,17 +247,19 @@ class SuperadminController extends Controller
 
     public function updateFeeMenuSettings(Request $request, AuditLogService $audit): RedirectResponse
     {
-        $data = $request->validate([
+        $request->validate([
             'menus' => ['required', 'array'],
+            'menus.*.label' => ['required', 'string', 'max:80'],
         ]);
 
-        foreach ($data['menus'] as $menuId => $settings) {
+        foreach ($request->input('menus', []) as $menuId => $settings) {
             $menu = FeeMenu::find($menuId);
             if (! $menu) {
                 continue;
             }
-            $before = $menu->only(['ma_enabled', 'ma_floor', 'agent_enabled', 'agent_floor', 'merchant_enabled', 'merchant_floor']);
+            $before = $menu->only(['label', 'ma_enabled', 'ma_floor', 'agent_enabled', 'agent_floor', 'merchant_enabled', 'merchant_floor']);
             $menu->forceFill([
+                'label' => $settings['label'],
                 'ma_enabled' => (bool) ($settings['ma_enabled'] ?? false),
                 'ma_floor' => (float) str_replace(',', '.', (string) ($settings['ma_floor'] ?? 0)),
                 'agent_enabled' => (bool) ($settings['agent_enabled'] ?? false),
