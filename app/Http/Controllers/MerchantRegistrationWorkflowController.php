@@ -19,6 +19,8 @@ use Illuminate\Validation\Rule;
 
 class MerchantRegistrationWorkflowController extends Controller
 {
+    public const MAX_REVISIONS = 3;
+
     public function submit(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse
     {
         if ($request->user()?->role === 'agent') {
@@ -28,9 +30,15 @@ class MerchantRegistrationWorkflowController extends Controller
                 ->firstOrFail();
             abort_unless((int) $registration->agent_id === (int) $agent->id, 403);
         }
-        abort_unless(in_array($registration->status, ['draft', 'pending_agent'], true), 422);
-        $before = $registration->only(['status', 'submitted_to_ma_at']);
-        $registration->update(['status' => 'pending_ma', 'submitted_to_ma_at' => now()]);
+        abort_unless(in_array($registration->status, ['draft', 'pending_agent', 'rejected'], true), 422);
+        $wasRejected = $registration->status === 'rejected';
+        abort_if($wasRejected && $registration->revision_count >= self::MAX_REVISIONS, 422);
+        $before = $registration->only(['status', 'submitted_to_ma_at', 'revision_count']);
+        $registration->update([
+            'status' => 'pending_ma',
+            'submitted_to_ma_at' => now(),
+            'revision_count' => $wasRejected ? $registration->revision_count + 1 : $registration->revision_count,
+        ]);
         $ma = $registration->agent?->ma;
         if ($ma) {
             $ma->notify(new MerchantRegistrationSubmittedToMa($registration->fresh(['agent'])));

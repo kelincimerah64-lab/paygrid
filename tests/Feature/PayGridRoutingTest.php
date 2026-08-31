@@ -1087,6 +1087,37 @@ class PayGridRoutingTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'merchant_registration.approved']);
     }
 
+    public function test_agent_can_resubmit_a_rejected_registration_up_to_three_times(): void
+    {
+        $this->seed();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+        $registration = MerchantRegistration::query()->create([
+            'agent_id' => $agent->id,
+            'token' => 'revision-test-token',
+            'store_name' => 'Revision Test Store',
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'status' => 'rejected',
+        ]);
+
+        for ($i = 1; $i <= 3; $i++) {
+            $this->actingAs($agentUser)
+                ->post(route('api.merchant-registration.submit', $registration))
+                ->assertRedirect()->assertSessionHas('status');
+            $registration->refresh();
+            $this->assertSame('pending_ma', $registration->status);
+            $this->assertSame($i, $registration->revision_count);
+            $registration->update(['status' => 'rejected']);
+        }
+
+        $this->actingAs($agentUser)
+            ->post(route('api.merchant-registration.submit', $registration))
+            ->assertStatus(422);
+        $this->assertSame('rejected', $registration->refresh()->status);
+        $this->assertSame(3, $registration->revision_count);
+    }
+
     public function test_agent_onboarding_link_is_single_use_and_scoped_to_agent(): void
     {
         $this->seed();

@@ -288,13 +288,21 @@ class DashboardController extends Controller
         $registrations = MerchantRegistration::query()
             ->where('agent_id', $agent->id)
             ->whereIn('id', $data['registration_ids'])
-            ->whereIn('status', ['draft', 'pending_agent'])
+            ->when($data['action'] === 'submit', fn ($query) => $query->where(fn ($nested) => $nested
+                ->whereIn('status', ['draft', 'pending_agent'])
+                ->orWhere(fn ($nested2) => $nested2->where('status', 'rejected')->where('revision_count', '<', MerchantRegistrationWorkflowController::MAX_REVISIONS))))
+            ->when($data['action'] === 'delete', fn ($query) => $query->whereIn('status', ['draft', 'pending_agent']))
             ->get();
 
         if ($data['action'] === 'submit') {
             foreach ($registrations as $registration) {
-                $before = $registration->only(['status', 'submitted_to_ma_at']);
-                $registration->update(['status' => 'pending_ma', 'submitted_to_ma_at' => now()]);
+                $wasRejected = $registration->status === 'rejected';
+                $before = $registration->only(['status', 'submitted_to_ma_at', 'revision_count']);
+                $registration->update([
+                    'status' => 'pending_ma',
+                    'submitted_to_ma_at' => now(),
+                    'revision_count' => $wasRejected ? $registration->revision_count + 1 : $registration->revision_count,
+                ]);
                 $audit->record('merchant_registration.bulk_submitted_to_ma', $registration, $before, $registration->only(array_keys($before)));
                 $this->notifyMaForRegistration($registration->fresh(['agent']));
             }

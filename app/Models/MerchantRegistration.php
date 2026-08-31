@@ -18,12 +18,14 @@ class MerchantRegistration extends Model
         'settlement_method',
         'payload',
         'status',
+        'revision_count',
         'submitted_to_ma_at',
         'approved_at',
     ];
 
     protected $casts = [
         'payload' => 'array',
+        'revision_count' => 'integer',
         'submitted_to_ma_at' => 'datetime',
         'approved_at' => 'datetime',
     ];
