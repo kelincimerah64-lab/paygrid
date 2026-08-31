@@ -2,35 +2,44 @@
 
 namespace App\Services;
 
+use App\Models\FeeMenu;
+
 class FeeMenuCatalog
 {
+    private const ROLES = ['ma', 'agent', 'merchant'];
+
+    private static array $cache = [];
+
     public function typeCategory(?string $rawType): string
     {
         return $rawType === 'cm' ? 'cm' : 'engine';
     }
 
     /**
-     * $typeCategory === null returns every menu for the role: for roles that split
-     * by cm/engine (agent, merchant) that means cm + engine merged into one flat
-     * list, since Agent/Merchant fee editing shows every menu regardless of the
-     * entity's current connection type. Pass 'cm'/'engine' explicitly only when you
-     * need just that one category (e.g. deriving a label for an already-set menu).
+     * Menus and their per-role floor/enabled state are managed by superadmin
+     * (see App\Models\FeeMenu). Cached per-request only, cleared via
+     * clearCache() after any write - there's no cm/engine split anymore, so
+     * $typeCategory is accepted for call-site compatibility but unused.
      */
     public function optionsFor(string $role, ?string $typeCategory = null): array
     {
-        $menus = config("paygrid.fee_menus.{$role}");
-
-        if ($menus === null) {
+        if (! in_array($role, self::ROLES, true)) {
             return [];
         }
 
-        if ($typeCategory !== null) {
-            return (array) ($menus[$typeCategory] ?? []);
-        }
+        return self::$cache[$role] ??= FeeMenu::query()
+            ->where("{$role}_enabled", true)
+            ->orderBy('sort_order')
+            ->get()
+            ->mapWithKeys(fn (FeeMenu $menu) => [
+                $menu->key => ['label' => $menu->label, 'floor' => (float) $menu->{"{$role}_floor"}],
+            ])
+            ->all();
+    }
 
-        return isset($menus['cm']) || isset($menus['engine'])
-            ? array_merge($menus['cm'] ?? [], $menus['engine'] ?? [])
-            : $menus;
+    public static function clearCache(): void
+    {
+        self::$cache = [];
     }
 
     public function floor(string $role, ?string $typeCategory, string $menuKey): ?float

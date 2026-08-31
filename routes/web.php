@@ -46,9 +46,13 @@ Route::get('/superadmin/{page}', [SuperadminController::class, 'page'])->name('s
 Route::post('/superadmin/ma', [SuperadminController::class, 'storeMa'])->middleware('throttle:dashboard-writes')->name('superadmin.ma.store');
 Route::post('/superadmin/ma/{user}', [SuperadminController::class, 'updateMa'])->middleware('throttle:dashboard-writes')->name('superadmin.ma.update');
 Route::post('/superadmin/merchant-fee/{merchant}', [SuperadminController::class, 'updateMerchantFee'])->middleware('throttle:dashboard-writes')->name('superadmin.merchant-fee.update');
+Route::post('/superadmin/ma-fee/{user}', [SuperadminController::class, 'updateMaFee'])->middleware('throttle:dashboard-writes')->name('superadmin.ma-fee.update');
 Route::post('/superadmin/merchant-group', [SuperadminController::class, 'storeAgent'])->middleware('throttle:dashboard-writes')->name('superadmin.agent.store');
 Route::post('/superadmin/timer-ticket', [SuperadminController::class, 'updateTimer'])->middleware('throttle:dashboard-writes')->name('superadmin.timer-ticket.update');
 Route::post('/superadmin/accounts/{user}/reset', [SuperadminController::class, 'resetAccount'])->middleware('throttle:dashboard-writes')->name('superadmin.accounts.reset');
+Route::post('/superadmin/fee-menus', [SuperadminController::class, 'storeFeeMenu'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.store');
+Route::post('/superadmin/fee-menus/settings', [SuperadminController::class, 'updateFeeMenuSettings'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.settings');
+Route::delete('/superadmin/fee-menus/{feeMenu}', [SuperadminController::class, 'destroyFeeMenu'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.destroy');
 });
 
 Route::middleware(['auth', 'role:cs_pusat,ma,superadmin'])->group(function () {

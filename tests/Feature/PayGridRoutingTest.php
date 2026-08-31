@@ -8,9 +8,11 @@ use App\Models\MerchantRegistration;
 use App\Models\MerchantSettlement;
 use App\Models\Agent;
 use App\Models\AgentOnboardingLink;
+use App\Models\FeeMenu;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
+use App\Services\FeeMenuCatalog;
 use App\Services\Gateway\GatewayClientInterface;
 use App\Services\Gateway\HilogateClient;
 use App\Services\TransactionIngestionService;
@@ -296,6 +298,84 @@ class PayGridRoutingTest extends TestCase
             'password' => 'Baru12345',
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertTrue(Hash::check('Baru12345', $cs->refresh()->password));
+    }
+
+    public function test_superadmin_can_manage_the_fee_menu_catalog(): void
+    {
+        $this->seed();
+        $superadmin = User::query()->where('email', 'superadmin@paygrid.local')->firstOrFail();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $this->actingAs($superadmin);
+
+        $this->get(route('superadmin.page', 'fee-menu-settings'))
+            ->assertOk()
+            ->assertSee('Based')
+            ->assertSee('Tambah Menu Fee');
+
+        $this->post(route('superadmin.fee-menus.store'), [
+            'label' => 'Based + Instant',
+        ])->assertRedirect()->assertSessionHas('status');
+        $newMenu = FeeMenu::query()->where('key', 'based_instant')->firstOrFail();
+
+        $payload = [];
+        foreach (FeeMenu::query()->get() as $row) {
+            $payload[$row->id] = [
+                'ma_enabled' => '1',
+                'ma_floor' => (string) $row->ma_floor,
+                'agent_enabled' => $row->key === 'based' ? '0' : '1',
+                'agent_floor' => (string) $row->agent_floor,
+                'merchant_enabled' => '1',
+                'merchant_floor' => $row->key === 'same_day' ? '2.50' : (string) $row->merchant_floor,
+            ];
+        }
+        $this->post(route('superadmin.fee-menus.settings'), ['menus' => $payload])
+            ->assertRedirect()->assertSessionHas('status');
+
+        $feeMenus = app(FeeMenuCatalog::class);
+        FeeMenuCatalog::clearCache();
+        $this->assertArrayNotHasKey('based', $feeMenus->optionsFor('agent'));
+        $this->assertArrayHasKey('based', $feeMenus->optionsFor('merchant'));
+        $this->assertEqualsWithDelta(2.50, $feeMenus->floor('merchant', null, 'same_day'), 0.0001);
+
+        $this->post(route('superadmin.merchant-fee.update', $merchant), [
+            'fee_menu_rates' => ['h_plus_1' => '1.00'],
+        ])->assertRedirect()->assertSessionHas('status');
+        $this->assertSame('h_plus_1', $merchant->refresh()->fee_menu);
+
+        $inUseMenu = FeeMenu::query()->where('key', 'h_plus_1')->firstOrFail();
+        $this->delete(route('superadmin.fee-menus.destroy', $inUseMenu))->assertStatus(422);
+        $this->assertDatabaseHas('fee_menus', ['id' => $inUseMenu->id]);
+
+        $this->delete(route('superadmin.fee-menus.destroy', $newMenu))
+            ->assertRedirect()->assertSessionHas('status');
+        $this->assertDatabaseMissing('fee_menus', ['id' => $newMenu->id]);
+    }
+
+    public function test_superadmin_can_edit_an_existing_ma_fee_and_it_cascades_to_merchants(): void
+    {
+        $this->seed();
+        $superadmin = User::query()->where('email', 'superadmin@paygrid.local')->firstOrFail();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $this->actingAs($superadmin);
+
+        $this->get(route('superadmin.page', 'ma'))->assertOk()->assertSee('Edit Fee');
+
+        $this->post(route('superadmin.merchant-fee.update', $merchant), [
+            'fee_menu_rates' => ['based' => '1.00'],
+        ])->assertRedirect()->assertSessionHas('status');
+        $this->assertSame('based', $merchant->refresh()->fee_menu);
+
+        $this->post(route('superadmin.ma-fee.update', $ma), [
+            'fee_menu_rates' => ['based' => '0.90'],
+        ])->assertRedirect()->assertSessionHas('status');
+
+        $this->assertEqualsWithDelta(0.90, (float) $ma->refresh()->fee_menu_rates['based'], 0.0001);
+        $this->assertEqualsWithDelta(0.90, (float) $merchant->refresh()->ma_fee_percent, 0.0001);
+
+        $this->post(route('superadmin.ma-fee.update', $ma), [
+            'fee_menu_rates' => ['based' => '0.10'],
+        ])->assertSessionHasErrors('fee_menu_rates');
     }
 
     public function test_merchant_admin_can_manage_users_settings_logs_and_is_scoped(): void

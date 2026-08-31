@@ -3,10 +3,14 @@
 namespace Tests\Unit\Fees;
 
 use App\Services\FeeMenuCatalog;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class FeeMenuCatalogTest extends TestCase
 {
+    use RefreshDatabase;
+
+
     public function test_type_category_maps_cm_and_everything_else(): void
     {
         $catalog = new FeeMenuCatalog();

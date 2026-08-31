@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\FeeMenu;
 use App\Models\Merchant;
 use App\Models\PaygridSetting;
 use App\Models\TopupRequest;
@@ -23,7 +24,7 @@ class SuperadminController extends Controller
 {
     public function page(FeeMenuCatalog $feeMenus, string $page = 'dashboard-fee'): View
     {
-        abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'timer-ticket', 'accounts'], true), 404);
+        abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'fee-menu-settings', 'timer-ticket', 'accounts'], true), 404);
 
         $search = trim((string) request('q', ''));
         $type = (string) request('type', 'all');
@@ -74,6 +75,7 @@ class SuperadminController extends Controller
                 'add-fee' => 'Add Fee',
                 'ma' => 'MA',
                 'merchant-group' => 'Merchant Group',
+                'fee-menu-settings' => 'Pengaturan Menu Fee',
                 'timer-ticket' => 'Timer Ticket',
                 'accounts' => 'Daftar Account',
                 default => 'Dashboard Fee',
@@ -86,6 +88,7 @@ class SuperadminController extends Controller
             'summary' => $this->summary(),
             'filters' => compact('search', 'type', 'status', 'role', 'maId', 'agentId'),
             'feeMenus' => $feeMenus,
+            'feeMenuRows' => FeeMenu::query()->orderBy('sort_order')->get(),
         ]);
     }
 
@@ -123,6 +126,22 @@ class SuperadminController extends Controller
         $audit->record('superadmin.ma_updated', $user, $before, $user->only(array_keys($before)));
 
         return back()->with('status', 'MA berhasil diupdate.');
+    }
+
+    public function updateMaFee(Request $request, User $user, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse
+    {
+        abort_unless($user->role === 'ma', 404);
+        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'ma');
+        $request->merge(['fee_menu_rates' => $rates]);
+        $data = $request->validate([
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('ma', null)],
+        ]);
+        $before = $user->only(['fee_menu_rates']);
+        $user->forceFill($data)->save();
+        $feeSync->resyncMa($user);
+        $audit->record('superadmin.ma_fee_updated', $user, $before, $user->only(['fee_menu_rates']));
+
+        return back()->with('status', 'Fee MA berhasil disimpan.');
     }
 
     public function updateMerchantFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse
@@ -205,6 +224,66 @@ class SuperadminController extends Controller
         return back()->with('status', 'Akses user berhasil direset. Password: '.$password);
     }
 
+    public function storeFeeMenu(Request $request, AuditLogService $audit): RedirectResponse
+    {
+        $data = $request->validate([
+            'label' => ['required', 'string', 'max:80'],
+            'key' => ['nullable', 'string', 'max:60', 'alpha_dash', 'unique:fee_menus,key'],
+        ]);
+        $key = ($data['key'] ?? null) ?: Str::slug($data['label'], '_');
+        abort_if($key === '', 422, 'Nama menu tidak valid.');
+        abort_if(FeeMenu::query()->where('key', $key)->exists(), 422, 'Menu dengan key tersebut sudah ada.');
+
+        $menu = FeeMenu::query()->create([
+            'key' => $key,
+            'label' => $data['label'],
+            'sort_order' => (int) FeeMenu::query()->max('sort_order') + 1,
+        ]);
+        FeeMenuCatalog::clearCache();
+        $audit->record('superadmin.fee_menu_created', $menu, null, $menu->toArray());
+
+        return back()->with('status', 'Menu fee "'.$menu->label.'" berhasil ditambahkan.');
+    }
+
+    public function updateFeeMenuSettings(Request $request, AuditLogService $audit): RedirectResponse
+    {
+        $data = $request->validate([
+            'menus' => ['required', 'array'],
+        ]);
+
+        foreach ($data['menus'] as $menuId => $settings) {
+            $menu = FeeMenu::find($menuId);
+            if (! $menu) {
+                continue;
+            }
+            $before = $menu->only(['ma_enabled', 'ma_floor', 'agent_enabled', 'agent_floor', 'merchant_enabled', 'merchant_floor']);
+            $menu->forceFill([
+                'ma_enabled' => (bool) ($settings['ma_enabled'] ?? false),
+                'ma_floor' => (float) str_replace(',', '.', (string) ($settings['ma_floor'] ?? 0)),
+                'agent_enabled' => (bool) ($settings['agent_enabled'] ?? false),
+                'agent_floor' => (float) str_replace(',', '.', (string) ($settings['agent_floor'] ?? 0)),
+                'merchant_enabled' => (bool) ($settings['merchant_enabled'] ?? false),
+                'merchant_floor' => (float) str_replace(',', '.', (string) ($settings['merchant_floor'] ?? 0)),
+            ])->save();
+            $audit->record('superadmin.fee_menu_settings_updated', $menu, $before, $menu->only(array_keys($before)));
+        }
+        FeeMenuCatalog::clearCache();
+
+        return back()->with('status', 'Pengaturan menu fee berhasil disimpan.');
+    }
+
+    public function destroyFeeMenu(FeeMenu $feeMenu, AuditLogService $audit): RedirectResponse
+    {
+        abort_if(Merchant::query()->where('fee_menu', $feeMenu->key)->exists(), 422, 'Menu ini masih dipakai aktif oleh toko, tidak bisa dihapus.');
+
+        $before = $feeMenu->toArray();
+        $feeMenu->delete();
+        FeeMenuCatalog::clearCache();
+        $audit->record('superadmin.fee_menu_deleted', $feeMenu, $before, null);
+
+        return back()->with('status', 'Menu fee "'.$before['label'].'" berhasil dihapus.');
+    }
+
     private function validateMa(Request $request, ?User $user = null): array
     {
         $feeMenus = app(FeeMenuCatalog::class);
@@ -242,6 +321,7 @@ class SuperadminController extends Controller
             ['key' => 'add-fee', 'label' => 'Add Fee', 'url' => route('superadmin.page', 'add-fee')],
             ['key' => 'ma', 'label' => 'MA', 'url' => route('superadmin.page', 'ma')],
             ['key' => 'merchant-group', 'label' => 'Merchant Group', 'url' => route('superadmin.page', 'merchant-group')],
+            ['key' => 'fee-menu-settings', 'label' => 'Pengaturan Menu Fee', 'url' => route('superadmin.page', 'fee-menu-settings')],
             ['key' => 'timer-ticket', 'label' => 'Timer Ticket', 'url' => route('superadmin.page', 'timer-ticket')],
             ['key' => 'accounts', 'label' => 'Daftar Account', 'url' => route('superadmin.page', 'accounts')],
         ];

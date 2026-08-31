@@ -403,8 +403,8 @@
         .admin-create-form .btn { min-height:40px; padding-inline:16px; margin-bottom:0; }
         .admin-minimum-card { max-width:520px; }
         .admin-minimum-card h2 { font-size:17px; }
-        .admin-minimum-form { display:grid; grid-template-columns:auto auto; gap:10px; align-items:end; }
-        .admin-minimum-form label { margin:0; }
+        .admin-minimum-form { display:grid; grid-template-columns:auto auto auto; gap:10px; align-items:end; }
+        .admin-minimum-form label { display:grid; gap:8px; margin:0; }
         .admin-minimum-form input { height:32px; min-height:32px; padding:5px 9px; width:160px; }
         .center-ticket-table th:nth-child(1) { width:17%; }
         .center-ticket-table th:nth-child(2) { width:9%; }
@@ -445,6 +445,16 @@
         .super-group-create-table th:nth-child(5), .super-group-create-table th:nth-child(6), .super-group-create-table th:nth-child(8), .super-group-create-table th:nth-child(9), .super-group-create-table th:nth-child(10) { width:6%; }
         .super-group-create-table td { height:50px; padding:5px 6px; }
         .super-group-create-table input, .super-group-create-table select { width:100%; height:30px; min-height:30px; padding:4px 7px; font-size:12px; font-weight:850; }
+        .fee-menu-settings-table { min-width:900px; }
+        .fee-menu-settings-table th:nth-child(1) { width:30%; }
+        .fee-menu-settings-table th:nth-child(2), .fee-menu-settings-table th:nth-child(4), .fee-menu-settings-table th:nth-child(6) { width:8%; text-align:center; }
+        .fee-menu-settings-table th:nth-child(3), .fee-menu-settings-table th:nth-child(5), .fee-menu-settings-table th:nth-child(7) { width:12%; }
+        .fee-menu-settings-table th:nth-child(8) { width:10%; text-align:center; }
+        .fee-menu-settings-table td { height:52px; padding:6px 8px; }
+        .fee-menu-settings-table td:nth-child(2), .fee-menu-settings-table td:nth-child(4), .fee-menu-settings-table td:nth-child(6), .fee-menu-settings-table td:nth-child(8) { text-align:center; }
+        .fee-menu-settings-table input[type="text"] { width:100%; box-sizing:border-box; height:30px; min-height:30px; padding:4px 7px; font-size:12px; font-weight:850; }
+        .fee-menu-settings-table input[type="checkbox"] { width:16px; height:16px; }
+        .fee-menu-wrap { overflow-x:auto; }
         .approval-card { display:grid; grid-template-columns:minmax(220px, 1.1fr) minmax(180px, .9fr) minmax(310px, 1.35fr) minmax(130px, .55fr); gap:18px; align-items:start; }
         .approval-card > div { min-width:0; }
         .initial { width:52px; height:52px; border-radius:50%; display:grid; place-items:center; background:var(--blue-2); color:#fff; font-size:22px; font-weight:950; flex:0 0 auto; }

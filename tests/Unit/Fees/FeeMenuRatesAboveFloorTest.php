@@ -3,10 +3,14 @@
 namespace Tests\Unit\Fees;
 
 use App\Rules\FeeMenuRatesAboveFloor;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class FeeMenuRatesAboveFloorTest extends TestCase
 {
+    use RefreshDatabase;
+
+
     public function test_zero_or_blank_rates_always_pass(): void
     {
         $rule = new FeeMenuRatesAboveFloor('ma', null);

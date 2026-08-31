@@ -129,9 +129,26 @@
     </section>
     <section class="card qris-panel section">
         <div class="qris-toolbar"><h2>Daftar MA</h2></div>
-        <table class="table qris-table"><thead><tr><th>MA</th><th>Fee per Menu</th><th>Status</th></tr></thead><tbody>
+        <table class="table qris-table"><thead><tr><th>MA</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
             @foreach($mas as $ma)
-                <tr><td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td><td>{{ $feeMenus->ratesSummary($ma->fee_menu_rates ?? [], 'ma') }}</td><td><span class="badge {{ $ma->is_active ? 'ok' : 'danger' }}">{{ $ma->is_active ? 'Aktif' : 'Nonaktif' }}</span></td></tr>
+                <tr>
+                    <td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td>
+                    <td>{{ $feeMenus->ratesSummary($ma->fee_menu_rates ?? [], 'ma') }}</td>
+                    <td><span class="badge {{ $ma->is_active ? 'ok' : 'danger' }}">{{ $ma->is_active ? 'Aktif' : 'Nonaktif' }}</span></td>
+                    <td>
+                        <button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="ma-fee-{{ $ma->id }}">Edit Fee</button>
+                        <div class="approval-modal" id="ma-fee-{{ $ma->id }}" hidden>
+                            <div class="approval-modal-card">
+                                <div class="qris-toolbar"><div><h2>Edit Fee MA</h2><p class="muted" style="margin:4px 0 0">{{ $ma->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
+                                <form method="post" action="{{ route('superadmin.ma-fee.update', $ma) }}" class="form-grid pad">
+                                    @csrf
+                                    @include('paygrid.partials.fee-menu-rates', ['role' => 'ma', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $ma->fee_menu_rates ?? []])
+                                    <div><button class="btn primary">Simpan Fee</button></div>
+                                </form>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
             @endforeach
         </tbody></table>
     </section>
@@ -168,6 +185,60 @@
         </div>
     </section>
     <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Fee per Menu</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>{{ $feeMenus->ratesSummary($agent->fee_menu_rates ?? [], 'agent') }}</td></tr>@endforeach</tbody></table></section>
+@endif
+
+@if($active === 'fee-menu-settings')
+    <section class="card qris-panel section" style="max-width:520px">
+        <div class="qris-toolbar"><h2>Tambah Menu Fee</h2></div>
+        <form method="post" action="{{ route('superadmin.fee-menus.store') }}" class="admin-minimum-form section">
+            @csrf
+            <label>Nama Menu<input name="label" required placeholder="mis. Based + Instant"></label>
+            <label>Key (opsional)<input name="key" placeholder="mis. based_instant"></label>
+            <button class="btn primary">Tambah Menu</button>
+        </form>
+    </section>
+
+    <section class="card qris-panel section">
+        <div class="qris-toolbar"><h2>Floor &amp; Status Menu per Role</h2></div>
+        <div class="sub">Floor 0 = default (bebas, tanpa batas minimal). Menu yang dinonaktifkan untuk sebuah role tidak akan muncul di form role tersebut.</div>
+        <form id="fee-menu-settings-form" method="post" action="{{ route('superadmin.fee-menus.settings') }}" class="section">
+            @csrf
+            <div class="table-wrap fee-menu-wrap">
+                <table class="table qris-table fee-menu-settings-table">
+                    <thead>
+                        <tr>
+                            <th>Menu</th>
+                            <th>MA Aktif</th><th>MA Floor %</th>
+                            <th>Agent Aktif</th><th>Agent Floor %</th>
+                            <th>Toko Aktif</th><th>Toko Floor %</th>
+                            <th>Hapus</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach($feeMenuRows as $menu)
+                        <tr>
+                            <td><strong>{{ $menu->label }}</strong><br><span class="muted">{{ $menu->key }}</span></td>
+                            <td><input type="checkbox" name="menus[{{ $menu->id }}][ma_enabled]" value="1" @checked($menu->ma_enabled)></td>
+                            <td><input type="text" inputmode="decimal" name="menus[{{ $menu->id }}][ma_floor]" value="{{ $pctInput($menu->ma_floor) }}"></td>
+                            <td><input type="checkbox" name="menus[{{ $menu->id }}][agent_enabled]" value="1" @checked($menu->agent_enabled)></td>
+                            <td><input type="text" inputmode="decimal" name="menus[{{ $menu->id }}][agent_floor]" value="{{ $pctInput($menu->agent_floor) }}"></td>
+                            <td><input type="checkbox" name="menus[{{ $menu->id }}][merchant_enabled]" value="1" @checked($menu->merchant_enabled)></td>
+                            <td><input type="text" inputmode="decimal" name="menus[{{ $menu->id }}][merchant_floor]" value="{{ $pctInput($menu->merchant_floor) }}"></td>
+                            <td><button type="submit" form="delete-fee-menu-{{ $menu->id }}" class="btn danger compact-btn" onclick="return confirm('Hapus menu {{ $menu->label }}?')">Hapus</button></td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+            <button class="btn primary">Simpan Semua</button>
+        </form>
+        @foreach($feeMenuRows as $menu)
+            <form id="delete-fee-menu-{{ $menu->id }}" method="post" action="{{ route('superadmin.fee-menus.destroy', $menu) }}" style="display:none">
+                @csrf
+                @method('DELETE')
+            </form>
+        @endforeach
+    </section>
 @endif
 
 @if($active === 'timer-ticket')
@@ -213,6 +284,18 @@
         if (e.target.matches && e.target.matches('[data-floor]')) {
             paygridWarnBelowFloor(e.target);
         }
+    });
+    document.querySelectorAll('[data-approval-detail]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var target = document.getElementById(button.dataset.approvalDetail);
+            if (target) target.hidden = false;
+        });
+    });
+    document.querySelectorAll('.approval-detail-close, .approval-modal').forEach(function (item) {
+        item.addEventListener('click', function (event) {
+            if (event.target.closest('.approval-modal-card') && !event.target.classList.contains('approval-detail-close')) return;
+            item.closest('.approval-modal').hidden = true;
+        });
     });
 </script>
 @endpush
