@@ -309,7 +309,7 @@ class PayGridRoutingTest extends TestCase
 
         $this->get(route('superadmin.page', 'fee-menu-settings'))
             ->assertOk()
-            ->assertSee('Based')
+            ->assertSee('Base H1')
             ->assertSee('Tambah Menu Fee');
 
         $this->post(route('superadmin.fee-menus.store'), [
@@ -322,7 +322,7 @@ class PayGridRoutingTest extends TestCase
             $payload[$row->id] = [
                 'ma_enabled' => '1',
                 'ma_floor' => (string) $row->ma_floor,
-                'agent_enabled' => $row->key === 'based' ? '0' : '1',
+                'agent_enabled' => $row->key === 'everyday' ? '0' : '1',
                 'agent_floor' => (string) $row->agent_floor,
                 'merchant_enabled' => '1',
                 'merchant_floor' => $row->key === 'same_day' ? '2.50' : (string) $row->merchant_floor,
@@ -333,8 +333,8 @@ class PayGridRoutingTest extends TestCase
 
         $feeMenus = app(FeeMenuCatalog::class);
         FeeMenuCatalog::clearCache();
-        $this->assertArrayNotHasKey('based', $feeMenus->optionsFor('agent'));
-        $this->assertArrayHasKey('based', $feeMenus->optionsFor('merchant'));
+        $this->assertArrayNotHasKey('everyday', $feeMenus->optionsFor('agent'));
+        $this->assertArrayHasKey('everyday', $feeMenus->optionsFor('merchant'));
         $this->assertEqualsWithDelta(2.50, $feeMenus->floor('merchant', null, 'same_day'), 0.0001);
 
         $this->post(route('superadmin.merchant-fee.update', $merchant), [
@@ -362,19 +362,19 @@ class PayGridRoutingTest extends TestCase
         $this->get(route('superadmin.page', 'ma'))->assertOk()->assertSee('Edit Fee');
 
         $this->post(route('superadmin.merchant-fee.update', $merchant), [
-            'fee_menu_rates' => ['based' => '1.00'],
+            'fee_menu_rates' => ['h_plus_1' => '1.00'],
         ])->assertRedirect()->assertSessionHas('status');
-        $this->assertSame('based', $merchant->refresh()->fee_menu);
+        $this->assertSame('h_plus_1', $merchant->refresh()->fee_menu);
 
         $this->post(route('superadmin.ma-fee.update', $ma), [
-            'fee_menu_rates' => ['based' => '0.90'],
+            'fee_menu_rates' => ['h_plus_1' => '0.90'],
         ])->assertRedirect()->assertSessionHas('status');
 
-        $this->assertEqualsWithDelta(0.90, (float) $ma->refresh()->fee_menu_rates['based'], 0.0001);
+        $this->assertEqualsWithDelta(0.90, (float) $ma->refresh()->fee_menu_rates['h_plus_1'], 0.0001);
         $this->assertEqualsWithDelta(0.90, (float) $merchant->refresh()->ma_fee_percent, 0.0001);
 
         $this->post(route('superadmin.ma-fee.update', $ma), [
-            'fee_menu_rates' => ['based' => '0.10'],
+            'fee_menu_rates' => ['h_plus_1' => '0.10'],
         ])->assertSessionHasErrors('fee_menu_rates');
     }
 

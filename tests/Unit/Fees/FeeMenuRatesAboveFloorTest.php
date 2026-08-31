@@ -33,7 +33,7 @@ class FeeMenuRatesAboveFloorTest extends TestCase
         });
 
         $this->assertCount(1, $failures);
-        $this->assertStringContainsString('Based + H+1', $failures[0]);
+        $this->assertStringContainsString('Base H1', $failures[0]);
         $this->assertStringContainsString('0.8%', $failures[0]);
     }
 

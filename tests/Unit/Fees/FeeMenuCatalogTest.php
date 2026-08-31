@@ -24,21 +24,19 @@ class FeeMenuCatalogTest extends TestCase
     {
         $catalog = new FeeMenuCatalog();
 
-        $this->assertEqualsWithDelta(0.80, $catalog->floor('ma', null, 'based'), 0.0001);
         $this->assertEqualsWithDelta(0.80, $catalog->floor('ma', null, 'h_plus_1'), 0.0001);
         $this->assertEqualsWithDelta(0.85, $catalog->floor('ma', null, 'everyday'), 0.0001);
         $this->assertEqualsWithDelta(0.90, $catalog->floor('ma', null, 'same_day'), 0.0001);
         $this->assertEqualsWithDelta(0.85, $catalog->floor('ma', null, 'h_plus_1_sc'), 0.0001);
         $this->assertEqualsWithDelta(0.90, $catalog->floor('ma', null, 'everyday_sc'), 0.0001);
         $this->assertEqualsWithDelta(0.95, $catalog->floor('ma', null, 'same_day_sc'), 0.0001);
-        $this->assertEqualsWithDelta(0.80, $catalog->floor('ma', null, 'h_plus_1_api'), 0.0001);
         $this->assertEqualsWithDelta(0.85, $catalog->floor('ma', null, 'everyday_api'), 0.0001);
         $this->assertEqualsWithDelta(0.90, $catalog->floor('ma', null, 'same_day_api'), 0.0001);
     }
 
     /**
      * Agent and Merchant menus are free-form (no minimum) - only MA enforces a floor.
-     * Every menu key still exists so the rate table renders the same 10 menus everywhere.
+     * Every menu key still exists so the rate table renders the same 8 menus everywhere.
      */
     public function test_agent_and_merchant_menus_share_ma_labels_with_no_floor(): void
     {
@@ -79,7 +77,7 @@ class FeeMenuCatalogTest extends TestCase
 
         $this->assertSame(1.10, $rates['h_plus_1']);
         $this->assertSame(0.0, $rates['everyday']);
-        $this->assertSame(0.0, $rates['based']);
+        $this->assertSame(0.0, $rates['same_day']);
     }
 
     public function test_normalize_rates_drops_keys_outside_the_catalog(): void
@@ -98,7 +96,7 @@ class FeeMenuCatalogTest extends TestCase
 
         $summary = $catalog->ratesSummary(['h_plus_1' => 1.05, 'everyday' => 0, 'same_day' => 0], 'agent');
 
-        $this->assertSame('Based + H+1: 1.05%', $summary);
+        $this->assertSame('Base H1: 1.05%', $summary);
     }
 
     public function test_rates_summary_returns_dash_when_nothing_is_set(): void
