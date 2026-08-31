@@ -39,7 +39,7 @@
     <div class="qris-toolbar"><div><h2>Fee per Toko</h2><p class="muted" style="margin:4px 0 0">Estimasi fee agen per toko sesuai periode filter, plus detail menu fee toko masing-masing.</p></div><span class="badge ok">{{ $num($rows->count()) }} toko</span></div>
     <div class="table-wrap">
         <table class="table qris-table">
-            <thead><tr><th>Toko</th><th>Kode Merchant</th><th>TRX Sukses</th><th>Volume Sukses</th><th>% Fee Agen</th><th>Estimasi Fee</th><th>Fee Menu Toko</th></tr></thead>
+            <thead><tr><th>Toko</th><th>Kode Merchant</th><th>TRX Sukses</th><th>Volume Sukses</th><th>% Fee Agen</th><th>Estimasi Fee</th><th>Detail</th></tr></thead>
             <tbody>
             @forelse($rows as $row)
                 <tr>
@@ -49,7 +49,8 @@
                     <td>{{ $money($row->volume) }}</td>
                     <td>{{ $pct($row->agent_fee_percent) }}</td>
                     <td><strong>{{ $money($row->fee_amount) }}</strong></td>
-                    <td>{{ $row->fee_menu_summary }}</td>
+                    <td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-fee-store-{{ $row->merchant_id }}">Detail</button>
+                    <div class="approval-modal" id="agent-fee-store-{{ $row->merchant_id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Fee Menu</h2><p class="muted" style="margin:4px 0 0">{{ $row->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>@include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'merchant', 'feeMenus' => $feeMenus, 'rates' => $row->fee_menu_rates])</div></div></td>
                 </tr>
             @empty
                 <tr><td colspan="7" class="empty">Belum ada transaksi sukses untuk filter ini.</td></tr>
@@ -59,3 +60,22 @@
     </div>
 </section>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-approval-detail]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const target = document.getElementById(button.dataset.approvalDetail);
+            if (target) target.hidden = false;
+        });
+    });
+    document.querySelectorAll('.approval-detail-close, .approval-modal').forEach((item) => {
+        item.addEventListener('click', (event) => {
+            if (event.target.closest('.approval-modal-card') && !event.target.classList.contains('approval-detail-close')) return;
+            item.closest('.approval-modal').hidden = true;
+        });
+    });
+});
+</script>
+@endpush

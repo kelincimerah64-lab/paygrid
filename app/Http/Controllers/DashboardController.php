@@ -127,10 +127,10 @@ class DashboardController extends Controller
             ->selectRaw('merchants.id as merchant_id, merchants.name, merchants.slug, merchants.merchant_id as merchant_code, merchants.agent_fee_percent, COUNT(*) as trx, COALESCE(SUM(topup_requests.amount), 0) as volume')
             ->groupBy('merchants.id', 'merchants.name', 'merchants.slug', 'merchants.merchant_id', 'merchants.agent_fee_percent')
             ->get()
-            ->each(function ($row) use ($merchantRates, $feeMenus) {
+            ->each(function ($row) use ($merchantRates) {
                 $row->agent_fee_percent = (float) $row->agent_fee_percent;
                 $row->fee_amount = (int) round($row->volume * $row->agent_fee_percent / 100);
-                $row->fee_menu_summary = $feeMenus->ratesSummary($merchantRates[$row->merchant_id] ?? [], 'merchant');
+                $row->fee_menu_rates = $merchantRates[$row->merchant_id] ?? [];
             })
             ->sortByDesc('fee_amount')
             ->values();
