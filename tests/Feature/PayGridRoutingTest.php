@@ -928,6 +928,30 @@ class PayGridRoutingTest extends TestCase
         $this->assertTrue($expiresAt?->equalTo($request->refresh()->expires_at));
     }
 
+    public function test_ingestion_reads_net_amount_from_nested_response_for_script_merchants(): void
+    {
+        $this->seed();
+        $merchant = Merchant::query()->where('merchant_type', 'script')->firstOrFail();
+
+        $result = app(TransactionIngestionService::class)->ingestForMerchant($merchant, [
+            'id' => 'np-net-amount-test',
+            'status' => 'SUCCESS',
+            'merchant_id' => $merchant->merchant_id,
+            'ref_id' => 'np-net-amount-test-ref',
+            'amount' => 40460,
+            'net_amount' => 40460,
+            'response' => [
+                'total' => 40258,
+                'amount' => 40460,
+            ],
+            'created_at' => now()->getTimestampMs(),
+        ], $merchant->gateway, 'gateway_pull');
+
+        $this->assertSame(40460, $result->amount);
+        $this->assertSame(40258, $result->net_amount);
+        $this->assertSame(202, $result->fee_amount);
+    }
+
     public function test_dashboard_reads_gateway_balance_from_matching_merchant_cache(): void
     {
         $this->seed();
@@ -1119,6 +1143,31 @@ class PayGridRoutingTest extends TestCase
             ->assertStatus(422);
         $this->assertSame('rejected', $registration->refresh()->status);
         $this->assertSame(3, $registration->revision_count);
+    }
+
+    public function test_agent_fee_page_estimates_net_margin_not_gross_agent_rate(): void
+    {
+        $this->seed();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+        $merchant = Merchant::query()->where('agent_id', $agent->id)->where('merchant_type', 'cm')->firstOrFail();
+        $merchant->forceFill(['agent_fee_percent' => 2.00, 'ma_fee_percent' => 0.50])->save();
+        $existingVolume = (int) TopupRequest::query()->where('merchant_id', $merchant->id)->where('status', 'success')->sum('amount');
+
+        TopupRequest::query()->create([
+            'merchant_id' => $merchant->id,
+            'customer_reference' => 'net-margin-test',
+            'gateway' => 'hilogate',
+            'status' => 'success',
+            'amount' => 1000000,
+            'submitted_at' => now(),
+        ]);
+
+        $response = $this->actingAs($agentUser)->get(route('agent.fee'))->assertOk();
+        $row = $response->viewData('rows')->firstWhere('merchant_id', $merchant->id);
+        $this->assertNotNull($row);
+        $this->assertEqualsWithDelta(1.50, $row->agent_margin_percent, 0.0001);
+        $this->assertSame((int) round(($existingVolume + 1000000) * 1.50 / 100), $row->fee_amount);
     }
 
     public function test_agent_onboarding_link_is_single_use_and_scoped_to_agent(): void

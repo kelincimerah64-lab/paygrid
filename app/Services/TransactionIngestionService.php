@@ -106,7 +106,7 @@ class TransactionIngestionService
         ));
 
         $amount = $this->numericAmount(Arr::get($payload, 'amount') ?? Arr::get($payload, 'total_amount') ?? 0);
-        $netAmount = $this->numericAmount(Arr::get($payload, 'net_amount') ?? Arr::get($payload, 'net') ?? $amount);
+        $netAmount = $this->numericAmount(Arr::get($payload, 'response.total') ?? Arr::get($payload, 'net_amount') ?? Arr::get($payload, 'net') ?? $amount);
         $feeAmount = $this->numericAmount(Arr::get($payload, 'fee') ?? Arr::get($payload, 'fee_amount') ?? max(0, $amount - $netAmount));
 
         $submittedAt = $this->timestamp(Arr::get($payload, 'created_at') ?? Arr::get($payload, 'createdAt'))
