@@ -31,7 +31,7 @@
 </section>
 
 <section class="card qris-panel section">
-    <div class="qris-toolbar"><h2>Fee Saya (Agent)</h2></div>
+    <div class="qris-toolbar"><h2>Agent Cost</h2></div>
     @include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'agent', 'feeMenus' => $feeMenus, 'rates' => $agent->fee_menu_rates ?? []])
 </section>
 
