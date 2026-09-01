@@ -175,13 +175,42 @@
             <div class="agent-bulk-bar"><div><strong>Bulk Action</strong><span>Pilih request pending, lalu kirim ke MA untuk proses approval.</span></div><div class="actions"><input type="hidden" name="action" value="submit"><button class="btn primary">Submit Selected ke MA</button></div></div>
         @endif
         <table class="table agent-request-table">
-            <thead><tr><th>Nama Toko</th><th>Merchant ID</th><th>Tanggal Request</th><th>User Finance</th><th>User CS</th><th>Status Approval</th><th>Action</th></tr></thead>
+            <thead><tr><th>Nama Toko</th><th>Merchant ID</th><th>Tanggal Request</th><th>User Finance</th><th>User CS</th><th>Status Approval</th><th>Detail</th><th>Action</th></tr></thead>
             <tbody>
             @foreach($registrations as $registration)
-                <tr><td>@if($canResubmit($registration))<input type="checkbox" name="registration_ids[]" value="{{ $registration->id }}">@endif {{ $registration->store_name }}</td><td>{{ $registration->merchant?->merchant_id ?: 'Pending MA' }}</td><td>{{ $registration->created_at->format('d M y') }}</td><td>FIN-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['finance_email'] ?? 'Menunggu approval' }}</span></td><td>CS-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['cs_email'] ?? 'Menunggu approval' }}</span></td><td><span class="badge {{ $statusClass($registration->status) }}">{{ ucfirst(str_replace('_', ' ', $registration->status)) }}</span>@if($registration->status === 'rejected')<br><span class="muted">Revisi {{ $registration->revision_count }}/{{ \App\Http\Controllers\MerchantRegistrationWorkflowController::MAX_REVISIONS }}</span>@endif</td><td>@if($registration->status === 'pending_agent')<button class="btn primary" formaction="{{ route('api.merchant-registration.submit', $registration) }}" formmethod="post">Submit MA</button><button class="btn danger" formaction="{{ route('agent.requests.delete', $registration) }}" formmethod="post" name="_method" value="delete">Delete</button>@elseif($registration->status === 'pending_ma')<span class="badge warn">Terkirim MA</span>@elseif($registration->status === 'rejected' && $canResubmit($registration))<button class="btn primary" formaction="{{ route('api.merchant-registration.submit', $registration) }}" formmethod="post">Submit Ulang</button>@elseif($registration->status === 'rejected')<span class="muted">Batas revisi tercapai</span>@else<span class="muted">-</span>@endif</td></tr>
+                @php($regPayload = (array) ($registration->payload ?? []))
+                @php($regDetailRows = [
+                    'Engine Name' => $registration->engine_name ?: ($regPayload['engine_name'] ?? '-'),
+                    'Tipe Merchant' => strtoupper($registration->merchant_type ?: ($regPayload['merchant_type'] ?? '-')),
+                    'Payment Gateway' => ucfirst($registration->gateway ?: ($regPayload['gateway'] ?? '-')),
+                    'PIC Email' => $regPayload['pic_email'] ?? '-',
+                    'PIC Telegram' => $regPayload['pic_telegram'] ?? '-',
+                    'Finance Email' => $regPayload['finance_email'] ?? '-',
+                    'Finance Telegram' => $regPayload['finance_telegram'] ?? '-',
+                    'CS Email' => $regPayload['cs_email'] ?? '-',
+                    'CS Telegram' => $regPayload['cs_telegram'] ?? '-',
+                    'IP Dashboard' => $regPayload['ip_dashboard'] ?? '-',
+                    'IP Finance' => $regPayload['ip_finance'] ?? '-',
+                    'Settlement Type ID' => $regPayload['settlement_type_id'] ?? $registration->settlement_method ?? '-',
+                    'Transaction Callback' => $regPayload['transaction_callback_url'] ?? '-',
+                    'Withdrawal Callback' => $regPayload['withdrawal_callback_url'] ?? '-',
+                    'API IP Whitelist' => $regPayload['api_ip_whitelist'] ?? '-',
+                    'Whitelist' => ($regPayload['is_whitelisted'] ?? false) ? 'Ya' : 'Tidak',
+                    'Transaction Gateway ID' => $regPayload['transaction_gateway_ids'] ?? '-',
+                    'Withdrawal Gateway ID' => $regPayload['withdrawal_gateway_ids'] ?? '-',
+                    'Merchant MDR' => $pct($regPayload['merchant_mdr_percent'] ?? 0),
+                    'Base MDR' => $pct($regPayload['base_mdr_percent'] ?? 0),
+                    'MA Fee' => $pct($regPayload['ma_fee_percent'] ?? 0),
+                    'Agent Fee' => $pct($regPayload['agent_fee_percent'] ?? 0),
+                    'Pay In Fee' => $pct($regPayload['payin_fee_percent'] ?? 0),
+                    'Disbursement Fee' => $regPayload['disbursement_fee_fixed'] ?? '-',
+                ])
+                <tr><td>@if($canResubmit($registration))<input type="checkbox" name="registration_ids[]" value="{{ $registration->id }}">@endif {{ $registration->store_name }}</td><td>{{ $registration->merchant?->merchant_id ?: 'Pending MA' }}</td><td>{{ $registration->created_at->format('d M y') }}</td><td>FIN-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['finance_email'] ?? 'Menunggu approval' }}</span></td><td>CS-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['cs_email'] ?? 'Menunggu approval' }}</span></td><td><span class="badge {{ $statusClass($registration->status) }}">{{ ucfirst(str_replace('_', ' ', $registration->status)) }}</span>@if($registration->status === 'rejected')<br><span class="muted">Revisi {{ $registration->revision_count }}/{{ \App\Http\Controllers\MerchantRegistrationWorkflowController::MAX_REVISIONS }}</span>@endif</td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-reg-detail-{{ $registration->id }}">Detail</button>
+                <div class="approval-modal" id="agent-reg-detail-{{ $registration->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Request Toko</h2><p class="muted" style="margin:4px 0 0">{{ $registration->store_name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><div class="approval-detail-grid">@foreach($regDetailRows as $label => $value)<div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>@endforeach</div></div></div></td>
+                <td>@if($registration->status === 'pending_agent')<button class="btn primary" formaction="{{ route('api.merchant-registration.submit', $registration) }}" formmethod="post">Submit MA</button><button class="btn danger" formaction="{{ route('agent.requests.delete', $registration) }}" formmethod="post" name="_method" value="delete">Delete</button>@elseif($registration->status === 'pending_ma')<span class="badge warn">Terkirim MA</span>@elseif($registration->status === 'rejected' && $canResubmit($registration))<button class="btn primary" formaction="{{ route('api.merchant-registration.submit', $registration) }}" formmethod="post">Submit Ulang</button>@elseif($registration->status === 'rejected')<span class="muted">Batas revisi tercapai</span>@else<span class="muted">-</span>@endif</td></tr>
             @endforeach
             @foreach($merchants as $merchant)
-                <tr><td>{{ $merchant->name }}</td><td>{{ $merchant->merchant_id }}</td><td>-</td><td>-</td><td>-</td><td><span class="badge ok">Approved</span></td><td>-</td></tr>
+                <tr><td>{{ $merchant->name }}</td><td>{{ $merchant->merchant_id }}</td><td>-</td><td>-</td><td>-</td><td><span class="badge ok">Approved</span></td><td>-</td><td>-</td></tr>
             @endforeach
             </tbody>
         </table>
@@ -211,3 +240,22 @@
     </section>
 @endif
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-approval-detail]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const target = document.getElementById(button.dataset.approvalDetail);
+            if (target) target.hidden = false;
+        });
+    });
+    document.querySelectorAll('.approval-detail-close, .approval-modal').forEach((item) => {
+        item.addEventListener('click', (event) => {
+            if (event.target.closest('.approval-modal-card') && !event.target.classList.contains('approval-detail-close')) return;
+            item.closest('.approval-modal').hidden = true;
+        });
+    });
+});
+</script>
+@endpush
