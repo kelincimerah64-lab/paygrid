@@ -328,6 +328,10 @@ class MaController extends Controller
 
     private function periodFilters(array $filters): array
     {
+        if ($filters['period'] === 'all') {
+            return array_merge($filters, ['from' => '', 'to' => '']);
+        }
+
         $now = now('Asia/Jakarta');
         [$from, $to] = match ($filters['period']) {
             'last_month' => [$now->copy()->subMonthNoOverflow()->startOfMonth()->addSecond(), $now->copy()->subMonthNoOverflow()->endOfMonth()],
