@@ -9,6 +9,7 @@ use App\Models\MerchantSettlement;
 use App\Models\Agent;
 use App\Models\AgentOnboardingLink;
 use App\Models\FeeMenu;
+use App\Models\FeeSnapshot;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
@@ -1145,18 +1146,18 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame(3, $registration->revision_count);
     }
 
-    public function test_agent_fee_page_estimates_net_margin_not_gross_agent_rate(): void
+    public function test_agent_fee_page_shows_each_stores_own_merchant_mdr(): void
     {
         $this->seed();
         $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
         $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
         $merchant = Merchant::query()->where('agent_id', $agent->id)->where('merchant_type', 'cm')->firstOrFail();
-        $merchant->forceFill(['agent_fee_percent' => 2.00, 'ma_fee_percent' => 0.50])->save();
+        $merchant->forceFill(['agent_fee_percent' => 1.00, 'merchant_mdr_percent' => 1.75])->save();
         $existingVolume = (int) TopupRequest::query()->where('merchant_id', $merchant->id)->where('status', 'success')->sum('amount');
 
         TopupRequest::query()->create([
             'merchant_id' => $merchant->id,
-            'customer_reference' => 'net-margin-test',
+            'customer_reference' => 'merchant-mdr-column-test',
             'gateway' => 'hilogate',
             'status' => 'success',
             'amount' => 1000000,
@@ -1164,10 +1165,90 @@ class PayGridRoutingTest extends TestCase
         ]);
 
         $response = $this->actingAs($agentUser)->get(route('agent.fee'))->assertOk();
-        $row = $response->viewData('rows')->firstWhere('merchant_id', $merchant->id);
+        $rows = $response->viewData('rows');
+        $row = $rows->firstWhere('merchant_id', $merchant->id);
         $this->assertNotNull($row);
-        $this->assertEqualsWithDelta(1.50, $row->agent_margin_percent, 0.0001);
-        $this->assertSame((int) round(($existingVolume + 1000000) * 1.50 / 100), $row->fee_amount);
+        $this->assertEqualsWithDelta(1.75, $row->merchant_mdr_percent, 0.0001);
+        $this->assertEqualsWithDelta(1.00, $row->agent_fee_percent, 0.0001);
+        $this->assertSame((int) round(($existingVolume + 1000000) * 1.75 / 100), $row->merchant_fee_amount);
+        $this->assertSame((int) $rows->sum('merchant_fee_amount'), $response->viewData('totalMerchantFee'));
+        $response->assertDontSee('Total Fee MA');
+    }
+
+    public function test_fee_totals_use_the_rate_that_applied_when_the_transaction_happened(): void
+    {
+        $this->seed();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+        $maUser = User::query()->where('role', 'ma')->where('id', $agent->ma_user_id)->firstOrFail();
+        $merchant = Merchant::query()->where('agent_id', $agent->id)->where('merchant_type', 'cm')->firstOrFail();
+
+        // The merchant's CURRENT rate - deliberately left untouched, so any code path that
+        // (wrongly) reads today's rate instead of the historical snapshot will disagree with
+        // the assertions below.
+        $currentAgentRate = (float) $merchant->agent_fee_percent;
+        $currentMaRate = (float) $merchant->ma_fee_percent;
+        $currentMerchantRate = (float) $merchant->merchant_mdr_percent;
+
+        // Rate that was actually in effect when this specific transaction happened, deliberately
+        // different from the current rate above.
+        $historicalAgentRate = $currentAgentRate + 10;
+        $historicalMaRate = $currentMaRate + 6;
+        $historicalMerchantRate = $currentMerchantRate + 8;
+
+        $agentFeeBefore = $this->actingAs($agentUser)->get(route('agent.fee'))->viewData('rows')->firstWhere('merchant_id', $merchant->id)?->fee_amount ?? 0;
+        $agentMerchantFeeBefore = $this->actingAs($agentUser)->get(route('agent.fee'))->viewData('rows')->firstWhere('merchant_id', $merchant->id)?->merchant_fee_amount ?? 0;
+        $maFeeBefore = $this->actingAs($maUser)->get(route('ma.fee'))->viewData('summary')['fee_ma'];
+
+        $topup = TopupRequest::query()->create([
+            'merchant_id' => $merchant->id,
+            'customer_reference' => 'historical-rate-test',
+            'gateway' => 'hilogate',
+            'status' => 'success',
+            'amount' => 1000000,
+            'submitted_at' => now(),
+        ]);
+        FeeSnapshot::query()->create([
+            'topup_request_id' => $topup->id,
+            'merchant_id' => $merchant->id,
+            'merchant_mdr_percent' => $historicalMerchantRate,
+            'ma_fee_percent' => $historicalMaRate,
+            'agent_fee_percent' => $historicalAgentRate,
+        ]);
+
+        $agentResponse = $this->actingAs($agentUser)->get(route('agent.fee'))->assertOk();
+        $agentRow = $agentResponse->viewData('rows')->firstWhere('merchant_id', $merchant->id);
+        $this->assertSame($agentFeeBefore + (int) round(1000000 * ($historicalMerchantRate - $historicalAgentRate) / 100), $agentRow->fee_amount);
+        $this->assertSame($agentMerchantFeeBefore + (int) round(1000000 * $historicalMerchantRate / 100), $agentRow->merchant_fee_amount);
+
+        $maFeeAfter = $this->actingAs($maUser)->get(route('ma.fee'))->assertOk()->viewData('summary')['fee_ma'];
+        $this->assertSame($maFeeBefore + (int) round(1000000 * ($historicalMerchantRate - $historicalMaRate) / 100), $maFeeAfter);
+    }
+
+    public function test_ma_fee_page_shows_estimated_rupiah_per_store(): void
+    {
+        $this->seed();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $maUser = User::query()->where('role', 'ma')->where('id', $agent->ma_user_id)->firstOrFail();
+        $merchant = Merchant::query()->where('agent_id', $agent->id)->where('merchant_type', 'cm')->firstOrFail();
+        $merchant->forceFill(['agent_fee_percent' => 1.00, 'ma_fee_percent' => 0.50, 'merchant_mdr_percent' => 1.75])->save();
+        $existingVolume = (int) TopupRequest::query()->where('merchant_id', $merchant->id)->where('status', 'success')->sum('amount');
+
+        TopupRequest::query()->create([
+            'merchant_id' => $merchant->id,
+            'customer_reference' => 'ma-fee-table-rupiah-test',
+            'gateway' => 'hilogate',
+            'status' => 'success',
+            'amount' => 1000000,
+            'submitted_at' => now(),
+        ]);
+
+        $row = $this->actingAs($maUser)->get(route('ma.fee'))->assertOk()->viewData('merchants')->firstWhere('id', $merchant->id);
+        $this->assertNotNull($row);
+        $volume = $existingVolume + 1000000;
+        $this->assertSame((int) round($volume * 1.75 / 100), $row->merchant_fee_amount);
+        $this->assertSame((int) round($volume * (1.75 - 1.00) / 100), $row->agent_fee_amount);
+        $this->assertSame((int) round($volume * (1.75 - 0.50) / 100), $row->ma_fee_amount);
     }
 
     public function test_agent_onboarding_link_is_single_use_and_scoped_to_agent(): void

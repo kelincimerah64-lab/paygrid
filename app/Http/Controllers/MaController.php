@@ -46,6 +46,17 @@ class MaController extends Controller
         $selectedAgent = $page === 'report' ? $this->selectedAgent($filters) : null;
         $selectedStore = $page === 'report' ? $this->selectedStore($filters) : null;
 
+        $merchants = in_array($page, ['fee', 'mapping', 'stores'], true) ? $this->merchants($filters)->get() : collect();
+        if ($page === 'fee') {
+            $feeAmounts = $this->feeAmountsByMerchant($dataFilters);
+            $merchants->each(function ($m) use ($feeAmounts) {
+                $amounts = $feeAmounts->get($m->id);
+                $m->merchant_fee_amount = (int) round((float) ($amounts->merchant_fee ?? 0));
+                $m->agent_fee_amount = (int) round((float) ($amounts->agent_fee ?? 0));
+                $m->ma_fee_amount = (int) round((float) ($amounts->ma_fee ?? 0));
+            });
+        }
+
         return view('paygrid.ma', [
             'roleLabel' => 'MA',
             'menus' => app(\App\Services\Navigation\MenuBuilder::class)->ma(),
@@ -73,7 +84,7 @@ class MaController extends Controller
             'selectedAgent' => $selectedAgent,
             'selectedStore' => $selectedStore,
             'selectedAgentStores' => $selectedAgent ? $this->selectedAgentStores($filters) : collect(),
-            'merchants' => in_array($page, ['fee', 'mapping', 'stores'], true) ? $this->merchants($filters)->get() : collect(),
+            'merchants' => $merchants,
             'registrations' => $page === 'approval' ? $this->registrations($filters)->get() : collect(),
             'transactions' => $selectedStore ? $this->transactions($dataFilters)->simplePaginate(25)->withQueryString() : null,
             'selectedStoreStats' => $selectedStore ? $this->selectedStoreStats($dataFilters) : null,
@@ -437,7 +448,7 @@ class MaController extends Controller
     {
         return $this->transactionsQuery($filters)
             ->select('topup_requests.*')
-            ->with('merchant.agent')
+            ->with(['merchant.agent', 'feeSnapshot'])
             ->latest('topup_requests.submitted_at');
     }
 
@@ -612,9 +623,10 @@ class MaController extends Controller
     {
         $row = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.ma_fee_percent / 100), 0) as ma')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as agent')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant')
+            ->leftJoin('fee_snapshots', 'fee_snapshots.topup_request_id', '=', 'topup_requests.id')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.ma_fee_percent, merchants.ma_fee_percent)) / 100), 0) as ma')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.agent_fee_percent, merchants.agent_fee_percent)) / 100), 0) as agent')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) / 100), 0) as merchant')
             ->first();
 
         return [
@@ -622,6 +634,20 @@ class MaController extends Controller
             'agent' => (int) round((float) ($row->agent ?? 0)),
             'merchant' => (int) round((float) ($row->merchant ?? 0)),
         ];
+    }
+
+    private function feeAmountsByMerchant(array $filters)
+    {
+        return (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->leftJoin('fee_snapshots', 'fee_snapshots.topup_request_id', '=', 'topup_requests.id')
+            ->selectRaw('topup_requests.merchant_id as merchant_id')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) / 100), 0) as merchant_fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.agent_fee_percent, merchants.agent_fee_percent)) / 100), 0) as agent_fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.ma_fee_percent, merchants.ma_fee_percent)) / 100), 0) as ma_fee')
+            ->groupBy('topup_requests.merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
     }
 
     private function transactionItems($transactions, string $amountField = 'amount'): array
@@ -702,14 +728,16 @@ class MaController extends Controller
     private function feeItems($transactions, string $percentColumn): array
     {
         return $transactions->take(200)->map(function (TopupRequest $trx) use ($percentColumn) {
-            $percent = (float) $trx->merchant?->{$percentColumn};
+            $mdrPercent = (float) ($trx->feeSnapshot?->merchant_mdr_percent ?? $trx->merchant?->merchant_mdr_percent);
+            $tierPercent = (float) ($trx->feeSnapshot?->{$percentColumn} ?? $trx->merchant?->{$percentColumn});
+            $spread = $mdrPercent - $tierPercent;
 
             return [
                 'date' => $trx->submitted_at?->format('d/m/y H.i') ?: '-',
                 'title' => $trx->customer_reference ?: $trx->gateway_ref_id ?: $trx->payment_id ?: '-',
-                'subtitle' => ($trx->merchant?->name ?: '-').' / '.$percent.'%',
+                'subtitle' => ($trx->merchant?->name ?: '-').' / '.$spread.'%',
                 'status' => $trx->status,
-                'amount' => (int) round((int) $trx->amount * ($percent / 100)),
+                'amount' => (int) round((int) $trx->amount * ($spread / 100)),
                 'meta' => 'Volume '.$trx->amount,
             ];
         })->values()->all();
