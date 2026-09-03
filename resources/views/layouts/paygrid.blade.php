@@ -116,8 +116,8 @@
         .bot-monitoring-table th:nth-child(6) { width:14%; }
         .bot-monitoring-table th:nth-child(7) { width:10%; }
         .bot-monitoring-table th:nth-child(8) { width:8%; }
-        .bot-note-row td { height:auto; padding-top:0; color:var(--muted); background:#fbfdff; font-size:11px; }
-        .bot-detail-row td { height:auto; padding:0 8px 10px; background:#fbfdff; }
+        .bot-monitoring-table .bot-note-row td { height:auto; padding-top:0; color:var(--muted); background:#fbfdff; font-size:11px; }
+        .bot-monitoring-table .bot-detail-row td { height:auto; padding:0 8px 10px; background:#fbfdff; }
         .bot-detail-card { border:1px solid #dbe5f2; border-radius:10px; background:#fff; box-shadow:0 8px 22px rgba(14, 35, 70, .045); overflow:hidden; }
         .bot-detail-card .approval-detail-grid { padding:12px; }
         .ma-metric-card { width:100%; text-align:left; font:inherit; cursor:pointer; color:inherit; }
@@ -140,7 +140,7 @@
         .ma-mapping-table th:nth-child(1) { width:28%; }
         .ma-mapping-table th:nth-child(2), .ma-mapping-table th:nth-child(3) { width:27%; }
         .ma-mapping-table th:nth-child(4) { width:18%; }
-        .ma-mapping-table td { height:auto; padding:8px 10px; }
+        .qris-table.ma-mapping-table td { height:auto; padding:8px 10px; }
         .ma-mapping-table select { width:100%; height:32px; min-height:32px; padding:5px 9px; font-weight:900; }
         .current-agent-box { max-width:260px; border:1px solid #dbe5f2; border-radius:8px; background:#fbfdff; padding:8px 10px; }
         .current-agent-box span { display:block; color:#52637a; font-size:10px; font-weight:950; text-transform:uppercase; letter-spacing:.08em; }
@@ -148,7 +148,7 @@
         .ma-store-panel { overflow-x:auto; }
         .ma-store-panel .table-wrap { overflow-x:auto; }
         .ma-store-summary-table { min-width:1040px; table-layout:auto; }
-        .ma-store-summary-table th { white-space:nowrap; }
+        .qris-table.ma-store-summary-table th { white-space:nowrap; }
         .ma-store-summary-table th:nth-child(1) { width:22%; }
         .ma-store-summary-table th:nth-child(2) { width:16%; }
         .ma-store-summary-table th:nth-child(n+3) { width:15%; }
