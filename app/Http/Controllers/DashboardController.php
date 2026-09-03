@@ -86,11 +86,12 @@ class DashboardController extends Controller
             ->get();
         $feeTotal = (int) round((float) TopupRequest::query()
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->leftJoin('fee_snapshots', 'fee_snapshots.topup_request_id', '=', 'topup_requests.id')
             ->where('merchants.agent_id', $agent->id)
             ->where('topup_requests.status', 'success')
             ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()))
             ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()))
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.agent_fee_percent, merchants.agent_fee_percent)) / 100), 0) as fee')
             ->value('fee'));
 
         return view('paygrid.agent-overview', [
@@ -119,17 +120,22 @@ class DashboardController extends Controller
 
         $rows = TopupRequest::query()
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->leftJoin('fee_snapshots', 'fee_snapshots.topup_request_id', '=', 'topup_requests.id')
             ->where('merchants.agent_id', $agent->id)
             ->where('topup_requests.status', 'success')
             ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()))
             ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()))
             ->when($filters['q'] !== '', fn ($query) => $query->where('merchants.name', 'like', '%'.$filters['q'].'%'))
-            ->selectRaw('merchants.id as merchant_id, merchants.name, merchants.slug, merchants.merchant_id as merchant_code, merchants.agent_fee_percent, COUNT(*) as trx, COALESCE(SUM(topup_requests.amount), 0) as volume')
-            ->groupBy('merchants.id', 'merchants.name', 'merchants.slug', 'merchants.merchant_id', 'merchants.agent_fee_percent')
+            ->selectRaw('merchants.id as merchant_id, merchants.name, merchants.slug, merchants.merchant_id as merchant_code, merchants.agent_fee_percent, merchants.merchant_mdr_percent, COUNT(*) as trx, COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.agent_fee_percent, merchants.agent_fee_percent)) / 100), 0) as fee_amount')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) / 100), 0) as merchant_fee_amount')
+            ->groupBy('merchants.id', 'merchants.name', 'merchants.slug', 'merchants.merchant_id', 'merchants.agent_fee_percent', 'merchants.merchant_mdr_percent')
             ->get()
             ->each(function ($row) use ($merchantRates) {
                 $row->agent_fee_percent = (float) $row->agent_fee_percent;
-                $row->fee_amount = (int) round($row->volume * $row->agent_fee_percent / 100);
+                $row->merchant_mdr_percent = (float) $row->merchant_mdr_percent;
+                $row->fee_amount = (int) round((float) $row->fee_amount);
+                $row->merchant_fee_amount = (int) round((float) $row->merchant_fee_amount);
                 $row->fee_menu_rates = $merchantRates[$row->merchant_id] ?? [];
             })
             ->sortByDesc('fee_amount')
@@ -143,6 +149,7 @@ class DashboardController extends Controller
             'feeMenus' => $feeMenus,
             'rows' => $rows,
             'total' => (int) round((float) $rows->sum('fee_amount')),
+            'totalMerchantFee' => (int) round((float) $rows->sum('merchant_fee_amount')),
             'reportFilters' => $filters,
         ]);
     }
