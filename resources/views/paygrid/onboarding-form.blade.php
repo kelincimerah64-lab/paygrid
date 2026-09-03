@@ -67,6 +67,7 @@
         <label>Tipe Merchant<select name="merchant_type"><option value="cm">CM</option><option value="script">Script</option></select></label>
         <label>Payment Gateway<select name="gateway"><option value="hilogate">Hilogate</option><option value="alpha">Alpha</option><option value="artageto">Artageto</option><option value="kingspay">KingsPay</option></select></label>
         <label>Menu Fee<select name="fee_menu"><option value="">Belum dipilih</option>@foreach($feeMenuOptions as $key => $option)<option value="{{ $key }}">{{ $option['label'] }}</option>@endforeach</select></label>
+        <label>Fee (%)<input name="merchant_mdr_percent" inputmode="decimal" placeholder="contoh: 1.2"></label>
         <label>Settlement Type ID<input name="settlement_type_id" placeholder="diisi MA jika belum tahu"></label>
     </div>
 
@@ -94,10 +95,6 @@
     <div class="form-grid">
         <label>Transaction Gateway ID<input name="transaction_gateway_ids" placeholder="default Hilogate jika kosong"></label>
         <label>Withdrawal Gateway ID<input name="withdrawal_gateway_ids" placeholder="default Hilogate jika kosong"></label>
-        <label>Merchant MDR (%)<input name="merchant_mdr_percent" inputmode="decimal" placeholder="contoh: 1.2"></label>
-        <label>Base MDR / HG (%)<input name="base_mdr_percent" inputmode="decimal" placeholder="contoh: 0.8"></label>
-        <label>MA Fee (%)<input name="ma_fee_percent" inputmode="decimal" placeholder="contoh: 0.4"></label>
-        <label>Agent Fee (%)<input name="agent_fee_percent" inputmode="decimal" placeholder="contoh: 0"></label>
         <label>Pay In Fee (%)<input name="payin_fee_percent" inputmode="decimal" placeholder="cashback/marketing fee"></label>
         <label>Disbursement Fee Fixed<input name="disbursement_fee_fixed" inputmode="numeric" placeholder="fee x jumlah disbursement"></label>
     </div>
