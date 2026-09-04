@@ -50,7 +50,7 @@
                     <td>{{ $money($row->volume) }}</td>
                     <td>{{ $pct($row->merchant_mdr_percent) }}</td>
                     <td>{{ $money($row->merchant_fee_amount) }}</td>
-                    <td>{{ $pct($row->agent_fee_percent) }}</td>
+                    <td>{{ $pct($row->merchant_mdr_percent - $row->agent_fee_percent) }}</td>
                     <td><strong>{{ $money($row->fee_amount) }}</strong></td>
                     <td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-fee-store-{{ $row->merchant_id }}">Detail</button>
                     <div class="approval-modal" id="agent-fee-store-{{ $row->merchant_id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Fee Menu</h2><p class="muted" style="margin:4px 0 0">{{ $row->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>@include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'merchant', 'feeMenus' => $feeMenus, 'rates' => $row->fee_menu_rates])</div></div></td>
