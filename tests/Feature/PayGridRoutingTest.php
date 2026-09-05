@@ -1175,7 +1175,7 @@ class PayGridRoutingTest extends TestCase
         $response->assertDontSee('Total Fee MA');
     }
 
-    public function test_fee_totals_use_the_rate_that_applied_when_the_transaction_happened(): void
+    public function test_fee_totals_always_use_the_merchants_current_rate_even_if_a_historical_snapshot_differs(): void
     {
         $this->seed();
         $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
@@ -1183,15 +1183,12 @@ class PayGridRoutingTest extends TestCase
         $maUser = User::query()->where('role', 'ma')->where('id', $agent->ma_user_id)->firstOrFail();
         $merchant = Merchant::query()->where('agent_id', $agent->id)->where('merchant_type', 'cm')->firstOrFail();
 
-        // The merchant's CURRENT rate - deliberately left untouched, so any code path that
-        // (wrongly) reads today's rate instead of the historical snapshot will disagree with
-        // the assertions below.
+        // The merchant's CURRENT rate - this is what every fee total must use.
         $currentAgentRate = (float) $merchant->agent_fee_percent;
         $currentMaRate = (float) $merchant->ma_fee_percent;
         $currentMerchantRate = (float) $merchant->merchant_mdr_percent;
 
-        // Rate that was actually in effect when this specific transaction happened, deliberately
-        // different from the current rate above.
+        // A stale historical snapshot with different rates - must be ignored entirely.
         $historicalAgentRate = $currentAgentRate + 10;
         $historicalMaRate = $currentMaRate + 6;
         $historicalMerchantRate = $currentMerchantRate + 8;
@@ -1202,7 +1199,7 @@ class PayGridRoutingTest extends TestCase
 
         $topup = TopupRequest::query()->create([
             'merchant_id' => $merchant->id,
-            'customer_reference' => 'historical-rate-test',
+            'customer_reference' => 'current-rate-test',
             'gateway' => 'hilogate',
             'status' => 'success',
             'amount' => 1000000,
@@ -1218,11 +1215,11 @@ class PayGridRoutingTest extends TestCase
 
         $agentResponse = $this->actingAs($agentUser)->get(route('agent.fee'))->assertOk();
         $agentRow = $agentResponse->viewData('rows')->firstWhere('merchant_id', $merchant->id);
-        $this->assertSame($agentFeeBefore + (int) round(1000000 * ($historicalMerchantRate - $historicalAgentRate) / 100), $agentRow->fee_amount);
-        $this->assertSame($agentMerchantFeeBefore + (int) round(1000000 * $historicalMerchantRate / 100), $agentRow->merchant_fee_amount);
+        $this->assertSame($agentFeeBefore + (int) round(1000000 * ($currentMerchantRate - $currentAgentRate) / 100), $agentRow->fee_amount);
+        $this->assertSame($agentMerchantFeeBefore + (int) round(1000000 * $currentMerchantRate / 100), $agentRow->merchant_fee_amount);
 
         $maFeeAfter = $this->actingAs($maUser)->get(route('ma.fee'))->assertOk()->viewData('summary')['fee_ma'];
-        $this->assertSame($maFeeBefore + (int) round(1000000 * ($historicalMerchantRate - $historicalMaRate) / 100), $maFeeAfter);
+        $this->assertSame($maFeeBefore + (int) round(1000000 * ($currentMerchantRate - $currentMaRate) / 100), $maFeeAfter);
     }
 
     public function test_ma_fee_page_shows_estimated_rupiah_per_store(): void

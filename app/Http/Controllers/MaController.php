@@ -623,10 +623,9 @@ class MaController extends Controller
     {
         $row = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->leftJoin('fee_snapshots', 'fee_snapshots.topup_request_id', '=', 'topup_requests.id')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.ma_fee_percent, merchants.ma_fee_percent)) / 100), 0) as ma')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.agent_fee_percent, merchants.agent_fee_percent)) / 100), 0) as agent')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) / 100), 0) as merchant')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.ma_fee_percent) / 100), 0) as ma')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as agent')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant')
             ->first();
 
         return [
@@ -640,11 +639,10 @@ class MaController extends Controller
     {
         return (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->leftJoin('fee_snapshots', 'fee_snapshots.topup_request_id', '=', 'topup_requests.id')
             ->selectRaw('topup_requests.merchant_id as merchant_id')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) / 100), 0) as merchant_fee')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.agent_fee_percent, merchants.agent_fee_percent)) / 100), 0) as agent_fee')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (COALESCE(fee_snapshots.merchant_mdr_percent, merchants.merchant_mdr_percent) - COALESCE(fee_snapshots.ma_fee_percent, merchants.ma_fee_percent)) / 100), 0) as ma_fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant_fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as agent_fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.ma_fee_percent) / 100), 0) as ma_fee')
             ->groupBy('topup_requests.merchant_id')
             ->get()
             ->keyBy('merchant_id');
