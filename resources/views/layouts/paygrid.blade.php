@@ -684,6 +684,7 @@
             .bot-monitoring-table td:nth-child(7)::before { content:'Timeline'; }
             .bot-monitoring-table td:nth-child(8)::before { content:'Detail'; }
             .bot-monitoring-table .bot-note-row td, .bot-monitoring-table .bot-detail-row td { display:block; }
+            .bot-monitoring-table .bot-note-row td::before, .bot-monitoring-table .bot-detail-row td::before { content:none; }
             .ma-store-summary-table { min-width:0; }
             .ma-store-summary-table td:nth-child(1)::before { content:'Nama Toko'; }
             .ma-store-summary-table td:nth-child(2)::before { content:'Agen'; }
