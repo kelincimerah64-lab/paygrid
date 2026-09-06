@@ -89,7 +89,7 @@
     <section class="card">
         <div class="filters"><input class="search" placeholder="Cari toko, merchant ID, grup, agen, PIC, status..."></div>
         <div class="table-wrap">
-            <table class="table">
+            <table class="table qris-table agent-store-table">
                 <thead><tr><th>Toko</th><th>Merchant ID</th><th>Grup / Agen</th><th>Gateway / Tipe</th><th>Hitungan Fee</th><th>PIC</th><th>Status</th><th>Provisioning</th><th>Detail</th></tr></thead>
                 <tbody>
                 @forelse($merchants as $merchant)
@@ -125,7 +125,7 @@
     <section class="card">
         <div class="filters"><input class="search" placeholder="Cari toko atau agen..."></div>
         <div class="table-wrap">
-            <table class="table">
+            <table class="table qris-table agent-mapping-table">
                 <thead><tr><th>Toko</th><th>Agen Sekarang</th><th>Pilih Agen</th><th>Simpan</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
@@ -143,10 +143,12 @@
 @elseif($active === 'agents')
     <section class="card">
         <div class="filters"><input class="search" placeholder="Cari agen, email, kontak, fee, status, group HG..."></div>
-        <table class="table">
+        <div class="table-wrap">
+        <table class="table qris-table agent-list-table">
             <thead><tr><th>Agen ID</th><th>Nama Agen</th><th>Email</th><th>HG Group ID</th><th>Fee Agen</th><th>Status</th></tr></thead>
             <tbody>@foreach($agents as $rowAgent)<tr><td>{{ $rowAgent->code }}</td><td>{{ $rowAgent->name }}</td><td>{{ $rowAgent->email ?: '-' }}</td><td>{{ $rowAgent->hg_group_id ?: '-' }}</td><td>{{ $pct($rowAgent->default_agent_fee_percent) }}</td><td><span class="badge ok">Active</span></td></tr>@endforeach</tbody>
         </table>
+        </div>
     </section>
 @elseif($active === 'fee')
     <section class="card pad">
@@ -174,7 +176,8 @@
         @if($hasBulkSelectable)
             <div class="agent-bulk-bar"><div><strong>Bulk Action</strong><span>Pilih request pending, lalu kirim ke MA untuk proses approval.</span></div><div class="actions"><input type="hidden" name="action" value="submit"><button class="btn primary">Submit Selected ke MA</button></div></div>
         @endif
-        <table class="table agent-request-table">
+        <div class="table-wrap">
+        <table class="table qris-table agent-request-table">
             <thead><tr><th>Nama Toko</th><th>Merchant ID</th><th>Tanggal Request</th><th>User Finance</th><th>User CS</th><th>Status Approval</th><th>Detail</th><th>Action</th></tr></thead>
             <tbody>
             @foreach($registrations as $registration)
@@ -214,6 +217,7 @@
             @endforeach
             </tbody>
         </table>
+        </div>
         </form>
     </section>
 @elseif(in_array($active, ['create-store', 'new-store']))
@@ -230,7 +234,7 @@
     </section>
     <section class="card section">
         <div class="qris-toolbar"><h2>Link Terakhir</h2><span class="muted">{{ ($onboardingLinks ?? collect())->count() }} link</span></div>
-        <form method="post" action="{{ route('agent.onboarding-links.bulk') }}">@csrf<input type="hidden" name="action" value="expire"><div class="actions pad"><button class="btn danger">Expire Selected</button></div><div class="table-wrap"><table class="table agent-link-table"><thead><tr><th>Pilih</th><th>Dibuat</th><th>Penerima</th><th>Status</th><th>Link</th><th>Request</th><th>Aksi</th></tr></thead><tbody>@forelse(($onboardingLinks ?? collect()) as $row)@php($effectiveStatus = $row->isUsable() ? $row->status : 'expired')<tr><td class="checkbox-cell">@if($row->isUsable())<input type="checkbox" name="link_ids[]" value="{{ $row->id }}">@else<span class="muted">-</span>@endif</td><td class="time-cell">{{ $row->created_at->format('d M y') }}<span>{{ $row->created_at->format('H:i') }}</span></td><td><strong>{{ $row->recipient_email ?: '-' }}</strong><br><span class="muted">{{ $row->recipient_telegram ?: '-' }}</span></td><td><span class="badge {{ $effectiveStatus === 'active' ? 'ok' : 'warn' }}">{{ ucfirst($effectiveStatus) }}</span></td><td><input readonly value="{{ route('merchant-registration.token-form', $row) }}"></td><td>{{ $row->registration?->store_name ?: '-' }}</td><td>@if($row->isUsable())<button class="btn danger" formaction="{{ route('agent.onboarding-links.expire', $row) }}" formmethod="post">Expire</button>@else<span class="muted">-</span>@endif</td></tr>@empty<tr><td colspan="7" class="empty">Belum ada link.</td></tr>@endforelse</tbody></table></div></form>
+        <form method="post" action="{{ route('agent.onboarding-links.bulk') }}">@csrf<input type="hidden" name="action" value="expire"><div class="actions pad"><button class="btn danger">Expire Selected</button></div><div class="table-wrap"><table class="table qris-table agent-link-table"><thead><tr><th>Pilih</th><th>Dibuat</th><th>Penerima</th><th>Status</th><th>Link</th><th>Request</th><th>Aksi</th></tr></thead><tbody>@forelse(($onboardingLinks ?? collect()) as $row)@php($effectiveStatus = $row->isUsable() ? $row->status : 'expired')<tr><td class="checkbox-cell">@if($row->isUsable())<input type="checkbox" name="link_ids[]" value="{{ $row->id }}">@else<span class="muted">-</span>@endif</td><td class="time-cell">{{ $row->created_at->format('d M y') }}<span>{{ $row->created_at->format('H:i') }}</span></td><td><strong>{{ $row->recipient_email ?: '-' }}</strong><br><span class="muted">{{ $row->recipient_telegram ?: '-' }}</span></td><td><span class="badge {{ $effectiveStatus === 'active' ? 'ok' : 'warn' }}">{{ ucfirst($effectiveStatus) }}</span></td><td><input readonly value="{{ route('merchant-registration.token-form', $row) }}"></td><td>{{ $row->registration?->store_name ?: '-' }}</td><td>@if($row->isUsable())<button class="btn danger" formaction="{{ route('agent.onboarding-links.expire', $row) }}" formmethod="post">Expire</button>@else<span class="muted">-</span>@endif</td></tr>@empty<tr><td colspan="7" class="empty">Belum ada link.</td></tr>@endforelse</tbody></table></div></form>
     </section>
     <script>document.addEventListener('DOMContentLoaded', () => document.querySelector('[data-copy-onboarding-link]')?.addEventListener('click', () => navigator.clipboard?.writeText(document.querySelector('[data-onboarding-link]')?.value || '')));</script>
 @else

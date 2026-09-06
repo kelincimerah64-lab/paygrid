@@ -715,6 +715,40 @@
             .fee-menu-settings-table td:nth-child(6)::before { content:'Toko Aktif'; }
             .fee-menu-settings-table td:nth-child(7)::before { content:'Toko Floor %'; }
             .fee-menu-settings-table td:nth-child(8)::before { content:'Hapus'; }
+            .agent-store-table td:nth-child(1)::before { content:'Toko'; }
+            .agent-store-table td:nth-child(2)::before { content:'Merchant ID'; }
+            .agent-store-table td:nth-child(3)::before { content:'Grup / Agen'; }
+            .agent-store-table td:nth-child(4)::before { content:'Gateway / Tipe'; }
+            .agent-store-table td:nth-child(5)::before { content:'Hitungan Fee'; }
+            .agent-store-table td:nth-child(6)::before { content:'PIC'; }
+            .agent-store-table td:nth-child(7)::before { content:'Status'; }
+            .agent-store-table td:nth-child(8)::before { content:'Provisioning'; }
+            .agent-store-table td:nth-child(9)::before { content:'Detail'; }
+            .agent-mapping-table td:nth-child(1)::before { content:'Toko'; }
+            .agent-mapping-table td:nth-child(2)::before { content:'Agen Sekarang'; }
+            .agent-mapping-table td:nth-child(3)::before { content:'Pilih Agen'; }
+            .agent-mapping-table td:nth-child(4)::before { content:'Simpan'; }
+            .agent-list-table td:nth-child(1)::before { content:'Agen ID'; }
+            .agent-list-table td:nth-child(2)::before { content:'Nama Agen'; }
+            .agent-list-table td:nth-child(3)::before { content:'Email'; }
+            .agent-list-table td:nth-child(4)::before { content:'HG Group ID'; }
+            .agent-list-table td:nth-child(5)::before { content:'Fee Agen'; }
+            .agent-list-table td:nth-child(6)::before { content:'Status'; }
+            .agent-request-table td:nth-child(1)::before { content:'Nama Toko'; }
+            .agent-request-table td:nth-child(2)::before { content:'Merchant ID'; }
+            .agent-request-table td:nth-child(3)::before { content:'Tanggal Request'; }
+            .agent-request-table td:nth-child(4)::before { content:'User Finance'; }
+            .agent-request-table td:nth-child(5)::before { content:'User CS'; }
+            .agent-request-table td:nth-child(6)::before { content:'Status Approval'; }
+            .agent-request-table td:nth-child(7)::before { content:'Detail'; }
+            .agent-request-table td:nth-child(8)::before { content:'Action'; }
+            .admin-monitoring-table td:nth-child(1)::before { content:'Waktu'; }
+            .admin-monitoring-table td:nth-child(2)::before { content:'Merchant'; }
+            .admin-monitoring-table td:nth-child(3)::before { content:'Gateway'; }
+            .admin-monitoring-table td:nth-child(4)::before { content:'Status'; }
+            .admin-monitoring-table td:nth-child(5)::before { content:'HTTP'; }
+            .admin-monitoring-table td:nth-child(6)::before { content:'Pesan'; }
+            .admin-monitoring-table td:nth-child(7)::before { content:'Action'; }
         }
         @media (max-width: 560px) {
             main { padding:14px 10px 30px; }

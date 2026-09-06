@@ -10,7 +10,7 @@
 </section>
 <section class="card section">
     <form method="get" class="filters"><select name="gateway"><option value="">Semua gateway</option><option value="hilogate" @selected(request('gateway') === 'hilogate')>Hilogate</option></select><select name="status"><option value="">Semua status</option><option value="success" @selected(request('status') === 'success')>Success</option><option value="failed" @selected(request('status') === 'failed')>Failed</option></select><input type="date" name="from" value="{{ request('from') }}"><input type="date" name="to" value="{{ request('to') }}"><button class="btn primary">Filter</button></form>
-    <div class="table-wrap"><table class="table"><thead><tr><th>Waktu</th><th>Merchant</th><th>Gateway</th><th>Status</th><th>HTTP</th><th>Pesan</th><th>Action</th></tr></thead><tbody>
+    <div class="table-wrap"><table class="table qris-table admin-monitoring-table"><thead><tr><th>Waktu</th><th>Merchant</th><th>Gateway</th><th>Status</th><th>HTTP</th><th>Pesan</th><th>Action</th></tr></thead><tbody>
     @forelse($logs as $log)
         <tr><td>{{ $log->created_at?->format('d/m/Y H:i:s') }}</td><td>{{ $log->merchant?->name ?? '-' }}</td><td>{{ strtoupper($log->gateway) }}</td><td><span class="badge {{ $log->status === 'success' ? 'ok' : ($log->status === 'failed' ? 'danger' : 'warn') }}">{{ strtoupper($log->status) }}</span></td><td>{{ $log->http_status ?? '-' }}</td><td class="truncate" style="max-width:300px">{{ $log->message }}</td><td>@if($log->merchant)<form method="post" action="{{ route('api.merchant.sync.retry', $log->merchant) }}">@csrf<button class="btn">Retry</button></form>@endif</td></tr>
     @empty
