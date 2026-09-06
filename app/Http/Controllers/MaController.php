@@ -173,7 +173,19 @@ class MaController extends Controller
         $audit->record('ma.agent_created', $agent, null, $agent->toArray());
         $audit->record('ma.agent_account_created', $agentUser, null, $agentUser->only(['email', 'username', 'role']));
 
-        return back()->with('status', 'Agen lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG.');
+        $csUser = User::query()->create([
+            'name' => 'CS '.$agent->name,
+            'email' => 'cs-'.strtolower($agent->code).'@paygrid.local',
+            'username' => 'CS-'.$agent->code,
+            'role' => 'cs_agent',
+            'agent_id' => $agent->id,
+            'is_active' => $isActive,
+            'password' => Hash::make($password),
+            'plain_password' => $password,
+        ]);
+        $audit->record('ma.cs_agent_created', $csUser, null, $csUser->only(['email', 'username', 'role']));
+
+        return back()->with('status', 'Agen lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG. Akun CS Agent — Username: '.$csUser->username.', Password: '.$password.'.');
     }
 
     public function mapAgent(Request $request, Merchant $merchant, AuditLogService $audit, FeeSyncService $feeSync): RedirectResponse

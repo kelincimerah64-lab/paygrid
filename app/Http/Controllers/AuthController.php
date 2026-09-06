@@ -65,6 +65,22 @@ class AuthController extends Controller
             return back()->withErrors(['email' => 'Akun belum terhubung ke merchant. Hubungi admin.'])->onlyInput('email');
         }
 
+        if ($request->user()->role === 'cs_ma' && ! $request->user()->ma_user_id) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()->withErrors(['email' => 'Akun belum terhubung ke MA. Hubungi admin.'])->onlyInput('email');
+        }
+
+        if ($request->user()->role === 'cs_agent' && ! $request->user()->agent_id) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()->withErrors(['email' => 'Akun belum terhubung ke agent. Hubungi admin.'])->onlyInput('email');
+        }
+
         $this->auditAuth('auth.login_success', $request->user(), $request);
 
         if (in_array($request->user()->role, ['cs', 'finance', 'admin', 'readonly_admin', 'readonly_cs'], true)) {
@@ -100,6 +116,8 @@ class AuthController extends Controller
             'ma' => route('ma.overview'),
             'cs' => $user?->merchant ? route('merchant.cs.tickets', $user->merchant) : route('login'),
             'readonly_cs' => $user?->merchant ? route('merchant.cs.tickets', $user->merchant) : route('login'),
+            'cs_ma' => route('cs-scope.index'),
+            'cs_agent' => route('cs-scope.index'),
             'finance' => $user?->merchant ? route('merchant.finance.overview', $user->merchant) : route('login'),
             default => route('login'),
         };

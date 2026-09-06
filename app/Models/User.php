@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
-#[Fillable(['name', 'email', 'username', 'contact', 'role', 'is_active', 'merchant_id', 'base_hg_percent', 'connection_type', 'connection_fee_percent', 'settlement_method', 'settlement_fee_percent', 'ma_fee_percent', 'fee_menu', 'fee_menu_rates', 'password', 'plain_password'])]
+#[Fillable(['name', 'email', 'username', 'contact', 'role', 'is_active', 'merchant_id', 'ma_user_id', 'agent_id', 'base_hg_percent', 'connection_type', 'connection_fee_percent', 'settlement_method', 'settlement_fee_percent', 'ma_fee_percent', 'fee_menu', 'fee_menu_rates', 'password', 'plain_password'])]
 #[Hidden(['password', 'plain_password', 'remember_token'])]
 class User extends Authenticatable
 {

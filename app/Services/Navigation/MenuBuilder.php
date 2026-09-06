@@ -44,6 +44,13 @@ class MenuBuilder
         ];
     }
 
+    public function csScope(): array
+    {
+        return [
+            ['key' => 'monitor', 'label' => 'Monitor', 'url' => route('cs-scope.index')],
+        ];
+    }
+
     public function centerSupport(): array
     {
         return [

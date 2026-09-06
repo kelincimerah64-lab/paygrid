@@ -265,6 +265,8 @@ class PayGridRoutingTest extends TestCase
             'fee_menu_rates' => ['h_plus_1_sc' => '0,85'],
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('users', ['email' => 'ma-baru@paygrid.local', 'role' => 'ma']);
+        $newMa = User::query()->where('email', 'ma-baru@paygrid.local')->firstOrFail();
+        $this->assertDatabaseHas('users', ['role' => 'cs_ma', 'ma_user_id' => $newMa->id]);
 
         $this->post(route('superadmin.merchant-fee.update', $merchant), [
             'fee_menu_rates' => ['same_day' => '1.35'],
@@ -282,6 +284,8 @@ class PayGridRoutingTest extends TestCase
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('agents', ['code' => 'AG-GROUP-BARU', 'name' => 'Group Baru']);
         $this->assertDatabaseHas('users', ['username' => 'AG-GROUP-BARU', 'role' => 'agent']);
+        $newAgent = Agent::query()->where('code', 'AG-GROUP-BARU')->firstOrFail();
+        $this->assertDatabaseHas('users', ['role' => 'cs_agent', 'agent_id' => $newAgent->id]);
 
         $this->post('/logout')->assertRedirect('/login');
         $this->post('/login', [
@@ -793,6 +797,143 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame(1, SupportTicket::query()->where('topup_request_id', $topup->id)->count());
     }
 
+    public function test_cs_agent_can_monitor_and_push_tickets_only_within_their_agent(): void
+    {
+        $this->seed();
+
+        $epc = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $inScopeMerchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $outOfScopeMerchant = Merchant::query()->where('slug', 'valohoki-1lg')->firstOrFail();
+
+        $csAgent = User::query()->create([
+            'name' => 'CS AG-EPC',
+            'email' => 'cs-ag-epc-test@paygrid.local',
+            'username' => 'CS-AG-EPC-TEST',
+            'role' => 'cs_agent',
+            'agent_id' => $epc->id,
+            'password' => Hash::make(config('paygrid.demo_password')),
+        ]);
+
+        $topup = TopupRequest::query()->create([
+            'merchant_id' => $inScopeMerchant->id,
+            'gateway' => $inScopeMerchant->gateway,
+            'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'cs-agent-scope-ref',
+            'transaction_id' => 'cs-agent-scope-trx',
+            'status' => 'expired',
+            'amount' => 50000,
+            'net_amount' => 49500,
+            'fee_amount' => 500,
+            'submitted_at' => now()->subHour(),
+            'expires_at' => now()->subMinutes(20),
+        ]);
+
+        $this->actingAs($csAgent)
+            ->get('/portal/nnp-cm-bj/cs/tickets')
+            ->assertOk();
+
+        $this->actingAs($csAgent)
+            ->get('/portal/valohoki-1lg/cs/tickets')
+            ->assertForbidden();
+
+        $this->actingAs($csAgent)
+            ->get(route('cs-scope.index'))
+            ->assertOk()
+            ->assertSee('nnp CM - BJ');
+
+        $this->actingAs($csAgent)
+            ->post(route('merchant.cs.topup.ticket', [$inScopeMerchant, $topup]), ['note' => 'Push dari CS Agent.'])
+            ->assertRedirect()
+            ->assertSessionHas('status');
+        $this->assertDatabaseHas('support_tickets', ['topup_request_id' => $topup->id, 'merchant_id' => $inScopeMerchant->id]);
+
+        $outOfScopeTopup = TopupRequest::query()->create([
+            'merchant_id' => $outOfScopeMerchant->id,
+            'gateway' => $outOfScopeMerchant->gateway,
+            'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'cs-agent-out-of-scope-ref',
+            'transaction_id' => 'cs-agent-out-of-scope-trx',
+            'status' => 'expired',
+            'amount' => 50000,
+            'net_amount' => 49500,
+            'fee_amount' => 500,
+            'submitted_at' => now()->subHour(),
+            'expires_at' => now()->subMinutes(20),
+        ]);
+
+        $this->actingAs($csAgent)
+            ->post(route('merchant.cs.topup.ticket', [$outOfScopeMerchant, $outOfScopeTopup]), ['note' => 'Should be blocked.'])
+            ->assertForbidden();
+
+        $this->actingAs($csAgent)
+            ->patch(route('api.checklist.update', $topup), ['checked' => true])
+            ->assertForbidden();
+
+        $this->actingAs($csAgent)->get('/cs-pusat')->assertForbidden();
+    }
+
+    public function test_cs_ma_can_monitor_across_every_agent_under_their_ma(): void
+    {
+        $this->seed();
+
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $epcMerchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $otherMerchant = Merchant::query()->where('slug', 'valohoki-1lg')->firstOrFail();
+
+        $csMa = User::query()->create([
+            'name' => 'CS Michael',
+            'email' => 'cs-ma-test@paygrid.local',
+            'username' => 'CS-MA-TEST',
+            'role' => 'cs_ma',
+            'ma_user_id' => $ma->id,
+            'password' => Hash::make(config('paygrid.demo_password')),
+        ]);
+
+        // Both AG-EPC and AG-OTHER belong to the same MA (michael) - a cs_ma must see both.
+        $this->actingAs($csMa)->get('/portal/nnp-cm-bj/cs/tickets')->assertOk();
+        $this->actingAs($csMa)->get('/portal/valohoki-1lg/cs/tickets')->assertOk();
+
+        $this->actingAs($csMa)
+            ->get(route('cs-scope.index'))
+            ->assertOk();
+
+        // A merchant under a completely different MA must stay out of scope.
+        $otherMaUser = User::query()->create([
+            'name' => 'Other MA',
+            'email' => 'other-ma-test@paygrid.local',
+            'role' => 'ma',
+            'password' => Hash::make(config('paygrid.demo_password')),
+        ]);
+        $otherAgent = Agent::query()->create([
+            'ma_user_id' => $otherMaUser->id,
+            'code' => 'AG-OTHER-MA-TEST',
+            'name' => 'Other MA Agent',
+            'email' => 'other-ma-agent-test@paygrid.local',
+            'password_plain' => config('paygrid.demo_password'),
+            'connection_type' => 'cm',
+            'is_active' => true,
+        ]);
+        $foreignMerchant = Merchant::query()->create([
+            'agent_id' => $otherAgent->id,
+            'slug' => 'foreign-ma-merchant-test',
+            'name' => 'Foreign MA Merchant',
+            'merchant_id' => 'foreign-ma-merchant-test-id',
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'approval_status' => 'approved',
+            'merchant_mdr_percent' => 1.2,
+        ]);
+
+        $this->actingAs($csMa)
+            ->get('/portal/foreign-ma-merchant-test/cs/tickets')
+            ->assertForbidden();
+
+        $scopedIds = app(\App\Services\CsScopeResolver::class)->merchantIds($csMa);
+        $this->assertContains($epcMerchant->id, $scopedIds);
+        $this->assertContains($otherMerchant->id, $scopedIds);
+        $this->assertNotContains($foreignMerchant->id, $scopedIds);
+    }
+
     public function test_script_cs_can_create_ticket_from_history_without_attachment(): void
     {
         $this->seed();
@@ -1047,6 +1188,8 @@ class PayGridRoutingTest extends TestCase
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('agents', ['code' => 'AGN-AGEN-LOKAL', 'name' => 'Agen Lokal']);
         $this->assertDatabaseHas('users', ['username' => 'AGN-AGEN-LOKAL', 'role' => 'agent']);
+        $localAgent = Agent::query()->where('code', 'AGN-AGEN-LOKAL')->firstOrFail();
+        $this->assertDatabaseHas('users', ['role' => 'cs_agent', 'agent_id' => $localAgent->id]);
 
         $this->post(route('ma.mapping.update', $merchant), ['agent_id' => $agent->id])
             ->assertRedirect()->assertSessionHas('status');

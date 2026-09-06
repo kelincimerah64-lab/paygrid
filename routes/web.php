@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ChecklistController;
+use App\Http\Controllers\CsScopeController;
 use App\Http\Controllers\CenterSupportController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
@@ -109,8 +110,12 @@ Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
     Route::post('/api/merchants/{merchant}/sync/retry', [GatewaySyncRetryController::class, 'store'])->name('api.merchant.sync.retry');
 });
 
+Route::middleware(['auth', 'role:cs_ma,cs_agent'])->group(function () {
+Route::get('/portal/cs-scope', [CsScopeController::class, 'index'])->name('cs-scope.index');
+});
+
 Route::get('/portal/{merchant}/cs', fn ($merchant) => redirect()->route('merchant.cs.tickets', $merchant));
-Route::middleware(['auth', 'role:cs,readonly_cs,ma,admin,readonly_admin,superadmin', 'merchant.scope'])->group(function () {
+Route::middleware(['auth', 'role:cs,readonly_cs,cs_ma,cs_agent,ma,admin,readonly_admin,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/cs/tickets', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'tickets', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.tickets');
 Route::get('/portal/{merchant}/cs/topup', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'topup', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.topup');
 Route::get('/portal/{merchant}/cs/checklist', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'checklist', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.checklist');

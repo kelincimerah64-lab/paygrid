@@ -105,7 +105,20 @@ class SuperadminController extends Controller
         ]);
         $audit->record('superadmin.ma_created', $user, null, $user->only(['name', 'email', 'contact', 'is_active']));
 
-        return back()->with('status', 'MA berhasil dibuat.');
+        $csPassword = config('paygrid.demo_password');
+        $csUser = User::query()->create([
+            'name' => 'CS '.$user->name,
+            'email' => 'cs-ma-'.$user->id.'@paygrid.local',
+            'username' => 'CS-MA-'.$user->id,
+            'role' => 'cs_ma',
+            'ma_user_id' => $user->id,
+            'is_active' => $user->is_active,
+            'password' => Hash::make($csPassword),
+            'plain_password' => $csPassword,
+        ]);
+        $audit->record('superadmin.cs_ma_created', $csUser, null, $csUser->only(['email', 'username', 'role']));
+
+        return back()->with('status', 'MA berhasil dibuat. Akun CS MA — Username: '.$csUser->username.', Password: '.$csPassword.'.');
     }
 
     public function updateMa(Request $request, User $user, AuditLogService $audit, FeeSyncService $feeSync): RedirectResponse
@@ -197,7 +210,20 @@ class SuperadminController extends Controller
         $audit->record('superadmin.agent_created', $agent, null, $agent->toArray());
         $audit->record('superadmin.agent_account_created', $agentUser, null, $agentUser->only(['name', 'email', 'username', 'role']));
 
-        return back()->with('status', 'Merchant Group lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG.');
+        $csUser = User::query()->updateOrCreate(
+            ['agent_id' => $agent->id, 'role' => 'cs_agent'],
+            [
+                'name' => 'CS '.$agent->name,
+                'email' => 'cs-'.Str::lower($agent->code).'@paygrid.local',
+                'username' => 'CS-'.$agent->code,
+                'is_active' => (bool) $agent->is_active,
+                'password' => Hash::make($password),
+                'plain_password' => $password,
+            ],
+        );
+        $audit->record('superadmin.cs_agent_created', $csUser, null, $csUser->only(['email', 'username', 'role']));
+
+        return back()->with('status', 'Merchant Group lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG. Akun CS Agent — Username: '.$csUser->username.', Password: '.$password.'.');
     }
 
     public function updateTimer(Request $request, AuditLogService $audit): RedirectResponse
