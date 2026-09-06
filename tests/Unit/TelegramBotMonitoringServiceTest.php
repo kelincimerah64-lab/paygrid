@@ -82,8 +82,8 @@ class TelegramBotMonitoringServiceTest extends TestCase
         $this->assertEqualsWithDelta(3.0, $result['kpis']['avg_pickup_minutes'], 0.01);
         $this->assertSame(['API Error', 'Dashboard Lemot'], $result['categories']);
         $this->assertSame(['ticket_id', 'created_at', 'requester_name', 'requester_username', 'category', 'status', 'assigned_name', 'pickup_minutes', 'handling_minutes', 'total_resolution_minutes', 'has_attachment', 'telegram_chat_id', 'last_note'], $result['headers']);
-        $this->assertSame('Refund sudah clear', $result['tickets'][0]['last_note']);
-        $this->assertContains(['key' => 'last_note', 'label' => 'Last Note', 'value' => 'Refund sudah clear'], $result['tickets'][0]['sheet_fields']);
+        $this->assertSame('Done by bot', $result['tickets'][0]['last_note']);
+        $this->assertContains(['key' => 'last_note', 'label' => 'Last Note', 'value' => 'Done by bot'], $result['tickets'][0]['sheet_fields']);
 
         Cache::flush();
         $filtered = $service->data(['category' => 'API Error']);

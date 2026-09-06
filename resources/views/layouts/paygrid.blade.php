@@ -674,6 +674,16 @@
             .agent-ticket-table td:nth-child(7)::before { content:'Status'; }
             .agent-ticket-table td:nth-child(8)::before { content:'Catatan'; }
             .agent-ticket-table td:nth-child(9)::before { content:'Submitted'; }
+            .bot-monitoring-table { min-width:0; }
+            .bot-monitoring-table td:nth-child(1)::before { content:'Ticket'; }
+            .bot-monitoring-table td:nth-child(2)::before { content:'Requester'; }
+            .bot-monitoring-table td:nth-child(3)::before { content:'Kategori'; }
+            .bot-monitoring-table td:nth-child(4)::before { content:'Status'; }
+            .bot-monitoring-table td:nth-child(5)::before { content:'Handler'; }
+            .bot-monitoring-table td:nth-child(6)::before { content:'SLA'; }
+            .bot-monitoring-table td:nth-child(7)::before { content:'Timeline'; }
+            .bot-monitoring-table td:nth-child(8)::before { content:'Detail'; }
+            .bot-monitoring-table .bot-note-row td, .bot-monitoring-table .bot-detail-row td { display:block; }
         }
         @media (max-width: 560px) {
             main { padding:14px 10px 30px; }

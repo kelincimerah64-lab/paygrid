@@ -34,7 +34,7 @@ class TelegramBotMonitoringService
         }
 
         $all = $this->normalize($rows);
-        $tickets = $this->filter($all, $filters);
+        $tickets = $this->filter($all, $filters)->sortByDesc('created_at');
 
         return [
             'headers' => $this->headers($rows),
