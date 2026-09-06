@@ -684,6 +684,36 @@
             .bot-monitoring-table td:nth-child(7)::before { content:'Timeline'; }
             .bot-monitoring-table td:nth-child(8)::before { content:'Detail'; }
             .bot-monitoring-table .bot-note-row td, .bot-monitoring-table .bot-detail-row td { display:block; }
+            .ma-store-summary-table { min-width:0; }
+            .ma-store-summary-table td:nth-child(1)::before { content:'Nama Toko'; }
+            .ma-store-summary-table td:nth-child(2)::before { content:'Agen'; }
+            .ma-store-summary-table td:nth-child(3)::before { content:'Transaksi Sukses'; }
+            .ma-store-summary-table td:nth-child(4)::before { content:'Volume Sukses'; }
+            .ma-store-summary-table td:nth-child(5)::before { content:'Saldo Pending HG'; }
+            .ma-store-summary-table td:nth-child(6)::before { content:'Settlement'; }
+            .ma-report-table { min-width:0; }
+            .ma-report-table td:nth-child(1)::before { content:'Masuk'; }
+            .ma-report-table td:nth-child(2)::before { content:'Sukses'; }
+            .ma-report-table td:nth-child(3)::before { content:'Durasi'; }
+            .ma-report-table td:nth-child(4)::before { content:'Toko'; }
+            .ma-report-table td:nth-child(5)::before { content:'Agen'; }
+            .ma-report-table td:nth-child(6)::before { content:'Status'; }
+            .ma-report-table td:nth-child(7)::before { content:'Amount'; }
+            .ma-report-table td:nth-child(8)::before { content:'Reference'; }
+            .ma-report-table td:nth-child(9)::before { content:'RRN'; }
+            .ma-report-table td:nth-child(10)::before { content:'Payment ID'; }
+            .ma-report-table td:nth-child(11)::before { content:'Net'; }
+            .ma-report-table td:nth-child(12)::before { content:'Settlement'; }
+            .ma-report-table td:nth-child(13)::before { content:'Sumber TRX'; }
+            .fee-menu-settings-table { min-width:0; }
+            .fee-menu-settings-table td:nth-child(1)::before { content:'Menu'; }
+            .fee-menu-settings-table td:nth-child(2)::before { content:'MA Aktif'; }
+            .fee-menu-settings-table td:nth-child(3)::before { content:'MA Floor %'; }
+            .fee-menu-settings-table td:nth-child(4)::before { content:'Agent Aktif'; }
+            .fee-menu-settings-table td:nth-child(5)::before { content:'Agent Floor %'; }
+            .fee-menu-settings-table td:nth-child(6)::before { content:'Toko Aktif'; }
+            .fee-menu-settings-table td:nth-child(7)::before { content:'Toko Floor %'; }
+            .fee-menu-settings-table td:nth-child(8)::before { content:'Hapus'; }
         }
         @media (max-width: 560px) {
             main { padding:14px 10px 30px; }
