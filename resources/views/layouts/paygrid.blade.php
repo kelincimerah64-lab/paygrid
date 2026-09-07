@@ -96,10 +96,13 @@
         .qris-metrics { grid-template-columns:repeat(4, minmax(0, 1fr)); margin-bottom:12px; gap:12px; }
         .qris-metrics.history-metrics { grid-template-columns:repeat(5, minmax(0, 1fr)); }
         .qris-metrics.ticket-metrics { grid-template-columns:1.4fr 1fr 1fr; }
-        .qris-metric { min-height:102px; border-radius:10px; position:relative; overflow:hidden; }
+        .qris-metric { min-height:102px; border-radius:10px; position:relative; overflow:hidden; container-type:inline-size; }
         .qris-metric::after { content:""; position:absolute; width:64px; height:64px; right:-24px; top:-24px; border-radius:999px; background:rgba(255,255,255,.35); }
         .qris-metric span { display:block; font-size:10px; letter-spacing:.09em; text-transform:uppercase; font-weight:950; color:#42526b; }
-        .qris-metric strong { display:block; margin-top:10px; font-size:23px; letter-spacing:-.035em; overflow-wrap:anywhere; }
+        .qris-metric strong { display:block; margin-top:10px; font-size:23px; letter-spacing:-.035em; white-space:nowrap; }
+        @container (max-width: 150px) { .qris-metric strong { font-size:19px; } }
+        @container (max-width: 120px) { .qris-metric strong { font-size:15px; } }
+        @container (max-width: 95px) { .qris-metric strong { font-size:12px; } }
         .qris-metric small { display:block; margin-top:6px; color:#5a6b82; font-size:12px; font-weight:700; line-height:1.35; }
         .qris-metric.primary { background:linear-gradient(135deg, #1557c2, #1f6fe5); color:#fff; border-color:#1d67d7; }
         .qris-metric.primary span, .qris-metric.primary small { color:rgba(255,255,255,.82); }
@@ -557,7 +560,7 @@
             .nav { grid-template-columns:repeat(2, minmax(0, 1fr)); }
             main { padding:20px 14px 40px; }
             h1 { font-size:28px; }
-            .cards, .qris-metrics, .topup-cards, .checklist-cards, .split, .approval-card, .approval-review-card, .approval-detail-grid, .form-grid, .bot-charts { grid-template-columns:1fr; }
+            .cards, .qris-metrics, .qris-metrics.history-metrics, .qris-metrics.ticket-metrics, .topup-cards, .checklist-cards, .split, .approval-card, .approval-review-card, .approval-detail-grid, .form-grid, .bot-charts { grid-template-columns:1fr; }
             .bot-chart-box { height:170px; }
             .admin-create-form, .admin-minimum-form { grid-template-columns:1fr; }
             .page-head, .filters, .qris-hero, .qris-toolbar { flex-direction:column; align-items:stretch; }
@@ -819,7 +822,7 @@
             main { padding:14px 10px 30px; }
             .sidebar { padding:12px 10px; }
             .nav { grid-template-columns:1fr; }
-            .cards, .qris-metrics, .topup-cards, .checklist-cards { grid-template-columns:1fr; }
+            .cards, .qris-metrics, .qris-metrics.history-metrics, .qris-metrics.ticket-metrics, .topup-cards, .checklist-cards { grid-template-columns:1fr; }
             .agent-filter-grid { padding:12px; }
             .agent-filter-actions { align-items:stretch; }
             .agent-filter-actions .btn, .page-actions .btn { width:100%; }
