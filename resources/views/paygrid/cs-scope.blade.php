@@ -30,7 +30,7 @@
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Tiket Belum Selesai</h2></div>
     <div class="table-wrap">
-        <table class="table qris-table">
+        <table class="table qris-table cs-scope-ticket-table">
             <thead>
                 <tr><th>Toko</th><th>Ticket</th><th>Issue</th><th>Status</th><th>Dibuat</th><th>Aksi</th></tr>
             </thead>
@@ -68,7 +68,7 @@
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Transaksi Bermasalah (Belum Jadi Tiket)</h2></div>
     <div class="table-wrap">
-        <table class="table qris-table">
+        <table class="table qris-table cs-scope-topup-table">
             <thead>
                 <tr><th>Toko</th><th>Masuk</th><th>Payment ID / RRN</th><th>Amount</th><th>Status</th><th>Aksi</th></tr>
             </thead>

@@ -749,6 +749,68 @@
             .admin-monitoring-table td:nth-child(5)::before { content:'HTTP'; }
             .admin-monitoring-table td:nth-child(6)::before { content:'Pesan'; }
             .admin-monitoring-table td:nth-child(7)::before { content:'Action'; }
+            .super-summary-table td:nth-child(1)::before { content:'Merchant'; }
+            .super-summary-table td:nth-child(2)::before { content:'Group'; }
+            .super-summary-table td:nth-child(3)::before { content:'Menu Fee'; }
+            .super-summary-table td:nth-child(4)::before { content:'MA'; }
+            .super-summary-table td:nth-child(5)::before { content:'Agent'; }
+            .super-summary-table td:nth-child(6)::before { content:'MDR Final'; }
+            .agent-fee-table td:nth-child(1)::before { content:'Toko'; }
+            .agent-fee-table td:nth-child(2)::before { content:'Kode Merchant'; }
+            .agent-fee-table td:nth-child(3)::before { content:'TRX Sukses'; }
+            .agent-fee-table td:nth-child(4)::before { content:'Volume Sukses'; }
+            .agent-fee-table td:nth-child(5)::before { content:'MDR Toko'; }
+            .agent-fee-table td:nth-child(6)::before { content:'Estimasi MDR Toko'; }
+            .agent-fee-table td:nth-child(7)::before { content:'% Fee Agen'; }
+            .agent-fee-table td:nth-child(8)::before { content:'Estimasi Fee Agen'; }
+            .agent-fee-table td:nth-child(9)::before { content:'Detail'; }
+            .cs-scope-ticket-table td:nth-child(1)::before { content:'Toko'; }
+            .cs-scope-ticket-table td:nth-child(2)::before { content:'Ticket'; }
+            .cs-scope-ticket-table td:nth-child(3)::before { content:'Issue'; }
+            .cs-scope-ticket-table td:nth-child(4)::before { content:'Status'; }
+            .cs-scope-ticket-table td:nth-child(5)::before { content:'Dibuat'; }
+            .cs-scope-ticket-table td:nth-child(6)::before { content:'Aksi'; }
+            .cs-scope-topup-table td:nth-child(1)::before { content:'Toko'; }
+            .cs-scope-topup-table td:nth-child(2)::before { content:'Masuk'; }
+            .cs-scope-topup-table td:nth-child(3)::before { content:'Payment ID / RRN'; }
+            .cs-scope-topup-table td:nth-child(4)::before { content:'Amount'; }
+            .cs-scope-topup-table td:nth-child(5)::before { content:'Status'; }
+            .cs-scope-topup-table td:nth-child(6)::before { content:'Aksi'; }
+            .ma-ranking-store-table td:nth-child(1)::before { content:'Toko'; }
+            .ma-ranking-store-table td:nth-child(2)::before { content:'TRX Sukses'; }
+            .ma-ranking-store-table td:nth-child(3)::before { content:'Volume Sukses'; }
+            .ma-ranking-agent-table td:nth-child(1)::before { content:'Agen'; }
+            .ma-ranking-agent-table td:nth-child(2)::before { content:'TRX Sukses'; }
+            .ma-ranking-agent-table td:nth-child(3)::before { content:'Volume Sukses'; }
+            .ma-fee-split-table td:nth-child(1)::before { content:'Toko'; }
+            .ma-fee-split-table td:nth-child(2)::before { content:'Menu Fee'; }
+            .ma-fee-split-table td:nth-child(3)::before { content:'Merchant MDR'; }
+            .ma-fee-split-table td:nth-child(4)::before { content:'Estimasi MDR Toko'; }
+            .ma-fee-split-table td:nth-child(5)::before { content:'Agent'; }
+            .ma-fee-split-table td:nth-child(6)::before { content:'Estimasi Fee Agen'; }
+            .ma-fee-split-table td:nth-child(7)::before { content:'MA Fee'; }
+            .ma-fee-split-table td:nth-child(8)::before { content:'Estimasi Fee MA'; }
+            .ma-fee-split-table td:nth-child(9)::before { content:'Detail'; }
+            .ma-agent-list-table td:nth-child(1)::before { content:'Agen'; }
+            .ma-agent-list-table td:nth-child(2)::before { content:'Email'; }
+            .ma-agent-list-table td:nth-child(3)::before { content:'Kontak'; }
+            .ma-agent-list-table td:nth-child(4)::before { content:'Fee per Menu'; }
+            .ma-agent-list-table td:nth-child(5)::before { content:'Status'; }
+            .ma-agent-list-table td:nth-child(6)::before { content:'Aksi'; }
+            .super-ma-list-table td:nth-child(1)::before { content:'MA'; }
+            .super-ma-list-table td:nth-child(2)::before { content:'Fee per Menu'; }
+            .super-ma-list-table td:nth-child(3)::before { content:'Status'; }
+            .super-ma-list-table td:nth-child(4)::before { content:'Aksi'; }
+            .super-group-list-table td:nth-child(1)::before { content:'Group'; }
+            .super-group-list-table td:nth-child(2)::before { content:'MA'; }
+            .super-group-list-table td:nth-child(3)::before { content:'Fee per Menu'; }
+            .ma-store-list-table td:nth-child(1)::before { content:'Toko'; }
+            .ma-store-list-table td:nth-child(2)::before { content:'Merchant'; }
+            .ma-store-list-table td:nth-child(3)::before { content:'Agen'; }
+            .ma-store-list-table td:nth-child(4)::before { content:'Tipe'; }
+            .ma-store-list-table td:nth-child(5)::before { content:'Fee'; }
+            .ma-store-list-table td:nth-child(6)::before { content:'Status'; }
+            .ma-store-list-table td:nth-child(7)::before { content:'Aksi'; }
         }
         @media (max-width: 560px) {
             main { padding:14px 10px 30px; }

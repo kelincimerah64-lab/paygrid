@@ -39,7 +39,7 @@
 <section class="card qris-panel section">
     <div class="qris-toolbar"><div><h2>Fee per Toko</h2><p class="muted" style="margin:4px 0 0">Estimasi fee agen per toko sesuai periode filter, plus detail menu fee toko masing-masing.</p></div><span class="badge ok">{{ $num($rows->count()) }} toko</span></div>
     <div class="table-wrap">
-        <table class="table qris-table">
+        <table class="table qris-table agent-fee-table">
             <thead><tr><th>Toko</th><th>Kode Merchant</th><th>TRX Sukses</th><th>Volume Sukses</th><th>MDR Toko</th><th>Estimasi MDR Toko</th><th>% Fee Agen</th><th>Estimasi Fee Agen</th><th>Detail</th></tr></thead>
             <tbody>
             @forelse($rows as $row)

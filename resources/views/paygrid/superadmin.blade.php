@@ -57,7 +57,7 @@
     <section class="card qris-panel section">
         <div class="qris-toolbar"><h2>Ringkasan Fee Per Merchant</h2></div>
         <div class="table-wrap">
-            <table class="table qris-table">
+            <table class="table qris-table super-summary-table">
                 <thead><tr><th>Merchant</th><th>Group</th><th>Menu Fee</th><th>MA</th><th>Agent</th><th>MDR Final</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
@@ -129,7 +129,7 @@
     </section>
     <section class="card qris-panel section">
         <div class="qris-toolbar"><h2>Daftar MA</h2></div>
-        <table class="table qris-table"><thead><tr><th>MA</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
+        <table class="table qris-table super-ma-list-table"><thead><tr><th>MA</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
             @foreach($mas as $ma)
                 <tr>
                     <td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td>
@@ -184,7 +184,7 @@
             </table>
         </div>
     </section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table"><thead><tr><th>Group</th><th>MA</th><th>Fee per Menu</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>{{ $feeMenus->ratesSummary($agent->fee_menu_rates ?? [], 'agent') }}</td></tr>@endforeach</tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Merchant Group</h2></div><table class="table qris-table super-group-list-table"><thead><tr><th>Group</th><th>MA</th><th>Fee per Menu</th></tr></thead><tbody>@foreach($agents as $agent)<tr><td><strong>{{ $agent->name }}</strong><br><span class="muted">{{ $agent->code }}</span></td><td>{{ $agent->ma?->name ?: '-' }}</td><td>{{ $feeMenus->ratesSummary($agent->fee_menu_rates ?? [], 'agent') }}</td></tr>@endforeach</tbody></table></section>
 @endif
 
 @if($active === 'fee-menu-settings')
