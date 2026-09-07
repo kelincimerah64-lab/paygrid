@@ -966,6 +966,66 @@ class PayGridRoutingTest extends TestCase
         $this->assertNotContains($foreignMerchant->id, $scopedIds);
     }
 
+    public function test_ma_and_agent_see_monitor_cs_in_their_own_dashboard(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+        $epcMerchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $otherAgentMerchant = Merchant::query()->where('slug', 'valohoki-1lg')->firstOrFail();
+
+        $this->actingAs($ma)
+            ->get(route('cs-scope.index'))
+            ->assertOk()
+            ->assertSee('Overview')
+            ->assertSee('Monitor CS');
+
+        $this->actingAs($agentUser)
+            ->get(route('cs-scope.index'))
+            ->assertOk()
+            ->assertSee('Status Request')
+            ->assertSee('Monitor CS');
+
+        $this->actingAs($agentUser)->get('/portal/nnp-cm-bj/cs/tickets')->assertOk();
+        $this->actingAs($agentUser)->get('/portal/valohoki-1lg/cs/tickets')->assertForbidden();
+
+        $topup = TopupRequest::query()->create([
+            'merchant_id' => $epcMerchant->id,
+            'gateway' => $epcMerchant->gateway,
+            'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'agent-own-dashboard-ref',
+            'transaction_id' => 'agent-own-dashboard-trx',
+            'status' => 'expired',
+            'amount' => 50000,
+            'net_amount' => 49500,
+            'fee_amount' => 500,
+            'submitted_at' => now()->subHour(),
+            'expires_at' => now()->subMinutes(20),
+        ]);
+        $this->actingAs($agentUser)
+            ->post(route('merchant.cs.topup.ticket', [$epcMerchant, $topup]), ['note' => 'Push dari dashboard Agent sendiri.'])
+            ->assertRedirect()
+            ->assertSessionHas('status');
+        $this->assertDatabaseHas('support_tickets', ['topup_request_id' => $topup->id, 'merchant_id' => $epcMerchant->id]);
+
+        $otherAgentTopup = TopupRequest::query()->create([
+            'merchant_id' => $otherAgentMerchant->id,
+            'gateway' => $otherAgentMerchant->gateway,
+            'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'agent-own-dashboard-blocked-ref',
+            'transaction_id' => 'agent-own-dashboard-blocked-trx',
+            'status' => 'expired',
+            'amount' => 50000,
+            'net_amount' => 49500,
+            'fee_amount' => 500,
+            'submitted_at' => now()->subHour(),
+            'expires_at' => now()->subMinutes(20),
+        ]);
+        $this->actingAs($agentUser)
+            ->post(route('merchant.cs.topup.ticket', [$otherAgentMerchant, $otherAgentTopup]), ['note' => 'Should be blocked.'])
+            ->assertForbidden();
+    }
+
     public function test_script_cs_can_create_ticket_from_history_without_attachment(): void
     {
         $this->seed();

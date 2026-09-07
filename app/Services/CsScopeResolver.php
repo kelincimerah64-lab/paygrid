@@ -18,6 +18,16 @@ class CsScopeResolver
             return Merchant::query()->where('agent_id', $user->agent_id)->pluck('id')->all();
         }
 
+        if ($user->role === 'ma') {
+            return Merchant::query()->whereRelation('agent', 'ma_user_id', $user->id)->pluck('id')->all();
+        }
+
+        if ($user->role === 'agent') {
+            $agent = $this->agentFor($user);
+
+            return $agent ? Merchant::query()->where('agent_id', $agent->id)->pluck('id')->all() : [];
+        }
+
         return [];
     }
 
@@ -36,6 +46,19 @@ class CsScopeResolver
             return 'CS Agent — '.(Agent::find($user->agent_id)?->name ?? '-');
         }
 
+        if ($user->role === 'ma') {
+            return 'MA';
+        }
+
+        if ($user->role === 'agent') {
+            return $this->agentFor($user)?->name ?? 'Agent';
+        }
+
         return 'CS';
+    }
+
+    private function agentFor(User $user): ?Agent
+    {
+        return Agent::query()->where('code', $user->username)->orWhere('email', $user->email)->first();
     }
 }

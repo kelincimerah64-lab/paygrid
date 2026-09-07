@@ -22,7 +22,7 @@ class MerchantScopeMiddleware
             abort_unless($user->merchant_id && (int) $user->merchant_id === (int) $merchant->id, 403);
         }
 
-        if ($user && $merchant && in_array($user->role, ['cs_ma', 'cs_agent'], true)) {
+        if ($user && $merchant && in_array($user->role, ['cs_ma', 'cs_agent', 'agent'], true)) {
             abort_unless($this->csScope->canAccessMerchant($user, $merchant), 403);
         }
 

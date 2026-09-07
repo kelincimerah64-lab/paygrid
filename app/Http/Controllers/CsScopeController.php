@@ -49,9 +49,15 @@ class CsScopeController extends Controller
             ->paginate(config('paygrid.reports.default_page_size', 50), ['*'], 'topups_page')
             ->withQueryString();
 
+        $menu = match ($user->role) {
+            'ma' => $menus->ma(),
+            'agent' => $menus->agent(),
+            default => $menus->csScope(),
+        };
+
         return view('paygrid.cs-scope', [
             'roleLabel' => $resolver->label($user),
-            'menus' => $menus->csScope(),
+            'menus' => $menu,
             'active' => 'monitor',
             'tickets' => $tickets,
             'problemTopups' => $problemTopups,

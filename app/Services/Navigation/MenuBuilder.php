@@ -31,6 +31,7 @@ class MenuBuilder
             ['key' => 'agents', 'label' => 'Agen', 'url' => route('ma.agents')],
             ['key' => 'create-store', 'label' => 'Create Toko', 'url' => route('ma.create-store')],
             ['key' => 'bot-monitoring', 'label' => 'Monitoring Bot Telegram', 'url' => route('ma.bot-monitoring')],
+            ['key' => 'monitor', 'label' => 'Monitor CS', 'url' => route('cs-scope.index')],
         ];
     }
 
@@ -41,6 +42,7 @@ class MenuBuilder
             ['key' => 'fee', 'label' => 'Fee', 'url' => route('agent.fee')],
             ['key' => 'create-store', 'label' => 'Create Toko', 'url' => route('agent.create-store')],
             ['key' => 'status-request', 'label' => 'Status Request', 'url' => route('agent.requests')],
+            ['key' => 'monitor', 'label' => 'Monitor CS', 'url' => route('cs-scope.index')],
         ];
     }
 
