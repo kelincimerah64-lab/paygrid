@@ -64,8 +64,8 @@ Route::post('/cs-pusat/tickets/{ticket}', [CenterSupportController::class, 'upda
 });
 
 Route::middleware(['auth', 'role:superadmin'])->group(function () {
-Route::get('/admin/users', fn (DashboardController $controller) => $controller->adminSimple('users', app(\App\Services\Navigation\MenuBuilder::class)))->name('admin.users');
-Route::get('/admin/log-aktivitas', fn (DashboardController $controller) => $controller->adminSimple('logs', app(\App\Services\Navigation\MenuBuilder::class)))->name('admin.logs');
+Route::get('/admin/users', fn () => redirect()->route('superadmin.page', 'accounts'))->name('admin.users');
+Route::get('/admin/log-aktivitas', [MonitoringController::class, 'logs'])->name('admin.logs');
 Route::get('/admin/monitoring', [MonitoringController::class, 'index'])->name('admin.monitoring');
 });
 

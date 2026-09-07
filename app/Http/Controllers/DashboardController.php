@@ -370,22 +370,6 @@ class DashboardController extends Controller
         abort(403);
     }
 
-    public function adminSimple(string $page, MenuBuilder $menus): View
-    {
-        return view('paygrid.simple-page', [
-            'roleLabel' => 'Admin',
-            'menus' => $menus->admin(),
-            'active' => $page,
-            'title' => match ($page) {
-                'logs' => 'Log Aktivitas',
-                default => 'User Dashboard',
-            },
-            'subtitle' => 'Area admin toko untuk user, log, topup request, checklist, finance, dan CS.',
-            'merchants' => app(MetricsService::class)->maMerchants(),
-            'registrations' => MerchantRegistration::query()->with(['agent', 'merchant'])->latest()->get(),
-        ]);
-    }
-
     public function merchantCs(Merchant $merchant, string $page, MenuBuilder $menus, MetricsService $metrics): View
     {
         $menu = $menus->merchantCs($merchant);

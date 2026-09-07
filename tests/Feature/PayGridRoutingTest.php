@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\Merchant;
 use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
@@ -303,6 +304,37 @@ class PayGridRoutingTest extends TestCase
             'password' => 'Baru12345',
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertTrue(Hash::check('Baru12345', $cs->refresh()->password));
+    }
+
+    public function test_admin_data_user_redirects_to_daftar_account_and_activity_log_shows_audit_entries(): void
+    {
+        $this->seed();
+        $superadmin = User::query()->where('email', 'superadmin@paygrid.local')->firstOrFail();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+
+        $this->actingAs($superadmin)
+            ->get(route('admin.users'))
+            ->assertRedirect(route('superadmin.page', 'accounts'));
+
+        AuditLog::query()->create([
+            'actor_user_id' => $superadmin->id,
+            'actor_role' => 'superadmin',
+            'action' => 'superadmin.ma_created',
+            'target_type' => User::class,
+            'target_id' => (string) $ma->id,
+            'before_payload' => null,
+            'after_payload' => ['name' => 'Test Log Entry'],
+            'created_at' => now(),
+        ]);
+
+        $this->actingAs($superadmin)
+            ->get(route('admin.logs'))
+            ->assertOk()
+            ->assertSee('Log Aktivitas')
+            ->assertSee('Test Log Entry');
+
+        $this->actingAs($ma)->get(route('admin.users'))->assertForbidden();
+        $this->actingAs($ma)->get(route('admin.logs'))->assertForbidden();
     }
 
     public function test_superadmin_can_manage_the_fee_menu_catalog(): void
