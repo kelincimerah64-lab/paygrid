@@ -346,10 +346,7 @@ class SuperadminController extends Controller
     {
         return [
             ['key' => 'dashboard-fee', 'label' => 'Dashboard Fee', 'url' => route('superadmin.overview')],
-            ['key' => 'add-fee', 'label' => 'Add Fee', 'url' => route('superadmin.page', 'add-fee')],
             ['key' => 'ma', 'label' => 'MA', 'url' => route('superadmin.page', 'ma')],
-            ['key' => 'merchant-group', 'label' => 'Merchant Group', 'url' => route('superadmin.page', 'merchant-group')],
-            ['key' => 'fee-menu-settings', 'label' => 'Pengaturan Menu Fee', 'url' => route('superadmin.page', 'fee-menu-settings')],
             ['key' => 'timer-ticket', 'label' => 'Timer Ticket', 'url' => route('superadmin.page', 'timer-ticket')],
             ['key' => 'accounts', 'label' => 'Daftar Account', 'url' => route('superadmin.page', 'accounts')],
         ];

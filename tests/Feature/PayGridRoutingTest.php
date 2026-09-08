@@ -252,8 +252,6 @@ class PayGridRoutingTest extends TestCase
             ->get('/superadmin')
             ->assertOk()
             ->assertSee('Dashboard Fee')
-            ->assertSee('Add Fee')
-            ->assertSee('Merchant Group')
             ->assertSee('Timer Ticket')
             ->assertSee('Daftar Account');
 
