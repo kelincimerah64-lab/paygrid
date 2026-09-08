@@ -635,8 +635,8 @@ class MaController extends Controller
     {
         $row = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.ma_fee_percent) / 100), 0) as ma')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as agent')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.ma_fee_percent / 100), 0) as ma')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as agent')
             ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant')
             ->first();
 
@@ -653,8 +653,8 @@ class MaController extends Controller
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
             ->selectRaw('topup_requests.merchant_id as merchant_id')
             ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant_fee')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as agent_fee')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.ma_fee_percent) / 100), 0) as ma_fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as agent_fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.ma_fee_percent / 100), 0) as ma_fee')
             ->groupBy('topup_requests.merchant_id')
             ->get()
             ->keyBy('merchant_id');
@@ -738,16 +738,14 @@ class MaController extends Controller
     private function feeItems($transactions, string $percentColumn): array
     {
         return $transactions->take(200)->map(function (TopupRequest $trx) use ($percentColumn) {
-            $mdrPercent = (float) ($trx->feeSnapshot?->merchant_mdr_percent ?? $trx->merchant?->merchant_mdr_percent);
             $tierPercent = (float) ($trx->feeSnapshot?->{$percentColumn} ?? $trx->merchant?->{$percentColumn});
-            $spread = $mdrPercent - $tierPercent;
 
             return [
                 'date' => $trx->submitted_at?->format('d/m/y H.i') ?: '-',
                 'title' => $trx->customer_reference ?: $trx->gateway_ref_id ?: $trx->payment_id ?: '-',
-                'subtitle' => ($trx->merchant?->name ?: '-').' / '.$spread.'%',
+                'subtitle' => ($trx->merchant?->name ?: '-').' / '.$tierPercent.'%',
                 'status' => $trx->status,
-                'amount' => (int) round((int) $trx->amount * ($spread / 100)),
+                'amount' => (int) round((int) $trx->amount * ($tierPercent / 100)),
                 'meta' => 'Volume '.$trx->amount,
             ];
         })->values()->all();
