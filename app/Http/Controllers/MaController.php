@@ -12,6 +12,7 @@ use App\Models\TopupRequest;
 use App\Models\User;
 use App\Rules\ExactlyOneFeeMenuFilled;
 use App\Rules\FeeMenuRatesAboveFloor;
+use App\Rules\FeeMenuRatesAboveReference;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
@@ -54,6 +55,7 @@ class MaController extends Controller
                 $m->merchant_fee_amount = (int) round((float) ($amounts->merchant_fee ?? 0));
                 $m->agent_fee_amount = (int) round((float) ($amounts->agent_fee ?? 0));
                 $m->ma_fee_amount = (int) round((float) ($amounts->ma_fee ?? 0));
+                $m->volume_trx = (int) ($amounts->volume ?? 0);
             });
         }
 
@@ -134,6 +136,7 @@ class MaController extends Controller
         $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
         $typeCategory = $feeMenus->typeCategory((string) $request->input('connection_type'));
         $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent')]);
+        $maRates = (array) (auth()->user()->fee_menu_rates ?? []);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:160'],
@@ -141,7 +144,7 @@ class MaController extends Controller
             'status' => ['required', 'in:Active,Review,Suspended'],
             'connection_type' => ['required', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null), new FeeMenuRatesAboveReference('agent', $maRates, 'Based Fee MA')],
             'password' => ['nullable', 'string', 'min:6', 'max:120'],
         ]);
         abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create agen ke HG masih dinonaktifkan.');
@@ -215,6 +218,7 @@ class MaController extends Controller
         $typeCategory = $feeMenus->typeCategory((string) $request->input('merchant_type'));
         $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
+        $agentRates = (array) (Agent::find($request->input('agent_id'))?->fee_menu_rates ?? []);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'username' => ['nullable', 'string', 'max:80'],
@@ -233,7 +237,7 @@ class MaController extends Controller
             'transaction_callback_url' => ['nullable', 'url', 'max:255'],
             'withdrawal_callback_url' => ['nullable', 'url', 'max:255'],
             'api_ip_whitelist' => ['nullable', 'string', 'max:255'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled()],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled(), new FeeMenuRatesAboveReference('merchant', $agentRates, 'Based Fee Agent')],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
         $data['fee_menu'] = array_key_first(array_filter($rates));
@@ -285,8 +289,9 @@ class MaController extends Controller
     {
         abort_unless($this->canUseAgent($agent), 403);
         $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent')]);
+        $maRates = (array) ($agent->ma->fee_menu_rates ?? []);
         $data = $request->validate([
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null), new FeeMenuRatesAboveReference('agent', $maRates, 'Based Fee MA')],
         ]);
         $before = $agent->only(['fee_menu_rates']);
         $agent->forceFill($data)->save();
@@ -302,13 +307,14 @@ class MaController extends Controller
         $this->normalizePercentInputs($request, ['payin_fee_percent']);
         $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
+        $agent = $merchant->agent()->with('ma')->firstOrFail();
+        $agentRates = (array) ($agent->fee_menu_rates ?? []);
         $data = $request->validate([
             'payin_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled()],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled(), new FeeMenuRatesAboveReference('merchant', $agentRates, 'Based Fee Agent')],
         ]);
         $data['fee_menu'] = array_key_first(array_filter($rates));
         $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
-        $agent = $merchant->agent()->with('ma')->firstOrFail();
         $data = array_merge($data, $feeSync->snapshotFor($agent, $data['fee_menu'], $rates[$data['fee_menu']]));
         $before = $merchant->only(['merchant_mdr_percent', 'payin_fee_percent', 'fee_menu', 'fee_menu_rates', 'settlement_method']);
         $merchant->forceFill($data)->save();
@@ -571,8 +577,8 @@ class MaController extends Controller
             'agent_total' => ['title' => 'List Agen', 'type' => 'agent', 'items' => $this->agentItems($agents)],
             'merchant_total' => ['title' => 'List Toko', 'type' => 'merchant', 'items' => $this->merchantItems($merchants)],
             'unassigned' => ['title' => 'Toko Belum Assign Agen', 'type' => 'merchant', 'items' => $this->merchantItems($merchants->whereNull('agent_id'))],
-            'fee_ma' => ['title' => 'Detail Fee MA', 'type' => 'fee', 'items' => $this->feeItems($successTransactions, 'ma_fee_percent')],
-            'fee_agent' => ['title' => 'Detail Fee Agen', 'type' => 'fee', 'items' => $this->feeItems($successTransactions, 'agent_fee_percent')],
+            'fee_ma' => ['title' => 'Detail Fee MA', 'type' => 'fee', 'items' => $this->feeItems($successTransactions, 'ma')],
+            'fee_agent' => ['title' => 'Detail Fee Agen', 'type' => 'fee', 'items' => $this->feeItems($successTransactions, 'agent')],
         ];
     }
 
@@ -635,8 +641,8 @@ class MaController extends Controller
     {
         $row = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.ma_fee_percent / 100), 0) as ma')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as agent')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.agent_fee_percent - merchants.ma_fee_percent) / 100), 0) as ma')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as agent')
             ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant')
             ->first();
 
@@ -652,9 +658,10 @@ class MaController extends Controller
         return (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
             ->selectRaw('topup_requests.merchant_id as merchant_id')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
             ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant_fee')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.agent_fee_percent / 100), 0) as agent_fee')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.ma_fee_percent / 100), 0) as ma_fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as agent_fee')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.agent_fee_percent - merchants.ma_fee_percent) / 100), 0) as ma_fee')
             ->groupBy('topup_requests.merchant_id')
             ->get()
             ->keyBy('merchant_id');
@@ -735,17 +742,20 @@ class MaController extends Controller
         ])->values()->all();
     }
 
-    private function feeItems($transactions, string $percentColumn): array
+    private function feeItems($transactions, string $tier): array
     {
-        return $transactions->take(200)->map(function (TopupRequest $trx) use ($percentColumn) {
-            $tierPercent = (float) ($trx->feeSnapshot?->{$percentColumn} ?? $trx->merchant?->{$percentColumn});
+        return $transactions->take(200)->map(function (TopupRequest $trx) use ($tier) {
+            $mdrPercent = (float) ($trx->feeSnapshot?->merchant_mdr_percent ?? $trx->merchant?->merchant_mdr_percent);
+            $agentPercent = (float) ($trx->feeSnapshot?->agent_fee_percent ?? $trx->merchant?->agent_fee_percent);
+            $maPercent = (float) ($trx->feeSnapshot?->ma_fee_percent ?? $trx->merchant?->ma_fee_percent);
+            $margin = $tier === 'ma' ? $agentPercent - $maPercent : $mdrPercent - $agentPercent;
 
             return [
                 'date' => $trx->submitted_at?->format('d/m/y H.i') ?: '-',
                 'title' => $trx->customer_reference ?: $trx->gateway_ref_id ?: $trx->payment_id ?: '-',
-                'subtitle' => ($trx->merchant?->name ?: '-').' / '.$tierPercent.'%',
+                'subtitle' => ($trx->merchant?->name ?: '-').' / '.$margin.'%',
                 'status' => $trx->status,
-                'amount' => (int) round((int) $trx->amount * ($tierPercent / 100)),
+                'amount' => (int) round((int) $trx->amount * ($margin / 100)),
                 'meta' => 'Volume '.$trx->amount,
             ];
         })->values()->all();

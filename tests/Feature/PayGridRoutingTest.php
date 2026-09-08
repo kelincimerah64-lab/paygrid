@@ -1448,11 +1448,11 @@ class PayGridRoutingTest extends TestCase
 
         $agentResponse = $this->actingAs($agentUser)->get(route('agent.fee'))->assertOk();
         $agentRow = $agentResponse->viewData('rows')->firstWhere('merchant_id', $merchant->id);
-        $this->assertSame($agentFeeBefore + (int) round(1000000 * $currentAgentRate / 100), $agentRow->fee_amount);
+        $this->assertSame($agentFeeBefore + (int) round(1000000 * ($currentMerchantRate - $currentAgentRate) / 100), $agentRow->fee_amount);
         $this->assertSame($agentMerchantFeeBefore + (int) round(1000000 * $currentMerchantRate / 100), $agentRow->merchant_fee_amount);
 
         $maFeeAfter = $this->actingAs($maUser)->get(route('ma.fee'))->assertOk()->viewData('summary')['fee_ma'];
-        $this->assertSame($maFeeBefore + (int) round(1000000 * $currentMaRate / 100), $maFeeAfter);
+        $this->assertSame($maFeeBefore + (int) round(1000000 * ($currentAgentRate - $currentMaRate) / 100), $maFeeAfter);
     }
 
     public function test_ma_fee_page_shows_estimated_rupiah_per_store(): void
@@ -1477,8 +1477,8 @@ class PayGridRoutingTest extends TestCase
         $this->assertNotNull($row);
         $volume = $existingVolume + 1000000;
         $this->assertSame((int) round($volume * 1.75 / 100), $row->merchant_fee_amount);
-        $this->assertSame((int) round($volume * 1.00 / 100), $row->agent_fee_amount);
-        $this->assertSame((int) round($volume * 0.50 / 100), $row->ma_fee_amount);
+        $this->assertSame((int) round($volume * (1.75 - 1.00) / 100), $row->agent_fee_amount);
+        $this->assertSame((int) round($volume * (1.00 - 0.50) / 100), $row->ma_fee_amount);
     }
 
     public function test_agent_onboarding_link_is_single_use_and_scoped_to_agent(): void

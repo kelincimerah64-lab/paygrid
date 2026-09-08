@@ -10,6 +10,7 @@ use App\Models\TopupRequest;
 use App\Models\User;
 use App\Rules\ExactlyOneFeeMenuFilled;
 use App\Rules\FeeMenuRatesAboveFloor;
+use App\Rules\FeeMenuRatesAboveReference;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
@@ -161,12 +162,13 @@ class SuperadminController extends Controller
     {
         $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
+        $agent = $merchant->agent()->with('ma')->firstOrFail();
+        $agentRates = (array) ($agent->fee_menu_rates ?? []);
         $data = $request->validate([
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled()],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled(), new FeeMenuRatesAboveReference('merchant', $agentRates, 'Based Fee Agent')],
         ]);
         $data['fee_menu'] = array_key_first(array_filter($rates));
         $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
-        $agent = $merchant->agent()->with('ma')->firstOrFail();
         $data = array_merge($data, $feeSync->snapshotFor($agent, $data['fee_menu'], $rates[$data['fee_menu']]));
         $before = $merchant->only(array_keys($data));
         $merchant->forceFill($data)->save();
@@ -180,6 +182,7 @@ class SuperadminController extends Controller
         $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
         $typeCategory = $feeMenus->typeCategory((string) $request->input('connection_type'));
         $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent')]);
+        $maRates = (array) (User::find($request->input('ma_user_id'))?->fee_menu_rates ?? []);
         $data = $request->validate([
             'ma_user_id' => ['nullable', 'exists:users,id'],
             'code' => ['nullable', 'string', 'max:40', 'unique:agents,code'],
@@ -188,7 +191,7 @@ class SuperadminController extends Controller
             'contact' => ['nullable', 'string', 'max:80'],
             'connection_type' => ['required', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null)],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null), new FeeMenuRatesAboveReference('agent', $maRates, 'Based Fee MA')],
             'is_active' => ['required', 'boolean'],
         ]);
         abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create merchant group ke HG masih dinonaktifkan.');
