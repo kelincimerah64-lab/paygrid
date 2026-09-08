@@ -58,6 +58,7 @@
             'fee_agent' => ['label' => 'Fee Agen', 'value' => $money($summary['fee_agent']), 'class' => '', 'note' => 'Dari trx sukses'],
         ];
     @endphp
+    <section class="card pad section" style="padding-bottom:12px"><span class="muted">Periode data di bawah ini:</span> <span class="badge ok">{{ $periodLabel }}</span></section>
     <div data-live-root data-live-interval="15000">
     <section class="grid qris-metrics history-metrics section" data-live-region="ma-overview-cards">
         @foreach($overviewCards as $key => $card)<button class="card pad qris-metric ma-metric-card {{ $card['class'] }}" type="button" data-ma-detail="{{ $key }}"><span>{{ $card['label'] }}</span><strong>{{ $card['value'] }}</strong><small>{{ $card['note'] }}</small></button>@endforeach
