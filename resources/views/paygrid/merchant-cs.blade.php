@@ -191,7 +191,7 @@
         <form method="get" class="qris-filters">
             <input class="search" name="q" value="{{ request('q') }}" placeholder="Search...">
             <select name="period" data-period-select>
-                @if($active !== 'tickets')<option value="today" @selected($period === 'today')>Hari ini</option>@endif
+                <option value="today" @selected($period === 'today')>Hari ini</option>
                 <option value="this_month" @selected($period === 'this_month')>Bulan ini</option>
                 <option value="last_month" @selected($period === 'last_month')>Bulan lalu</option>
                 <option value="all" @selected($period === 'all')>{{ $active === 'tickets' ? 'Semua tiket' : 'Semua data' }}</option>

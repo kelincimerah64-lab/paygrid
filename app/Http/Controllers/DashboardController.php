@@ -378,7 +378,7 @@ class DashboardController extends Controller
 
         abort_if(! collect($menu)->contains('key', $page), 404);
 
-        $period = request('period', $page === 'tickets' ? 'this_month' : 'today');
+        $period = request('period', 'today');
         [$defaultFrom, $defaultTo] = match ($period) {
             'last_month' => [now('Asia/Jakarta')->subMonthNoOverflow()->startOfMonth()->toDateString(), now('Asia/Jakarta')->subMonthNoOverflow()->endOfMonth()->toDateString()],
             'all' => [null, null],
@@ -527,11 +527,12 @@ class DashboardController extends Controller
 
         abort_if(! collect($menu)->contains('key', $page), 404);
 
-        $period = request('period', $page === 'report' ? 'all' : 'this_month');
+        $period = request('period', 'today');
         [$defaultFrom, $defaultTo] = match ($period) {
             'last_month' => [now('Asia/Jakarta')->subMonthNoOverflow()->startOfMonth()->toDateString(), now('Asia/Jakarta')->subMonthNoOverflow()->endOfMonth()->toDateString()],
             'all' => [null, null],
-            default => [now('Asia/Jakarta')->startOfMonth()->toDateString(), now('Asia/Jakarta')->toDateString()],
+            'this_month' => [now('Asia/Jakarta')->startOfMonth()->toDateString(), now('Asia/Jakarta')->toDateString()],
+            default => [now('Asia/Jakarta')->toDateString(), now('Asia/Jakarta')->toDateString()],
         };
         $from = request('from', $defaultFrom);
         $to = request('to', $defaultTo ?: $from);

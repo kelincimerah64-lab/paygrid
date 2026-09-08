@@ -63,11 +63,13 @@
 <section class="card qris-panel section">
     <form class="qris-toolbar" method="get">
         <div>
-            <strong>{{ $active === 'report' ? 'Report Transaksi Toko' : 'Data Transaksi Bulanan' }}</strong>
+            <strong>{{ $active === 'report' ? 'Report Transaksi Toko' : 'Data Transaksi' }}</strong>
             <div class="muted">Last sync: {{ $latestSync?->finished_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s') ?? '-' }}</div>
+            <div class="muted">Periode: <span class="badge ok">{{ $period === 'all' ? 'Semua data' : (($from ?: '-').' - '.($to ?: '-')) }}</span></div>
         </div>
         <div class="qris-filters">
             <select name="period" data-period-select>
+                <option value="today" @selected($period === 'today')>Hari ini</option>
                 <option value="this_month" @selected($period === 'this_month')>Bulan ini</option>
                 <option value="last_month" @selected($period === 'last_month')>Bulan lalu</option>
                 <option value="all" @selected($period === 'all')>Semua data</option>
