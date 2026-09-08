@@ -110,10 +110,11 @@ class DashboardController extends Controller
     public function agentFee(MenuBuilder $menus, FeeMenuCatalog $feeMenus): View
     {
         $agent = $this->currentAgent();
+        $today = CarbonImmutable::now('Asia/Jakarta')->toDateString();
         $filters = [
             'q' => trim((string) request('q', '')),
-            'from' => (string) request('from', ''),
-            'to' => (string) request('to', ''),
+            'from' => (string) request('from', $today),
+            'to' => (string) request('to', $today),
         ];
 
         $merchantRates = Merchant::query()->where('agent_id', $agent->id)->get(['id', 'fee_menu_rates'])->pluck('fee_menu_rates', 'id');
