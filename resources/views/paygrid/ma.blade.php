@@ -93,7 +93,11 @@
         $isSynced = abs($combinedPercent - (float) $m->merchant_mdr_percent) < 0.01;
     @endphp
     <tr><td><strong>{{ $m->name }}</strong></td><td>{{ $m->fee_menu ? ($feeMenus->optionsFor('merchant')[$m->fee_menu]['label'] ?? $m->fee_menu) : '-' }}</td><td>{{ $pct($m->merchant_mdr_percent) }}</td><td>{{ $money($m->merchant_fee_amount ?? 0) }}</td><td>{{ $money($m->agent_fee_amount ?? 0) }}</td><td><strong>{{ $pct($combinedPercent) }}</strong></td><td><strong>{{ $money($m->ma_fee_amount ?? 0) }}</strong></td><td><span class="badge {{ $isSynced ? 'ok' : 'warn' }}">{{ $isSynced ? 'Valid' : 'Gak Sinkron' }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="fee-tab-store-{{ $m->id }}">Detail</button>
-        <div class="approval-modal" id="fee-tab-store-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Fee Menu</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>@include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'merchant', 'feeMenus' => $feeMenus, 'rates' => $m->fee_menu_rates ?? []])</div></div></td></tr>
+        <div class="approval-modal" id="fee-tab-store-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Fee Menu</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }} &mdash; <span class="badge {{ $isSynced ? 'ok' : 'warn' }}">{{ $isSynced ? 'Valid' : 'Gak Sinkron' }}</span></p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
+        <h3 style="margin:12px 0 4px">Merchant</h3>@include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'merchant', 'feeMenus' => $feeMenus, 'rates' => $m->fee_menu_rates ?? []])
+        <h3 style="margin:12px 0 4px">Agent{{ $m->agent ? ' — '.$m->agent->name : '' }}</h3>@include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'agent', 'feeMenus' => $feeMenus, 'rates' => $m->agent->fee_menu_rates ?? []])
+        <h3 style="margin:12px 0 4px">MA (Saya)</h3>@include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'ma', 'feeMenus' => $feeMenus, 'rates' => auth()->user()->fee_menu_rates ?? []])
+        </div></div></td></tr>
     @endforeach
     </tbody></table></section>
 @endif
