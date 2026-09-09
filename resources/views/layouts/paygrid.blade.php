@@ -174,7 +174,7 @@
         .ma-report-table th:nth-child(11) { width:8%; }
         .ma-report-table th:nth-child(12) { width:7%; }
         .ma-report-table th:nth-child(13) { width:5%; }
-        .ma-report-table td:nth-child(5), .ma-report-table td:nth-child(9) { text-align:right; white-space:nowrap; }
+        .ma-report-table td:nth-child(9) { white-space:nowrap; }
         .ma-report-table td:nth-child(6), .ma-report-table td:nth-child(8), .ma-report-table td:nth-child(10), .ma-report-table td:nth-child(13) { overflow-wrap:anywhere; word-break:break-word; }
         .topup-cards { grid-template-columns:repeat(6, minmax(0, 1fr)); gap:12px; margin-bottom:12px; }
         .checklist-cards { grid-template-columns:repeat(5, minmax(0, 1fr)); gap:14px; margin-bottom:12px; }
