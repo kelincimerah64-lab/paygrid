@@ -4,7 +4,7 @@
     $reportFilters = $reportFilters ?? ['q' => '', 'from' => '', 'to' => ''];
     $money = fn ($value) => 'Rp '.number_format((int) ($value ?? 0), 0, ',', '.');
     $num = fn ($value) => number_format((int) ($value ?? 0), 0, ',', '.');
-    $pct = fn ($value) => number_format((float) ($value ?? 0), 2, ',', '.').'%';
+    $pct = fn ($value) => number_format((float) ($value ?? 0), 3, ',', '.').'%';
 @endphp
 
 @section('content')

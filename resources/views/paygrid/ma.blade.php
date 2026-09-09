@@ -101,7 +101,7 @@
     <tr><td><strong>{{ $m->name }}</strong></td><td>{{ $menuLabel }}</td><td>{{ $pct($mdrToko) }}</td><td>{{ number_format($m->volume_trx ?? 0, 0, ',', '.') }}</td><td>{{ $pct($marginAgent) }}</td><td>{{ $money($m->agent_fee_amount ?? 0) }}</td><td>{{ $pct($marginMa) }}</td><td>{{ $money($m->ma_fee_amount ?? 0) }}</td><td><span class="badge {{ $isValidFloor ? 'ok' : 'warn' }}">{{ $isValidFloor ? 'Valid' : 'Gak Sinkron' }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="fee-tab-store-{{ $m->id }}">Detail</button>
         <div class="approval-modal" id="fee-tab-store-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Fee Menu</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }} &mdash; <span class="badge {{ $isValidFloor ? 'ok' : 'warn' }}">{{ $isValidFloor ? 'Valid' : 'Gak Sinkron' }}</span></p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
         <div class="table-wrap"><table class="table qris-table">
-            <thead><tr><th>Menu</th><th>MDR Toko</th><th>Based Fee MA</th><th>Based Fee Agent</th><th>Fee (MDR&minus;Based MA)</th><th>Margin Agent</th><th>Margin MA</th><th>Volume Trx</th><th>Revenue MA</th><th>Revenue Agent</th></tr></thead>
+            <thead><tr><th>Menu</th><th>MDR Toko</th><th>Based Fee MA</th><th>Based Fee Agent</th><th>FEE</th><th>Margin Agent</th><th>Margin MA</th><th>Volume Trx</th><th>Revenue MA</th><th>Revenue Agent</th></tr></thead>
             <tbody><tr>
                 <td>{{ $menuLabel }}</td>
                 <td>{{ $pct($mdrToko) }}</td>

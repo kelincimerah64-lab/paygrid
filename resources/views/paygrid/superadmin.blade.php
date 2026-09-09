@@ -2,7 +2,7 @@
 
 @php
     $money = fn ($value) => 'Rp '.number_format((int) $value, 0, ',', '.');
-    $pct = fn ($value) => number_format((float) $value, 2, ',', '.').'%';
+    $pct = fn ($value) => number_format((float) $value, 3, ',', '.').'%';
     $pctInput = fn ($value) => number_format((float) $value, 2, '.', '');
 @endphp
 

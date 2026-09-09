@@ -8,7 +8,7 @@
     $agent = $agent ?? null;
     $statusClass = fn ($status) => $status === 'approved' ? 'ok' : ($status === 'rejected' ? 'danger' : 'warn');
     $money = fn ($value) => number_format((int) ($value ?? 0), 0, ',', '.');
-    $pct = fn ($value) => number_format((float) ($value ?? 0), 2, ',', '.').'%';
+    $pct = fn ($value) => number_format((float) ($value ?? 0), 3, ',', '.').'%';
 @endphp
 
 @section('content')
