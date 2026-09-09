@@ -123,8 +123,9 @@
 
 @if($active === 'approval')
     <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Request Approval</h2><p class="muted" style="margin:4px 0 0">Review toko, user access, dan fee structure. Request baru dari submit agen masuk ke sini, pending diprioritaskan paling atas.</p></div></div></section>
+    <section class="card qris-panel section"><div class="table-wrap"><table class="table qris-table ma-approval-table"><thead><tr><th>Toko</th><th>Agen</th><th>Menu Fee</th><th>Merchant MDR</th><th>Admin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
     @if($registrations->isEmpty())
-        <section class="card pad section"><p class="muted">Belum ada request.</p></section>
+        <tr><td colspan="7" class="empty">Belum ada request.</td></tr>
     @else
     @foreach($registrations as $r)
         @php
@@ -168,42 +169,39 @@
                 'Disbursement Fee %' => $pct($payload['withdrawal_fee_percentage'] ?? 0),
             ];
         @endphp
-        <section class="card pad section approval-review-card">
-            <div class="approval-store-cell"><div class="initial">{{ $initial }}</div><div><div class="label">Toko</div><h2 class="truncate">{{ $r->store_name }}</h2><div class="muted">Agen: {{ $r->agent?->name ?: '-' }}</div><div class="muted truncate">{{ $payload['topup_url'] ?? $merchant?->topup_url ?? $r->engine_name ?? '-' }}</div></div></div>
-            <div><div class="label">Merchant</div><div class="merchant-id-box">ID</div><h2 class="truncate">{{ $payload['merchant_group_name'] ?? $r->agent?->name ?? strtoupper($r->gateway) }}</h2><div class="muted truncate">{{ $merchant?->merchant_id ?? ($payload['merchant_id'] ?? 'Pending MA') }}</div></div>
-            <div><div class="label">Data User</div><div class="user-access-card"><strong>ADMIN</strong><h2>{{ $adminName }}</h2><div class="muted truncate">{{ $adminEmail }}</div><b>PW: {{ $adminPassword }}</b></div></div>
-            <div><div class="label">Structure Fee</div><div class="fee-row"><span>Agen Pemegang Toko</span><strong>{{ $r->agent?->name ?: '-' }}</strong></div><div class="fee-row"><span>Payment Gateway</span><strong>{{ ucfirst($r->gateway) }}</strong></div><div class="fee-pill wide"><span>Merchant MDR</span><strong>{{ $pct($merchantMdr) }}</strong></div><div class="mini-grid"><div class="fee-pill"><span>Menu Fee</span><strong>{{ $requestFeeMenu ? ($requestMenuOptions[$requestFeeMenu]['label'] ?? $requestFeeMenu) : '-' }}</strong></div><div class="fee-pill"><span>Pay In Fee</span><strong>{{ $pct($payinFee) }}</strong></div><div class="fee-pill"><span>Disbursement Fee</span><strong>{{ $payload['withdrawal_fee'] ?? '-' }}</strong></div></div><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="approval-detail-{{ $r->id }}">View Details</button></div>
-            <div>
-                <div class="label">Decision</div>
-                <div style="margin:12px 0"><span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></div>
+        <tr>
+            <td><strong>{{ $r->store_name }}</strong><br><span class="muted truncate" style="display:block; max-width:180px">{{ $payload['topup_url'] ?? $merchant?->topup_url ?? $r->engine_name ?? '-' }}</span></td>
+            <td>{{ $r->agent?->name ?: '-' }}</td>
+            <td>{{ $requestFeeMenu ? ($requestMenuOptions[$requestFeeMenu]['label'] ?? $requestFeeMenu) : '-' }}</td>
+            <td>{{ $pct($merchantMdr) }}</td>
+            <td>{{ $adminName }}<br><span class="muted truncate" style="display:block; max-width:180px">{{ $adminEmail }}</span></td>
+            <td><span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></td>
+            <td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="approval-detail-{{ $r->id }}">Detail</button>
+            <div class="approval-modal" id="approval-detail-{{ $r->id }}" hidden><div class="approval-modal-card">
+                <div class="qris-toolbar"><div><h2>{{ $r->store_name }}</h2><p class="muted" style="margin:4px 0 0">Agen: {{ $r->agent?->name ?: '-' }} &mdash; <span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
+                <div class="user-access-card"><strong>ADMIN</strong><h2>{{ $adminName }}</h2><div class="muted truncate">{{ $adminEmail }}</div><b>PW: {{ $adminPassword }}</b></div>
                 @if(!in_array($r->status, ['approved', 'rejected'], true))
                     <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form">
                         @csrf
                         @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $requestRates])
                         <input type="hidden" name="payin_fee_percent" value="{{ $payinFee }}">
-                        <button class="btn primary compact-btn" style="width:100%; margin-bottom:8px">Approve</button>
+                        <button class="btn primary compact-btn" style="width:100%; margin:8px 0">Approve</button>
                     </form>
                     <form method="post" action="{{ route('api.merchant-registration.reject', $r) }}">
                         @csrf
                         <button class="btn danger compact-btn" style="width:100%">Reject</button>
                     </form>
-                @else
-                    <div class="muted" style="text-align:center">-</div>
                 @endif
-            </div>
-        </section>
-        <div class="approval-modal" id="approval-detail-{{ $r->id }}" hidden>
-            <div class="approval-modal-card">
-                <div class="qris-toolbar"><div><h2>Detail Hilogate</h2><p class="muted" style="margin:4px 0 0">Data final request toko.</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
-                <div class="approval-detail-grid">
+                <div class="approval-detail-grid" style="margin-top:12px">
                     @foreach($detailRows as $label => $value)
                         <div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>
                     @endforeach
                 </div>
-            </div>
-        </div>
+            </div></div></td>
+        </tr>
     @endforeach
     @endif
+    </tbody></table></div></section>
 @endif
 
 @if($active === 'mapping')
