@@ -2,7 +2,7 @@
 
 @php
     $money = fn ($value) => 'Rp '.number_format((int) ($value ?? 0), 0, ',', '.');
-    $pct = fn ($value) => number_format((float) $value, 2, ',', '.').'%';
+    $pct = fn ($value) => number_format((float) $value, 3, ',', '.').'%';
     $pctInput = fn ($value) => number_format((float) $value, 2, '.', '');
     $badge = fn ($status) => App\Support\PayGridLabels::badge($status);
     $dateInput = fn ($value) => $value ? \Carbon\CarbonImmutable::parse($value)->format('Y-m-d') : '';
