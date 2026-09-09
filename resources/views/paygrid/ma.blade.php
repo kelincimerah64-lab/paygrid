@@ -115,6 +115,7 @@
                 <td>{{ $money($m->agent_fee_amount ?? 0) }}</td>
             </tr></tbody>
         </table></div>
+        <p class="muted" style="margin:10px 2px 0"><strong>Note:</strong><br>Fee : MDR &minus; Based Fee MA<br>Margin Agent : MDR Toko &minus; Based Fee Agent<br>Margin MA : Fee &minus; Margin Agent<br>Revenue MA : Margin MA &times; Volume Trx<br>Revenue Agent : Margin Agent &times; Volume Trx</p>
         </div></div></td></tr>
     @endforeach
     </tbody></table></section>
