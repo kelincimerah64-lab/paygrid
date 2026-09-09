@@ -21,6 +21,10 @@
         .brand { display:flex; align-items:center; justify-content:center; }
         .brand img { display:block; width:190px; max-width:100%; height:auto; }
         .role { margin-top:8px; text-align:center; font-size:12px; font-weight:900; color:#111d32; }
+        .role-row { display:flex; align-items:center; justify-content:center; gap:8px; }
+        .role-row .role { margin-top:8px; }
+        .logout-icon { width:24px; height:24px; border-radius:50%; border:1px solid #f0c2c2; background:#fff; color:#c0392b; display:grid; place-items:center; font-size:13px; line-height:1; cursor:pointer; padding:0; }
+        .logout-icon:hover { background:#fdecea; border-color:#e6a5a0; }
         .notif-bell { position:relative; display:inline-flex; }
         .notif-bell summary { list-style:none; cursor:pointer; width:26px; height:26px; border-radius:50%; border:1px solid #c6d5ea; background:#fff; display:grid; place-items:center; font-size:13px; position:relative; }
         .notif-bell summary::-webkit-details-marker { display:none; }
@@ -41,13 +45,7 @@
         .nav a:hover .nav-icon { border-color:#9dbaf1; transform:scale(1.04); }
         .nav a.active .nav-icon { background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.72); color:#fff; box-shadow:none; }
         .nav-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .spacer { flex:1; }
         .nav-scroll { flex:1; min-height:0; overflow-y:auto; }
-        .logout { border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:18px 10px; color:#4b5870; }
-        .logout > div:first-child { min-height:40px; display:flex; align-items:center; font-weight:650; }
-        .user { display:flex; align-items:center; gap:10px; font-weight:900; }
-        .session-note { margin-top:10px; padding:9px 10px; border:1px solid #dbe5f2; border-radius:8px; background:#f7faff; color:#5b6b82; font-size:11px; font-weight:750; line-height:1.35; }
-        .avatar { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; border:2px solid var(--blue); color:var(--blue); background:#f2f7ff; font-size:13px; }
         main { min-width:0; padding:18px 22px 36px; }
         .page-head { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; margin-bottom:20px; }
         .page-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
@@ -547,7 +545,6 @@
             .sidebar { position:relative; height:auto; padding:14px; }
             .brand img { width:170px; }
             .nav { grid-template-columns:repeat(3, minmax(0, 1fr)); }
-            .logout { padding-top:12px; }
             main { padding:18px 14px 36px; }
             .page-head { flex-direction:column; align-items:stretch; }
             .page-actions { justify-content:flex-start; }
@@ -840,12 +837,10 @@
     <aside class="sidebar">
         <div>
             <div class="brand"><img src="{{ asset('images/paygrid-logo.png') }}" alt="PayGrid Transaction Monitoring Dashboard"></div>
-            <div class="role">{{ $roleLabel ?? 'PayGrid' }}</div>
-        </div>
-        <div class="logout">
-            <form method="post" action="{{ route('logout') }}">@csrf<button class="btn" style="width:100%; justify-content:flex-start">Logout</button></form>
-            <div class="user" style="margin-top:18px"><div class="avatar">{{ substr(auth()->user()?->name ?? 'PG', 0, 2) }}</div><div>{{ auth()->user()?->name ?? ($roleLabel ?? 'PayGrid') }}</div></div>
-            <div class="session-note">Sesi otomatis berakhir setelah {{ config('session.lifetime') }} menit tidak aktif.</div>
+            <div class="role-row">
+                <div class="role">{{ $roleLabel ?? 'PayGrid' }}</div>
+                <form method="post" action="{{ route('logout') }}">@csrf<button type="submit" class="logout-icon" title="Logout (sesi otomatis berakhir setelah {{ config('session.lifetime') }} menit tidak aktif)" aria-label="Logout">⏻</button></form>
+            </div>
         </div>
         <div class="nav-scroll">
             <div class="menu-title">Menu</div>
