@@ -58,7 +58,7 @@
         <div class="qris-toolbar"><h2>Ringkasan Fee Per Merchant</h2></div>
         <div class="table-wrap">
             <table class="table qris-table super-summary-table">
-                <thead><tr><th>Merchant</th><th>Group</th><th>Menu Fee</th><th>MA</th><th>Agent</th><th>MDR Final</th></tr></thead>
+                <thead><tr><th>Merchant</th><th>Group</th><th>Menu Fee</th><th>Margin MA</th><th>Margin Agent</th><th>MDR Final</th></tr></thead>
                 <tbody>
                 @foreach($merchants as $merchant)
                     @php($menuLabel = $merchant->fee_menu ? ($feeMenus->optionsFor('merchant')[$merchant->fee_menu]['label'] ?? $merchant->fee_menu) : '-')
@@ -66,8 +66,8 @@
                         <td><strong>{{ $merchant->name }}</strong><br><span class="muted">{{ strtoupper($merchant->merchant_type) }}</span></td>
                         <td>{{ $merchant->agent?->name ?: '-' }}</td>
                         <td>{{ $menuLabel }}</td>
-                        <td>{{ $pct($merchant->ma_fee_percent) }}</td>
-                        <td>{{ $pct($merchant->agent_fee_percent) }}</td>
+                        <td>{{ $pct((float) $merchant->agent_fee_percent - (float) $merchant->ma_fee_percent) }}</td>
+                        <td>{{ $pct((float) $merchant->merchant_mdr_percent - (float) $merchant->agent_fee_percent) }}</td>
                         <td><strong>{{ $pct($merchant->merchant_mdr_percent) }}</strong></td>
                     </tr>
                 @endforeach
