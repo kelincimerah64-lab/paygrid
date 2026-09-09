@@ -42,7 +42,8 @@
         .nav a.active .nav-icon { background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.72); color:#fff; box-shadow:none; }
         .nav-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .spacer { flex:1; }
-        .logout { border-top:1px solid var(--line); padding:18px 10px 0; color:#4b5870; }
+        .nav-scroll { flex:1; min-height:0; overflow-y:auto; }
+        .logout { border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:18px 10px; color:#4b5870; }
         .logout > div:first-child { min-height:40px; display:flex; align-items:center; font-weight:650; }
         .user { display:flex; align-items:center; gap:10px; font-weight:900; }
         .session-note { margin-top:10px; padding:9px 10px; border:1px solid #dbe5f2; border-radius:8px; background:#f7faff; color:#5b6b82; font-size:11px; font-weight:750; line-height:1.35; }
@@ -841,7 +842,12 @@
             <div class="brand"><img src="{{ asset('images/paygrid-logo.png') }}" alt="PayGrid Transaction Monitoring Dashboard"></div>
             <div class="role">{{ $roleLabel ?? 'PayGrid' }}</div>
         </div>
-        <div>
+        <div class="logout">
+            <form method="post" action="{{ route('logout') }}">@csrf<button class="btn" style="width:100%; justify-content:flex-start">Logout</button></form>
+            <div class="user" style="margin-top:18px"><div class="avatar">{{ substr(auth()->user()?->name ?? 'PG', 0, 2) }}</div><div>{{ auth()->user()?->name ?? ($roleLabel ?? 'PayGrid') }}</div></div>
+            <div class="session-note">Sesi otomatis berakhir setelah {{ config('session.lifetime') }} menit tidak aktif.</div>
+        </div>
+        <div class="nav-scroll">
             <div class="menu-title">Menu</div>
             <nav class="nav">
                 @foreach($menus as $item)
@@ -872,12 +878,6 @@
                     <a href="{{ $item['url'] }}" class="{{ ($active ?? '') === $item['key'] ? 'active' : '' }}" data-key="{{ $item['key'] }}"><span class="nav-icon" aria-hidden="true">{{ $navIcon }}</span><span class="nav-label">{{ $item['label'] }}</span></a>
                 @endforeach
             </nav>
-        </div>
-        <div class="spacer"></div>
-        <div class="logout">
-            <form method="post" action="{{ route('logout') }}">@csrf<button class="btn" style="width:100%; justify-content:flex-start">Logout</button></form>
-            <div class="user" style="margin-top:18px"><div class="avatar">{{ substr(auth()->user()?->name ?? 'PG', 0, 2) }}</div><div>{{ auth()->user()?->name ?? ($roleLabel ?? 'PayGrid') }}</div></div>
-            <div class="session-note">Sesi otomatis berakhir setelah {{ config('session.lifetime') }} menit tidak aktif.</div>
         </div>
     </aside>
     <main>
