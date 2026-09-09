@@ -24,7 +24,7 @@
 <section class="grid cards">
     <div class="card pad metric"><label>Total Toko</label><strong>{{ $num($merchants->count()) }}</strong></div>
     <div class="card pad metric blue"><label>Volume Sukses</label><strong>{{ $money($merchants->sum('metric_volume_success')) }}</strong></div>
-    <div class="card pad metric"><label>Transaksi Sukses</label><strong>{{ $num($merchants->sum('metric_trx_total')) }}</strong></div>
+    <div class="card pad metric"><label>Transaksi Sukses</label><strong>{{ $num($merchants->sum('metric_trx_success')) }}</strong></div>
     <div class="card pad metric warn-soft"><label>Transaksi Pending</label><strong>{{ $num($merchants->sum('metric_trx_pending')) }}</strong></div>
 </section>
 
@@ -52,7 +52,7 @@
     <div class="qris-toolbar"><div><h2>Report Toko</h2><p class="muted" style="margin:4px 0 0">Ringkasan transaksi per toko sesuai periode filter.</p></div><span class="badge ok">{{ $num($merchants->count()) }} toko</span></div>
     <div class="table-wrap">
         <table class="table qris-table agent-store-report-table">
-            <thead><tr><th>Toko</th><th>Tipe</th><th>TRX Sukses</th><th>Sukses</th><th>Pending Transaksi</th><th>Expired</th><th>Volume Sukses</th><th>Saldo Pending HG</th><th>Settlement</th></tr></thead>
+            <thead><tr><th>Toko</th><th>Tipe</th><th>Total Transaksi</th><th>Sukses</th><th>Pending Transaksi</th><th>Expired</th><th>Volume Sukses</th><th>Saldo Pending HG</th><th>Settlement</th></tr></thead>
             <tbody>
             @forelse($merchants as $merchant)
                 <tr>
