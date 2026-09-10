@@ -183,6 +183,9 @@
                 @if(!in_array($r->status, ['approved', 'rejected'], true))
                     <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form">
                         @csrf
+                        @if(($r->merchant_type ?: ($payload['merchant_type'] ?? null)) === 'script')
+                            <label>Engine Type<select name="engine_type" required><option value="">Pilih Engine Type</option><option value="sc" @selected(($payload['engine_type'] ?? null) === 'sc')>Script</option><option value="api" @selected(($payload['engine_type'] ?? null) === 'api')>API</option></select></label>
+                        @endif
                         @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $requestRates])
                         <input type="hidden" name="payin_fee_percent" value="{{ $payinFee }}">
                         <button class="btn primary compact-btn" style="width:100%; margin:8px 0">Approve</button>
