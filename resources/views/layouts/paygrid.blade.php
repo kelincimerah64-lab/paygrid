@@ -237,6 +237,15 @@
         .ticket-table th:nth-child(5) { width:9%; }
         .ticket-table th:nth-child(6) { width:11%; }
         .ticket-table th:nth-child(7) { width:20%; }
+        .cs-scope-ticket-table { min-width:0; table-layout:fixed; }
+        .cs-scope-ticket-table th:nth-child(1) { width:10%; }
+        .cs-scope-ticket-table th:nth-child(2) { width:8%; }
+        .cs-scope-ticket-table th:nth-child(3) { width:19%; }
+        .cs-scope-ticket-table th:nth-child(4) { width:11%; }
+        .cs-scope-ticket-table th:nth-child(5) { width:10%; }
+        .cs-scope-ticket-table th:nth-child(6) { width:9%; }
+        .cs-scope-ticket-table th:nth-child(7) { width:11%; }
+        .cs-scope-ticket-table th:nth-child(8) { width:22%; }
         .time-cell { line-height:1.18; white-space:nowrap; }
         .time-cell span { display:block; color:#26364f; font-size:12px; font-weight:650; margin-top:2px; }
         .ref-line { display:block; max-width:100%; }
