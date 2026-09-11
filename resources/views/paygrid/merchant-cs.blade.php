@@ -259,11 +259,11 @@
                         @elseif(! in_array($ticket->status, ['done', 'cancelled'], true))
                             <form method="post" action="{{ route('merchant.cs.ticket.submit', [$merchant, $ticket]) }}" enctype="multipart/form-data" class="ticket-submit">
                                 @csrf
-                                <label class="file-pick">
-                                    Pilih file (opsional)
+                                <label class="file-pick" title="Lampiran opsional, boleh dikosongkan">
+                                    Pilih file
                                     <input type="file" name="attachment" accept="image/*">
                                 </label>
-                                <span class="file-name">Belum pilih</span>
+                                <span class="file-name">Opsional</span>
                                 <button class="btn primary" type="submit">Submit</button>
                             </form>
                         @else
