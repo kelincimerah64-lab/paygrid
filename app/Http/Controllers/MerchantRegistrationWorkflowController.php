@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Merchant;
 use App\Models\MerchantRegistration;
 use App\Models\Agent;
+use App\Models\User;
 use App\Notifications\MerchantRegistrationSubmittedToMa;
 use App\Jobs\ProvisionMerchantOnGateway;
 use App\Rules\ExactlyOneFeeMenuFilled;
@@ -15,6 +16,7 @@ use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -62,10 +64,19 @@ class MerchantRegistrationWorkflowController extends Controller
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
             'merchant_type' => ['nullable', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
+            'admin_email' => ['required', 'email', 'max:160'],
             'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled(), new FeeMenuRatesAboveReference('merchant', $agentRates, 'Based Fee Agent')],
             'payin_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
         $activeMenu = array_key_first(array_filter($rates));
+
+        $existingAdmin = $registration->merchant_id
+            ? User::query()->where('merchant_id', $registration->merchant_id)->where('role', 'admin')->first()
+            : null;
+        $emailTaken = User::query()->where('email', $data['admin_email'])
+            ->when($existingAdmin, fn ($query) => $query->where('id', '!=', $existingAdmin->id))
+            ->exists();
+        abort_if($emailTaken, 422, 'Email admin sudah dipakai user lain.');
 
         $payload = (array) ($registration->payload ?? []);
         $merchantMdr = (float) $rates[$activeMenu];
@@ -119,6 +130,25 @@ class MerchantRegistrationWorkflowController extends Controller
         ]);
         $merchant->save();
 
+        $adminCredentialNote = '';
+        if ($existingAdmin) {
+            if ($existingAdmin->email !== $data['admin_email']) {
+                $existingAdmin->forceFill(['email' => $data['admin_email']])->save();
+            }
+        } else {
+            $demoPassword = config('paygrid.demo_password');
+            $adminUser = User::query()->create([
+                'name' => str($data['admin_email'])->before('@')->replace(['.', '_', '-'], ' ')->title()->toString(),
+                'email' => $data['admin_email'],
+                'role' => 'admin',
+                'merchant_id' => $merchant->id,
+                'password' => Hash::make($demoPassword),
+                'plain_password' => $demoPassword,
+            ]);
+            $audit->record('merchant_registration.admin_created', $adminUser, null, $adminUser->only(['email', 'role', 'merchant_id']));
+            $adminCredentialNote = ' Admin default: '.$adminUser->email.' / '.$demoPassword.'.';
+        }
+
         $before = $registration->only(['status', 'merchant_id', 'approved_at']);
         $registration->update(['merchant_id' => $merchant->id, 'status' => 'approved', 'approved_at' => now()]);
         $audit->record('merchant_registration.approved', $registration, $before, $registration->only(array_keys($before)));
@@ -127,7 +157,7 @@ class MerchantRegistrationWorkflowController extends Controller
             ProvisionMerchantOnGateway::dispatch($merchant->id);
         }
 
-        return back()->with('status', 'Merchant berhasil diapprove di PayGrid.');
+        return back()->with('status', 'Merchant berhasil diapprove di PayGrid.'.$adminCredentialNote);
     }
 
     public function reject(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse

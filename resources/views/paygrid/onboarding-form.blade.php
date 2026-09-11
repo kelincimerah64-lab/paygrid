@@ -73,6 +73,7 @@
 
     <h2 class="section">PIC dan User Toko</h2>
     <div class="form-grid">
+        <label>Email Admin<input name="admin_email" type="email" placeholder="admin@domain.com" required></label>
         <label>Email PIC<input name="pic_email" type="email" placeholder="pic@domain.com"></label>
         <label>Telegram PIC<input name="pic_telegram" placeholder="@usernamepic"></label>
         <label>Email Finance<input name="finance_email" type="email" placeholder="finance@domain.com"></label>

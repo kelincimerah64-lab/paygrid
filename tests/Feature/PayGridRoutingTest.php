@@ -1478,6 +1478,7 @@ class PayGridRoutingTest extends TestCase
         $this->actingAs($user)
             ->post(route('api.merchant-registration.approve', $registration), [
                 'fee_menu_rates' => ['everyday' => 1.2],
+                'admin_email' => 'admin-approval@paygrid.local',
             ])
             ->assertRedirect();
 
@@ -1491,6 +1492,7 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame('https://example.test/transaction', $merchant->transaction_callback_url);
         $this->assertSame(5000, $merchant->disbursement_fee_fixed);
         $this->assertDatabaseHas('audit_logs', ['action' => 'merchant_registration.approved']);
+        $this->assertDatabaseHas('users', ['email' => 'admin-approval@paygrid.local', 'role' => 'admin', 'merchant_id' => $merchant->id]);
     }
 
     public function test_agent_can_resubmit_a_rejected_registration_up_to_three_times(): void

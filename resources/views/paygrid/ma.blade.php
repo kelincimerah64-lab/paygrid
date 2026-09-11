@@ -183,6 +183,7 @@
                 @if(!in_array($r->status, ['approved', 'rejected'], true))
                     <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form">
                         @csrf
+                        <label>Email Admin<input type="email" name="admin_email" value="{{ old('admin_email', $adminEmail !== '-' ? $adminEmail : '') }}" required></label>
                         @if(($r->merchant_type ?: ($payload['merchant_type'] ?? null)) === 'script')
                             <label>Engine Type<select name="engine_type" required><option value="">Pilih Engine Type</option><option value="sc" @selected(($payload['engine_type'] ?? null) === 'sc')>Script</option><option value="api" @selected(($payload['engine_type'] ?? null) === 'api')>API</option></select></label>
                         @endif
