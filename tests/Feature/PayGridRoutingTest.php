@@ -1122,6 +1122,53 @@ class PayGridRoutingTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_ma_and_agent_can_push_ticket_to_center_directly_from_monitor_cs(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $ticket = SupportTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+
+        $this->actingAs($ma)
+            ->get(route('cs-scope.index'))
+            ->assertOk()
+            ->assertSee($ticket->ticket_no)
+            ->assertSee('Push Tiket');
+
+        $this->actingAs($ma)
+            ->post(route('merchant.cs.ticket.submit', [$merchant, $ticket]), [])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Tiket berhasil dikirim ke CS pusat.');
+
+        $ticket->refresh();
+        $this->assertSame('open', $ticket->status);
+        $this->assertNotNull($ticket->submitted_to_center_at);
+
+        // Reflected on the merchant's own CS toko dashboard too - same underlying record.
+        $csUser = User::query()->where('email', 'cs-bj@paygrid.local')->firstOrFail();
+        $this->actingAs($csUser)
+            ->get(route('merchant.cs.tickets', $merchant))
+            ->assertOk()
+            ->assertSee('Terkirim');
+
+        // A second ticket, pushed by the Agent this time.
+        $secondTicket = SupportTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'ticket_no' => 'TCK-MONITOR-PUSH-AGENT',
+            'reference' => 'monitor-push-agent-ref',
+            'issue' => 'Payment pending',
+            'status' => 'not_started',
+        ]);
+
+        $this->actingAs($agentUser)
+            ->post(route('merchant.cs.ticket.submit', [$merchant, $secondTicket]), [])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Tiket berhasil dikirim ke CS pusat.');
+
+        $this->assertNotNull($secondTicket->refresh()->submitted_to_center_at);
+    }
+
     public function test_script_cs_can_create_ticket_from_history_without_attachment(): void
     {
         $this->seed();

@@ -19,7 +19,7 @@ class CsScopeController extends Controller
         $merchantFilter = (int) request('merchant_id', 0);
 
         $tickets = SupportTicket::query()
-            ->with('merchant')
+            ->with(['merchant', 'topupRequest'])
             ->whereIn('merchant_id', $merchantIds)
             ->where('status', '!=', 'done')
             ->when($merchantFilter, fn ($query) => $query->where('merchant_id', $merchantFilter))

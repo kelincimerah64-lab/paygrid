@@ -32,26 +32,46 @@
     <div class="table-wrap">
         <table class="table qris-table cs-scope-ticket-table">
             <thead>
-                <tr><th>Toko</th><th>Ticket</th><th>Issue</th><th>Status</th><th>Dibuat</th><th>Aksi</th></tr>
+                <tr><th>Toko</th><th>Dibuat</th><th>Ticket</th><th>Customer</th><th>Issue</th><th>Status Pusat</th><th>Catatan</th><th>Push Tiket</th></tr>
             </thead>
             <tbody>
             @forelse($tickets as $ticket)
+                @php($topup = $ticket->topupRequest)
                 <tr>
                     <td><strong>{{ $ticket->merchant?->name ?: '-' }}</strong></td>
-                    <td><strong>{{ $ticket->ticket_no }}</strong><br><span class="muted truncate ref-line">{{ $ticket->reference ?: '-' }}</span></td>
+                    <td>
+                        <strong>{{ $ticket->created_at?->timezone('Asia/Jakarta')->format('H:i:s') ?? '-' }}</strong><br>
+                        <span class="muted">{{ $ticket->created_at?->timezone('Asia/Jakarta')->format('d M Y') ?? '-' }}</span>
+                    </td>
+                    <td>
+                        <strong>{{ $ticket->ticket_no }}</strong><br>
+                        <span class="muted truncate ref-line">{{ $ticket->reference ?: '-' }}</span><br>
+                        <span class="muted">RRN: {{ $topup?->rrn ?: '-' }}</span>
+                    </td>
+                    <td><strong class="truncate ref-line">{{ $ticket->client_reference ?: $topup?->customer_reference ?: '-' }}</strong></td>
                     <td><span class="truncate ref-line">{{ $ticket->issue }}</span></td>
-                    <td><span class="badge {{ $statusClass($ticket->center_status ?: $ticket->status) }}">{{ $statusLabel($ticket->center_status ?: $ticket->status) }}</span></td>
-                    <td class="time-cell">{{ $ticket->created_at?->timezone('Asia/Jakarta')->format('d M Y H.i') ?? '-' }}</td>
+                    <td><span class="badge {{ App\Support\PayGridLabels::centerStatusBadge($ticket->center_status) }}">{{ $statusLabel($ticket->center_status ?: $ticket->status) }}</span></td>
+                    <td>{{ $ticket->center_note ?: (count($ticket->attachments ?? []) ? count($ticket->attachments).' lampiran' : 'Belum ada lampiran') }}</td>
                     <td>
                         @if($ticket->submitted_to_center_at)
                             <span class="badge ok">Terkirim</span>
+                        @elseif(! in_array($ticket->status, ['done', 'cancelled'], true))
+                            <form method="post" action="{{ route('merchant.cs.ticket.submit', [$ticket->merchant, $ticket]) }}" enctype="multipart/form-data" class="ticket-submit">
+                                @csrf
+                                <label class="file-pick" title="Lampiran opsional, boleh dikosongkan">
+                                    Pilih file
+                                    <input type="file" name="attachment" accept="image/*">
+                                </label>
+                                <span class="file-name">Opsional</span>
+                                <button class="btn primary" type="submit">Push Tiket</button>
+                            </form>
                         @else
-                            <a class="btn primary compact-btn" href="{{ route('merchant.cs.tickets', $ticket->merchant) }}">Push Tiket</a>
+                            <span class="muted">-</span>
                         @endif
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="empty">Tidak ada tiket terbuka pada scope ini.</td></tr>
+                <tr><td colspan="8" class="empty">Tidak ada tiket terbuka pada scope ini.</td></tr>
             @endforelse
             </tbody>
         </table>
@@ -97,3 +117,14 @@
     </div>
 </section>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('change', (event) => {
+    if (! event.target.matches('.ticket-submit input[type="file"]')) return;
+    const name = event.target.files && event.target.files[0] ? event.target.files[0].name : 'Opsional';
+    const label = event.target.closest('.ticket-submit')?.querySelector('.file-name');
+    if (label) label.textContent = name;
+});
+</script>
+@endpush
