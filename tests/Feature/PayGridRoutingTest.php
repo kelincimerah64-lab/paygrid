@@ -1045,6 +1045,83 @@ class PayGridRoutingTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_ma_is_scoped_to_their_own_agents_merchants_on_cs_pages(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $epcMerchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+
+        // MA can reach the CS pages for a merchant under one of their own agents.
+        $this->actingAs($ma)->get('/portal/nnp-cm-bj/cs/tickets')->assertOk();
+
+        // A merchant under a completely different MA must stay out of reach, even via direct URL.
+        $otherMaUser = User::query()->create([
+            'name' => 'Other MA',
+            'email' => 'other-ma-scope-test@paygrid.local',
+            'role' => 'ma',
+            'password' => Hash::make(config('paygrid.demo_password')),
+        ]);
+        $otherAgent = Agent::query()->create([
+            'ma_user_id' => $otherMaUser->id,
+            'code' => 'AG-OTHER-MA-SCOPE-TEST',
+            'name' => 'Other MA Scope Agent',
+            'email' => 'other-ma-scope-agent-test@paygrid.local',
+            'password_plain' => config('paygrid.demo_password'),
+            'connection_type' => 'cm',
+            'is_active' => true,
+        ]);
+        $foreignMerchant = Merchant::query()->create([
+            'agent_id' => $otherAgent->id,
+            'slug' => 'foreign-ma-scope-merchant-test',
+            'name' => 'Foreign MA Scope Merchant',
+            'merchant_id' => 'foreign-ma-scope-merchant-test-id',
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'approval_status' => 'approved',
+            'merchant_mdr_percent' => 1.2,
+        ]);
+
+        $this->actingAs($ma)
+            ->get('/portal/foreign-ma-scope-merchant-test/cs/tickets')
+            ->assertForbidden();
+
+        $topup = TopupRequest::query()->create([
+            'merchant_id' => $epcMerchant->id,
+            'gateway' => $epcMerchant->gateway,
+            'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'ma-own-scope-ref',
+            'transaction_id' => 'ma-own-scope-trx',
+            'status' => 'expired',
+            'amount' => 50000,
+            'net_amount' => 49500,
+            'fee_amount' => 500,
+            'submitted_at' => now()->subHour(),
+            'expires_at' => now()->subMinutes(20),
+        ]);
+        $this->actingAs($ma)
+            ->post(route('merchant.cs.topup.ticket', [$epcMerchant, $topup]), ['note' => 'Push dari MA sendiri.'])
+            ->assertRedirect()
+            ->assertSessionHas('status');
+        $this->assertDatabaseHas('support_tickets', ['topup_request_id' => $topup->id, 'merchant_id' => $epcMerchant->id]);
+
+        $foreignTopup = TopupRequest::query()->create([
+            'merchant_id' => $foreignMerchant->id,
+            'gateway' => $foreignMerchant->gateway,
+            'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'ma-foreign-scope-ref',
+            'transaction_id' => 'ma-foreign-scope-trx',
+            'status' => 'expired',
+            'amount' => 50000,
+            'net_amount' => 49500,
+            'fee_amount' => 500,
+            'submitted_at' => now()->subHour(),
+            'expires_at' => now()->subMinutes(20),
+        ]);
+        $this->actingAs($ma)
+            ->post(route('merchant.cs.topup.ticket', [$foreignMerchant, $foreignTopup]), ['note' => 'Should be blocked.'])
+            ->assertForbidden();
+    }
+
     public function test_script_cs_can_create_ticket_from_history_without_attachment(): void
     {
         $this->seed();
