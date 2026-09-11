@@ -715,6 +715,27 @@ class PayGridRoutingTest extends TestCase
         $this->assertCount(1, $ticket->refresh()->attachments);
     }
 
+    public function test_cs_can_submit_ticket_without_an_attachment(): void
+    {
+        $this->seed();
+
+        $user = User::query()->where('email', 'cs-bj@paygrid.local')->firstOrFail();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $ticket = SupportTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+
+        $this->actingAs($user)
+            ->post(route('merchant.cs.ticket.submit', [$merchant, $ticket]), [
+                'note' => 'Belum ada bukti, langsung submit.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Tiket berhasil dikirim ke CS pusat.');
+
+        $ticket->refresh();
+        $this->assertSame('open', $ticket->status);
+        $this->assertNotNull($ticket->submitted_to_center_at);
+        $this->assertSame([], $ticket->attachments ?? []);
+    }
+
     public function test_cs_pusat_can_receive_and_update_submitted_ticket_status(): void
     {
         Storage::fake('public');

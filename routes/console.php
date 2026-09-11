@@ -273,6 +273,61 @@ Artisan::command('fees:backfill-snapshots', function (\App\Services\FeeService $
     $this->info("Backfilled {$count} fee snapshot(s).");
 })->purpose('Create immutable fee snapshots for existing transactions.');
 
+Artisan::command('tickets:auto-create-pending', function (
+    \App\Services\Gateway\GatewayManager $gateways,
+    \App\Services\TransactionIngestionService $ingestion,
+    \App\Services\SupportTicketService $tickets,
+) {
+    $pendingMinutes = (int) \App\Models\PaygridSetting::value('ticket_pending_minutes', '40');
+    $submittedBefore = now()->subMinutes($pendingMinutes);
+
+    $created = 0;
+    $checked = 0;
+
+    \App\Models\TopupRequest::query()
+        ->where('status', 'pending')
+        ->where('submitted_at', '<=', $submittedBefore)
+        ->whereDoesntHave('ticket')
+        ->with('merchant')
+        ->chunkById(200, function ($requests) use ($gateways, $ingestion, $tickets, $pendingMinutes, &$created, &$checked) {
+            foreach ($requests as $topup) {
+                $merchant = $topup->merchant;
+                if (! $merchant) {
+                    continue;
+                }
+
+                if (! $tickets->canCreateTicket($topup)) {
+                    continue;
+                }
+
+                $checked++;
+
+                if ($topup->gateway_ref_id) {
+                    try {
+                        $response = $gateways->for($merchant)->getTransaction($merchant, $topup->gateway_ref_id);
+                        $payload = $response['data'] ?? $response;
+                        if (is_array($payload)) {
+                            $ingestion->ingestForMerchant($merchant, $payload, $merchant->gateway, $merchant->gateway.'_status_pull');
+                        }
+                    } catch (\Throwable) {
+                        // Live re-check failed (e.g. gateway timeout) - fall back to the local
+                        // status we already have rather than silently skipping the ticket.
+                    }
+                    $topup->refresh();
+                }
+
+                if ($topup->status !== 'pending') {
+                    continue;
+                }
+
+                $tickets->createFromTopup($topup, 'Ticket dibuat otomatis sistem setelah pending lebih dari '.$pendingMinutes.' menit (sudah dicek ulang ke gateway).');
+                $created++;
+            }
+        });
+
+    $this->info("Checked {$checked} overdue pending transaction(s), auto-created {$created} ticket(s).");
+})->purpose('Re-verify overdue pending transactions against the gateway and auto-create tickets for ones still pending.');
+
 Artisan::command('gateway:health-hilogate {merchant}', function (\App\Services\Gateway\GatewayManager $gateways) {
     $merchant = Merchant::query()
         ->where('slug', $this->argument('merchant'))

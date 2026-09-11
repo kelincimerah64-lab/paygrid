@@ -246,7 +246,8 @@
                     </td>
                     <td>
                         <strong>{{ $ticket->ticket_no }}</strong><br>
-                        <span class="muted truncate ref-line">{{ $ticket->reference ?: '-' }}</span>
+                        <span class="muted truncate ref-line">{{ $ticket->reference ?: '-' }}</span><br>
+                        <span class="muted">RRN: {{ $topup?->rrn ?: '-' }}</span>
                     </td>
                     <td><strong class="truncate ref-line">{{ $ticket->client_reference ?: $topup?->customer_reference ?: '-' }}</strong></td>
                     <td><span class="truncate ref-line">{{ $ticket->issue }}</span></td>
@@ -259,8 +260,8 @@
                             <form method="post" action="{{ route('merchant.cs.ticket.submit', [$merchant, $ticket]) }}" enctype="multipart/form-data" class="ticket-submit">
                                 @csrf
                                 <label class="file-pick">
-                                    Pilih file
-                                    <input type="file" name="attachment" accept="image/*" required>
+                                    Pilih file (opsional)
+                                    <input type="file" name="attachment" accept="image/*">
                                 </label>
                                 <span class="file-name">Belum pilih</span>
                                 <button class="btn primary" type="submit">Submit</button>

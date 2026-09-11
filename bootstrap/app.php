@@ -33,6 +33,11 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping(4)
             ->runInBackground();
 
+        $schedule->command('tickets:auto-create-pending')
+            ->everyMinute()
+            ->withoutOverlapping(5)
+            ->runInBackground();
+
         $schedule->command('paygrid:queue-monitor')
             ->everyMinute()
             ->withoutOverlapping(1)

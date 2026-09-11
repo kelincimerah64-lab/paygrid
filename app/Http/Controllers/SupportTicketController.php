@@ -6,11 +6,16 @@ use App\Models\Merchant;
 use App\Models\PaygridSetting;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
+use App\Services\SupportTicketService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class SupportTicketController extends Controller
 {
+    public function __construct(private readonly SupportTicketService $tickets)
+    {
+    }
+
     public function submit(Request $request, Merchant $merchant, SupportTicket $ticket): RedirectResponse
     {
         abort_unless($ticket->merchant_id === $merchant->id, 404);
@@ -19,18 +24,20 @@ class SupportTicketController extends Controller
         }
 
         $data = $request->validate([
-            'attachment' => ['required', 'image', 'max:4096'],
+            'attachment' => ['nullable', 'image', 'max:4096'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $path = $request->file('attachment')->store('ticket-attachments/'.$merchant->id, 'local');
         $attachments = $ticket->attachments ?? [];
-        $attachments[] = [
-            'path' => $path,
-            'disk' => 'local',
-            'name' => $request->file('attachment')->getClientOriginalName(),
-            'uploaded_at' => now()->toIso8601String(),
-        ];
+        if ($request->hasFile('attachment')) {
+            $path = $request->file('attachment')->store('ticket-attachments/'.$merchant->id, 'local');
+            $attachments[] = [
+                'path' => $path,
+                'disk' => 'local',
+                'name' => $request->file('attachment')->getClientOriginalName(),
+                'uploaded_at' => now()->toIso8601String(),
+            ];
+        }
 
         $ticket->update([
             'attachments' => $attachments,
@@ -51,7 +58,7 @@ class SupportTicketController extends Controller
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        if (! $this->canCreateTicket($topupRequest)) {
+        if (! $this->tickets->canCreateTicket($topupRequest)) {
             return back()->withErrors(['ticket' => 'Ticket pending baru bisa dibuat setelah pending '.PaygridSetting::value('ticket_pending_minutes', '40').' menit.']);
         }
 
@@ -59,18 +66,7 @@ class SupportTicketController extends Controller
             return back()->with('status', 'Transaksi ini sudah menjadi tiket. Buka menu Tickets untuk submit ke CS pusat.');
         }
 
-        $ticket = SupportTicket::query()->firstOrCreate(
-            ['topup_request_id' => $topupRequest->id],
-            [
-                'merchant_id' => $merchant->id,
-                'ticket_no' => $this->ticketNo($topupRequest),
-                'reference' => $topupRequest->gateway_ref_id,
-                'client_reference' => $topupRequest->customer_reference ?: $topupRequest->transaction_id,
-                'issue' => $topupRequest->status === 'pending' ? 'Payment pending' : 'Payment '.$topupRequest->status,
-                'status' => 'not_started',
-                'note' => 'Ticket dibuat CS toko. Menunggu submit ke CS pusat.',
-            ],
-        );
+        $ticket = $this->tickets->createFromTopup($topupRequest);
 
         $ticket->update([
             'note' => $data['note'] ?? $ticket->note,
@@ -79,44 +75,5 @@ class SupportTicketController extends Controller
         ]);
 
         return back()->with('status', 'Transaksi berhasil jadi tiket. Buka menu Tickets untuk submit ke CS pusat.');
-    }
-
-    private function canCreateTicket(TopupRequest $request): bool
-    {
-        if (in_array($request->status, ['expired', 'failed', 'rejected'], true)) {
-            return true;
-        }
-
-        if ($request->status !== 'pending') {
-            return false;
-        }
-
-        $deadline = $this->ticketDeadline($request);
-
-        return $deadline !== null && now()->greaterThanOrEqualTo($deadline);
-    }
-
-    private function ticketDeadline(TopupRequest $request): ?\Carbon\CarbonInterface
-    {
-        $pendingMinutes = (int) PaygridSetting::value('ticket_pending_minutes', '40');
-
-        if ($request->submitted_at) {
-            $base = $request->submitted_at->lte(now()->addMinute()) ? $request->submitted_at : $request->created_at;
-
-            return $base?->copy()->addMinutes($pendingMinutes);
-        }
-
-        if ($request->expires_at) {
-            return $request->expires_at->copy()->addMinutes(max(0, $pendingMinutes - (int) config('paygrid.topup.expires_in_minutes', 30)));
-        }
-
-        return null;
-    }
-
-    private function ticketNo(TopupRequest $request): string
-    {
-        $suffix = preg_replace('/[^A-Za-z0-9]/', '', (string) ($request->gateway_ref_id ?: $request->id));
-
-        return 'TCK-'.$request->id.'-'.substr($suffix ?: (string) $request->id, -8);
     }
 }
