@@ -16,15 +16,15 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MerchantTicketController extends Controller
 {
-    public function index(Merchant $merchant, MerchantTicketService $tickets, MenuBuilder $menus): View
+    public function index(Request $request, Merchant $merchant, MerchantTicketService $tickets, MenuBuilder $menus): View
     {
         abort_unless($merchant->general_ticket_enabled, 404);
 
         return view('paygrid.merchant-tickets', [
             'roleLabel' => $merchant->name.' - Tickets',
             'merchant' => $merchant,
-            'menus' => $menus->merchantAdmin($merchant),
-            'active' => 'support-ticket',
+            'menus' => $this->menusFor($request, $merchant, $menus),
+            'active' => $this->activeFor($request),
             'csCategories' => MerchantTicketService::CS_CATEGORIES,
             'techCategories' => MerchantTicketService::TECH_CATEGORIES,
             'tickets' => MerchantTicket::query()
@@ -55,7 +55,7 @@ class MerchantTicketController extends Controller
         return redirect()->route('merchant.tickets.show', [$merchant, $ticket])->with('status', 'Tiket berhasil dibuat: '.$ticket->ticket_no);
     }
 
-    public function show(Merchant $merchant, MerchantTicket $ticket, MenuBuilder $menus): View
+    public function show(Request $request, Merchant $merchant, MerchantTicket $ticket, MenuBuilder $menus): View
     {
         abort_unless($merchant->general_ticket_enabled, 404);
         abort_unless((int) $ticket->merchant_id === (int) $merchant->id, 404);
@@ -63,10 +63,25 @@ class MerchantTicketController extends Controller
         return view('paygrid.merchant-ticket-show', [
             'roleLabel' => $merchant->name.' - Tickets',
             'merchant' => $merchant,
-            'menus' => $menus->merchantAdmin($merchant),
-            'active' => 'support-ticket',
+            'menus' => $this->menusFor($request, $merchant, $menus),
+            'active' => $this->activeFor($request),
             'ticket' => $ticket->load('messages.user'),
         ]);
+    }
+
+    private function menusFor(Request $request, Merchant $merchant, MenuBuilder $menus): array
+    {
+        return match ($request->user()?->role) {
+            'ma' => $menus->ma(),
+            'agent' => $menus->agent(),
+            'cs', 'readonly_cs' => $menus->merchantCs($merchant),
+            default => $menus->merchantAdmin($merchant),
+        };
+    }
+
+    private function activeFor(Request $request): string
+    {
+        return in_array($request->user()?->role, ['ma', 'agent'], true) ? 'create-ticket' : 'support-ticket';
     }
 
     public function reply(Request $request, Merchant $merchant, MerchantTicket $ticket, MerchantTicketService $tickets): RedirectResponse

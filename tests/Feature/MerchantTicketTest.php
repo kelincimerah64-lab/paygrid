@@ -233,6 +233,24 @@ class MerchantTicketTest extends TestCase
         $this->assertDatabaseHas('merchant_tickets', ['merchant_id' => $merchant->id, 'created_by_user_id' => $ma->id]);
     }
 
+    public function test_ma_keeps_their_own_menu_when_visiting_a_stores_ticket_page(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $storeAdmin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($ma)->get(route('merchant.tickets.index', $merchant))
+            ->assertOk()
+            ->assertSee('Request Approval')
+            ->assertDontSee('Atur Minimum Topup');
+
+        $this->actingAs($storeAdmin)->get(route('merchant.tickets.index', $merchant))
+            ->assertOk()
+            ->assertSee('Atur Minimum Topup')
+            ->assertDontSee('Request Approval');
+    }
+
     public function test_ma_ticket_list_excludes_merchants_explicitly_disabled(): void
     {
         $this->seed();
