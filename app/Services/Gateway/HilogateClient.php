@@ -65,7 +65,7 @@ class HilogateClient implements GatewayClientInterface
             'page' => $page,
             'page_size' => $pageSize,
             'from' => $filters['from'] ?? null,
-            'to' => $filters['to'] ?? null,
+            'until' => $filters['to'] ?? null,
             'status' => $filters['status'] ?? null,
         ], static fn ($value) => $value !== null && $value !== '');
 

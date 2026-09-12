@@ -41,7 +41,7 @@ class HilogateClientTest extends TestCase
 
         $this->assertSame('trx-1', $rows[0]['id']);
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://app.hilogate.test/api/v1/merchants/store-123/qris?page=2&page_size=25&from=2026-08-10&to=2026-08-10'
+            return $request->url() === 'https://app.hilogate.test/api/v1/merchants/store-123/qris?page=2&page_size=25&from=2026-08-10&until=2026-08-10'
                 && $request->header('X-Merchant-ID')[0] === 'store-123'
                 && $request->header('X-Environment')[0] === 'live'
                 && $request->header('X-Signature')[0] === md5('/api/v1/merchants/store-123/qris'.'store-secret');

@@ -223,6 +223,8 @@ class SyncMerchantTransactions implements ShouldQueue
             return [$client->pullTransactions($merchant, $filters), null];
         }
 
+        $filters += $this->defaultHilogateWindow();
+
         $requestedMode = $filters['pull_mode'] ?? null;
         $modes = $requestedMode
             ? [$requestedMode]
@@ -240,5 +242,15 @@ class SyncMerchantTransactions implements ShouldQueue
         }
 
         return [$lastRows, $lastMode];
+    }
+
+    private function defaultHilogateWindow(): array
+    {
+        $hours = max(1, (int) config('paygrid.gateway_sync.window_hours', 24));
+
+        return [
+            'from' => now()->subHours($hours)->utc()->format('Y-m-d\TH:i:s').'Z',
+            'to' => now()->utc()->format('Y-m-d\TH:i:s').'Z',
+        ];
     }
 }

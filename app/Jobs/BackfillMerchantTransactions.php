@@ -179,6 +179,8 @@ class BackfillMerchantTransactions implements ShouldQueue
             return [$client->pullTransactions($merchant, $filters), null];
         }
 
+        $filters += $this->hilogateWindowFor($this->date ?: now('Asia/Jakarta')->toDateString());
+
         $requestedMode = $filters['pull_mode'] ?? null;
         $modes = $requestedMode
             ? [$requestedMode]
@@ -196,5 +198,15 @@ class BackfillMerchantTransactions implements ShouldQueue
         }
 
         return [$lastRows, $lastMode];
+    }
+
+    private function hilogateWindowFor(string $date): array
+    {
+        $day = \Carbon\CarbonImmutable::parse($date, 'Asia/Jakarta');
+
+        return [
+            'from' => $day->startOfDay()->utc()->format('Y-m-d\TH:i:s').'Z',
+            'to' => $day->endOfDay()->utc()->format('Y-m-d\TH:i:s').'Z',
+        ];
     }
 }

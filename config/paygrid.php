@@ -36,6 +36,7 @@ return [
         'enabled' => env('PAYGRID_GATEWAY_SYNC_ENABLED', true),
         'interval_seconds' => (int) env('PAYGRID_GATEWAY_SYNC_INTERVAL_SECONDS', 8),
         'page_size' => (int) env('PAYGRID_GATEWAY_SYNC_PAGE_SIZE', 50),
+        'window_hours' => (int) env('PAYGRID_GATEWAY_SYNC_WINDOW_HOURS', 24),
         'max_pages' => (int) env('PAYGRID_GATEWAY_SYNC_MAX_PAGES', 10),
         'backfill_pages_per_run' => (int) env('PAYGRID_GATEWAY_BACKFILL_PAGES_PER_RUN', 3),
         'concurrency' => (int) env('PAYGRID_GATEWAY_SYNC_CONCURRENCY', 6),
