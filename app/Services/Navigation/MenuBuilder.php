@@ -32,6 +32,7 @@ class MenuBuilder
             ['key' => 'create-store', 'label' => 'Create Toko', 'url' => route('ma.create-store')],
             ['key' => 'bot-monitoring', 'label' => 'Monitoring Bot Telegram', 'url' => route('ma.bot-monitoring')],
             ['key' => 'monitor', 'label' => 'Monitor CS', 'url' => route('cs-scope.index')],
+            ['key' => 'create-ticket', 'label' => 'Create Ticket', 'url' => route('ma.tickets.index')],
         ];
     }
 

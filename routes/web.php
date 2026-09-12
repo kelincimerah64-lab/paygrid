@@ -6,6 +6,7 @@ use App\Http\Controllers\CenterSupportController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentTicketController;
+use App\Http\Controllers\MaTicketController;
 use App\Http\Controllers\MerchantTicketController;
 use App\Http\Controllers\GatewayCallbackController;
 use App\Http\Controllers\MerchantRegistrationController;
@@ -41,6 +42,7 @@ Route::post('/ma/agents/{agent}/fee', [MaController::class, 'updateAgentFee'])->
 Route::get('/ma/create-store', fn (MaController $controller) => $controller->page('create-store'))->name('ma.create-store');
 Route::post('/ma/create-store', [MaController::class, 'storeMerchant'])->middleware('throttle:dashboard-writes')->name('ma.create-store.store');
 Route::get('/ma/bot-monitoring', fn (MaController $controller) => $controller->page('bot-monitoring'))->name('ma.bot-monitoring');
+Route::get('/ma/tickets', [MaTicketController::class, 'index'])->name('ma.tickets.index');
 });
 
 Route::middleware(['auth', 'role:superadmin'])->group(function () {

@@ -891,6 +891,7 @@
                         'tickets' => '!',
                         'settlement' => '⇣',
                         'support-ticket' => '✎',
+                        'create-ticket' => '✎',
                     ][$item['key']] ?? '•')
                     <a href="{{ $item['url'] }}" class="{{ ($active ?? '') === $item['key'] ? 'active' : '' }}" data-key="{{ $item['key'] }}"><span class="nav-icon" aria-hidden="true">{{ $navIcon }}</span><span class="nav-label">{{ $item['label'] }}</span></a>
                 @endforeach

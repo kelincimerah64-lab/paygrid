@@ -210,4 +210,36 @@ class MerchantTicketTest extends TestCase
         $this->post('/login', ['email' => $csSupport->email, 'password' => 'password'])
             ->assertRedirect(route('dept-tickets.index'));
     }
+
+    public function test_ma_sees_pilot_merchant_and_can_create_ticket_for_it(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+
+        $this->actingAs($ma)->get(route('ma.tickets.index'))
+            ->assertOk()
+            ->assertSee($merchant->name)
+            ->assertSee(route('merchant.tickets.index', $merchant));
+
+        $this->actingAs($ma)->post(route('merchant.tickets.store', $merchant), [
+            'department' => 'cs',
+            'category' => 'others',
+            'description' => 'Dibuat oleh MA untuk toko.',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('merchant_tickets', ['merchant_id' => $merchant->id, 'created_by_user_id' => $ma->id]);
+    }
+
+    public function test_ma_ticket_list_excludes_merchants_without_the_flag(): void
+    {
+        $this->seed();
+        $this->pilotMerchant();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $bj = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+
+        $this->actingAs($ma)->get(route('ma.tickets.index'))
+            ->assertOk()
+            ->assertDontSee(route('merchant.tickets.index', $bj));
+    }
 }
