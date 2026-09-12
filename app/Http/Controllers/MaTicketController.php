@@ -17,7 +17,7 @@ class MaTicketController extends Controller
 
         $merchants = Merchant::query()
             ->with('agent')
-            ->with(['merchantTickets' => fn ($query) => $query->whereIn('status', ['open', 'in_progress'])->latest()])
+            ->with(['merchantTickets' => fn ($query) => $query->whereIn('status', ['open', 'in_progress'])->latest('last_message_at')])
             ->when($user->role !== 'superadmin', fn ($query) => $query->whereIn('id', $scope->merchantIds($user)))
             ->where('general_ticket_enabled', true)
             ->orderBy('name')

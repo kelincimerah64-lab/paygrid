@@ -32,14 +32,13 @@
                     <td><strong>{{ $merchant->name }}</strong></td>
                     <td>{{ $merchant->agent?->name ?: '-' }}</td>
                     <td>
-                        @forelse($merchant->merchantTickets as $ticket)
-                            <div style="margin-bottom:4px">
-                                <span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span>
-                                <span class="muted">{{ $ticket->ticket_no }} &mdash; {{ $deptLabel($ticket->department) }}: {{ $categoryLabel($ticket) }}</span>
-                            </div>
-                        @empty
+                        @php($latest = $merchant->merchantTickets->first())
+                        @if($latest)
+                            <span class="badge {{ $statusClass($latest->status) }}">{{ $merchant->merchantTickets->count() }} terbuka</span>
+                            <span class="muted truncate ref-line" style="max-width:260px">{{ $latest->ticket_no }} &mdash; {{ $deptLabel($latest->department) }}: {{ $categoryLabel($latest) }}</span>
+                        @else
                             <span class="muted">Tidak ada tiket terbuka</span>
-                        @endforelse
+                        @endif
                     </td>
                     <td><a class="btn primary compact-btn" href="{{ route('merchant.tickets.index', $merchant) }}">Buat Tiket</a></td>
                 </tr>

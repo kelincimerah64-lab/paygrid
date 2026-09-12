@@ -307,4 +307,29 @@ class MerchantTicketTest extends TestCase
             ->assertSee('TK-00099')
             ->assertSee('Settlement');
     }
+
+    public function test_ma_ticket_list_stays_compact_with_many_open_tickets(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+
+        for ($i = 1; $i <= 5; $i++) {
+            MerchantTicket::query()->create([
+                'merchant_id' => $merchant->id,
+                'created_by_user_id' => $ma->id,
+                'ticket_no' => 'TK-STACK-'.$i,
+                'department' => 'cs',
+                'category' => 'others',
+                'description' => 'Tiket ke-'.$i,
+                'status' => 'open',
+                'last_message_at' => now()->addSeconds($i),
+            ]);
+        }
+
+        $response = $this->actingAs($ma)->get(route('ma.tickets.index'))->assertOk();
+        $response->assertSee('5 terbuka');
+        $response->assertSee('TK-STACK-5');
+        $response->assertDontSee('TK-STACK-4');
+    }
 }
