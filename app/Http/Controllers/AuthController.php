@@ -118,6 +118,8 @@ class AuthController extends Controller
             'readonly_cs' => $user?->merchant ? route('merchant.cs.tickets', $user->merchant) : route('login'),
             'cs_ma' => route('cs-scope.index'),
             'cs_agent' => route('cs-scope.index'),
+            'cs_support' => route('dept-tickets.index'),
+            'tech_support' => route('dept-tickets.index'),
             'finance' => $user?->merchant ? route('merchant.finance.overview', $user->merchant) : route('login'),
             default => route('login'),
         };

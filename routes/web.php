@@ -5,6 +5,8 @@ use App\Http\Controllers\CsScopeController;
 use App\Http\Controllers\CenterSupportController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DepartmentTicketController;
+use App\Http\Controllers\MerchantTicketController;
 use App\Http\Controllers\GatewayCallbackController;
 use App\Http\Controllers\MerchantRegistrationController;
 use App\Http\Controllers\MerchantRegistrationWorkflowController;
@@ -122,6 +124,21 @@ Route::get('/portal/{merchant}/cs/checklist', fn (\App\Models\Merchant $merchant
 Route::post('/portal/{merchant}/cs/tickets/{ticket}/submit', [SupportTicketController::class, 'submit'])->middleware('throttle:dashboard-writes')->name('merchant.cs.ticket.submit');
 Route::post('/portal/{merchant}/cs/topup/{topupRequest}/ticket', [SupportTicketController::class, 'createFromTopup'])->middleware('throttle:dashboard-writes')->name('merchant.cs.topup.ticket');
 Route::get('/portal/{merchant}/cs/history', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'history', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.history');
+});
+
+Route::middleware(['auth', 'role:admin,readonly_admin,cs,readonly_cs,ma,agent,superadmin', 'merchant.scope'])->group(function () {
+Route::get('/portal/{merchant}/tickets', [MerchantTicketController::class, 'index'])->name('merchant.tickets.index');
+Route::post('/portal/{merchant}/tickets', [MerchantTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.store');
+Route::get('/portal/{merchant}/tickets/{ticket}', [MerchantTicketController::class, 'show'])->name('merchant.tickets.show');
+Route::post('/portal/{merchant}/tickets/{ticket}/reply', [MerchantTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.reply');
+Route::get('/portal/{merchant}/tickets/{ticket}/attachment', [MerchantTicketController::class, 'attachment'])->name('merchant.tickets.attachment');
+});
+
+Route::middleware(['auth', 'role:cs_support,tech_support,superadmin'])->group(function () {
+Route::get('/dept-support/tickets', [DepartmentTicketController::class, 'index'])->name('dept-tickets.index');
+Route::get('/dept-support/tickets/{ticket}', [DepartmentTicketController::class, 'show'])->name('dept-tickets.show');
+Route::post('/dept-support/tickets/{ticket}/reply', [DepartmentTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('dept-tickets.reply');
+Route::post('/dept-support/tickets/{ticket}/status', [DepartmentTicketController::class, 'updateStatus'])->middleware('throttle:dashboard-writes')->name('dept-tickets.status');
 });
 
 Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {

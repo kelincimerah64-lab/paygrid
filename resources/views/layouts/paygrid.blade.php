@@ -493,6 +493,17 @@
         .form-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
         .form-grid label { font-weight:900; color:#10233f; }
         .form-grid input, .form-grid select { width:100%; margin-top:8px; }
+        .ticket-create-form { display:flex; flex-direction:column; gap:14px; max-width:520px; padding:14px; }
+        .ticket-create-form label { display:grid; gap:8px; margin:0; }
+        .ticket-create-form textarea, .ticket-reply-form textarea { width:100%; border:1px solid #c9d6ea; border-radius:7px; padding:8px 10px; font:inherit; font-size:13px; resize:vertical; }
+        .ticket-reply-form { display:flex; flex-direction:column; gap:10px; padding:0 14px 14px; }
+        .ticket-thread { display:flex; flex-direction:column; gap:10px; padding:14px; max-height:420px; overflow-y:auto; }
+        .ticket-message { max-width:78%; padding:10px 12px; border-radius:10px; background:#fbfdff; border:1px solid var(--line); }
+        .ticket-message.staff { align-self:flex-start; background:#eef4ff; }
+        .ticket-message.store { align-self:flex-end; }
+        .ticket-message-meta { display:flex; justify-content:space-between; gap:14px; font-size:11px; color:var(--muted); margin-bottom:4px; }
+        .ticket-message-meta strong { color:var(--ink); font-size:12px; }
+        .ticket-message-body { font-size:13px; white-space:pre-wrap; color:var(--ink); }
         .empty { padding:24px 18px; color:var(--muted); text-align:center; line-height:1.45; }
         .empty strong { display:block; color:var(--ink); margin-bottom:4px; }
         .ops-panel { display:grid; gap:9px; margin:0 0 18px; }
@@ -570,6 +581,8 @@
             main { padding:20px 14px 40px; }
             h1 { font-size:28px; }
             .cards, .qris-metrics, .qris-metrics.history-metrics, .qris-metrics.ticket-metrics, .topup-cards, .checklist-cards, .split, .approval-card, .approval-review-card, .approval-detail-grid, .form-grid, .bot-charts { grid-template-columns:1fr; }
+            .ticket-message { max-width:100%; }
+            .ticket-create-form { max-width:100%; }
             .bot-chart-box { height:170px; }
             .admin-create-form, .admin-minimum-form { grid-template-columns:1fr; }
             .page-head, .filters, .qris-hero, .qris-toolbar { flex-direction:column; align-items:stretch; }
@@ -877,6 +890,7 @@
                         'history' => '↺',
                         'tickets' => '!',
                         'settlement' => '⇣',
+                        'support-ticket' => '✎',
                     ][$item['key']] ?? '•')
                     <a href="{{ $item['url'] }}" class="{{ ($active ?? '') === $item['key'] ? 'active' : '' }}" data-key="{{ $item['key'] }}"><span class="nav-icon" aria-hidden="true">{{ $navIcon }}</span><span class="nav-label">{{ $item['label'] }}</span></a>
                 @endforeach

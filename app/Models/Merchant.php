@@ -54,6 +54,7 @@ class Merchant extends Model
     protected $casts = [
         'merchant_key' => 'encrypted',
         'topup_enabled' => 'boolean',
+        'general_ticket_enabled' => 'boolean',
         'minimum_topup_amount' => 'integer',
         'merchant_mdr_percent' => 'decimal:4',
         'base_mdr_percent' => 'decimal:4',

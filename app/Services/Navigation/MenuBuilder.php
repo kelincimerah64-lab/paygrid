@@ -61,20 +61,33 @@ class MenuBuilder
         ];
     }
 
+    public function deptTickets(): array
+    {
+        return [
+            ['key' => 'tickets', 'label' => 'Tickets', 'url' => route('dept-tickets.index')],
+        ];
+    }
+
     public function merchantCs(Merchant $merchant): array
     {
         if ($merchant->isScript()) {
-            return [
+            $menu = [
                 ['key' => 'tickets', 'label' => 'Tiket status', 'url' => route('merchant.cs.tickets', $merchant)],
                 ['key' => 'history', 'label' => 'History TRX', 'url' => route('merchant.cs.history', $merchant)],
             ];
+        } else {
+            $menu = [
+                ['key' => 'tickets', 'label' => 'Tickets', 'url' => route('merchant.cs.tickets', $merchant)],
+                ['key' => 'topup', 'label' => 'Topup Request', 'url' => route('merchant.cs.topup', $merchant)],
+                ['key' => 'checklist', 'label' => 'Sukses Checklist', 'url' => route('merchant.cs.checklist', $merchant)],
+            ];
         }
 
-        return [
-            ['key' => 'tickets', 'label' => 'Tickets', 'url' => route('merchant.cs.tickets', $merchant)],
-            ['key' => 'topup', 'label' => 'Topup Request', 'url' => route('merchant.cs.topup', $merchant)],
-            ['key' => 'checklist', 'label' => 'Sukses Checklist', 'url' => route('merchant.cs.checklist', $merchant)],
-        ];
+        if ($merchant->general_ticket_enabled) {
+            $menu[] = ['key' => 'support-ticket', 'label' => 'Create Ticket', 'url' => route('merchant.tickets.index', $merchant)];
+        }
+
+        return $menu;
     }
 
     public function merchantFinance(Merchant $merchant): array
@@ -103,6 +116,10 @@ class MenuBuilder
 
         $menu[] = ['key' => 'finance', 'label' => 'Toko Finance', 'url' => route('merchant.finance.overview', $merchant)];
         $menu[] = ['key' => 'cs', 'label' => 'Toko CS', 'url' => route('merchant.cs.tickets', $merchant)];
+
+        if ($merchant->general_ticket_enabled) {
+            $menu[] = ['key' => 'support-ticket', 'label' => 'Create Ticket', 'url' => route('merchant.tickets.index', $merchant)];
+        }
 
         return $menu;
     }
