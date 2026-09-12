@@ -44,6 +44,7 @@ class MenuBuilder
             ['key' => 'create-store', 'label' => 'Create Toko', 'url' => route('agent.create-store')],
             ['key' => 'status-request', 'label' => 'Status Request', 'url' => route('agent.requests')],
             ['key' => 'monitor', 'label' => 'Monitor CS', 'url' => route('cs-scope.index')],
+            ['key' => 'create-ticket', 'label' => 'Create Ticket', 'url' => route('ma.tickets.index')],
         ];
     }
 

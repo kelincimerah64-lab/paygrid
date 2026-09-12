@@ -42,6 +42,9 @@ Route::post('/ma/agents/{agent}/fee', [MaController::class, 'updateAgentFee'])->
 Route::get('/ma/create-store', fn (MaController $controller) => $controller->page('create-store'))->name('ma.create-store');
 Route::post('/ma/create-store', [MaController::class, 'storeMerchant'])->middleware('throttle:dashboard-writes')->name('ma.create-store.store');
 Route::get('/ma/bot-monitoring', fn (MaController $controller) => $controller->page('bot-monitoring'))->name('ma.bot-monitoring');
+});
+
+Route::middleware(['auth', 'role:ma,agent,superadmin'])->group(function () {
 Route::get('/ma/tickets', [MaTicketController::class, 'index'])->name('ma.tickets.index');
 });
 

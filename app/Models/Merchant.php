@@ -85,6 +85,11 @@ class Merchant extends Model
         return $this->hasMany(SupportTicket::class);
     }
 
+    public function merchantTickets(): HasMany
+    {
+        return $this->hasMany(MerchantTicket::class);
+    }
+
     public function metrics(): HasMany
     {
         return $this->hasMany(MerchantDailyMetric::class);

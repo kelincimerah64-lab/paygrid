@@ -1,5 +1,16 @@
 @extends('layouts.paygrid')
 
+@php
+    $deptLabel = fn ($dept) => $dept === 'tech' ? 'Tech' : 'CS';
+    $statusLabel = fn ($status) => App\Support\PayGridLabels::status($status);
+    $statusClass = fn ($status) => $status === 'in_progress' ? 'warn' : 'danger';
+    $categoryLabel = function ($ticket) {
+        $categories = $ticket->department === 'tech' ? \App\Services\MerchantTicketService::TECH_CATEGORIES : \App\Services\MerchantTicketService::CS_CATEGORIES;
+
+        return $categories[$ticket->category] ?? $ticket->category;
+    };
+@endphp
+
 @section('content')
 <div class="qris-hero">
     <div>
@@ -13,17 +24,27 @@
     <div class="table-wrap">
         <table class="table qris-table">
             <thead>
-                <tr><th>Toko</th><th>Agen</th><th></th></tr>
+                <tr><th>Toko</th><th>Agen</th><th>Isu Terbuka</th><th></th></tr>
             </thead>
             <tbody>
             @forelse($merchants as $merchant)
                 <tr>
                     <td><strong>{{ $merchant->name }}</strong></td>
                     <td>{{ $merchant->agent?->name ?: '-' }}</td>
+                    <td>
+                        @forelse($merchant->merchantTickets as $ticket)
+                            <div style="margin-bottom:4px">
+                                <span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span>
+                                <span class="muted">{{ $ticket->ticket_no }} &mdash; {{ $deptLabel($ticket->department) }}: {{ $categoryLabel($ticket) }}</span>
+                            </div>
+                        @empty
+                            <span class="muted">Tidak ada tiket terbuka</span>
+                        @endforelse
+                    </td>
                     <td><a class="btn primary compact-btn" href="{{ route('merchant.tickets.index', $merchant) }}">Buat Tiket</a></td>
                 </tr>
             @empty
-                <tr><td colspan="3" class="empty">Belum ada toko dengan fitur Create Ticket aktif.</td></tr>
+                <tr><td colspan="4" class="empty">Belum ada toko dengan fitur Create Ticket aktif.</td></tr>
             @endforelse
             </tbody>
         </table>

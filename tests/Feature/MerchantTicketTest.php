@@ -242,4 +242,48 @@ class MerchantTicketTest extends TestCase
             ->assertOk()
             ->assertDontSee(route('merchant.tickets.index', $bj));
     }
+
+    public function test_agent_sees_only_their_own_scoped_merchant_and_can_create_ticket(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $agentUser = User::query()->where('username', 'AG-OTHER')->firstOrFail();
+        $bj = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+
+        $this->actingAs($agentUser)->get(route('ma.tickets.index'))
+            ->assertOk()
+            ->assertSee($merchant->name)
+            ->assertDontSee(route('merchant.tickets.index', $bj));
+
+        $this->actingAs($agentUser)->post(route('merchant.tickets.store', $merchant), [
+            'department' => 'tech',
+            'category' => 'technical_issue',
+            'description' => 'Dibuat oleh agen untuk toko.',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('merchant_tickets', ['merchant_id' => $merchant->id, 'created_by_user_id' => $agentUser->id]);
+    }
+
+    public function test_ma_ticket_list_shows_open_issue_summary_per_store(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+
+        MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => $ma->id,
+            'ticket_no' => 'TK-00099',
+            'department' => 'cs',
+            'category' => 'settlement',
+            'description' => 'Settlement belum cair',
+            'status' => 'open',
+            'last_message_at' => now(),
+        ]);
+
+        $this->actingAs($ma)->get(route('ma.tickets.index'))
+            ->assertOk()
+            ->assertSee('TK-00099')
+            ->assertSee('Settlement');
+    }
 }
