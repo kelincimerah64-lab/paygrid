@@ -32,9 +32,9 @@ class DepartmentTicketController extends Controller
             ->withQueryString();
 
         return view('paygrid.dept-tickets', [
-            'roleLabel' => $this->labelFor($departments),
-            'menus' => app(MenuBuilder::class)->deptTickets(),
-            'active' => 'tickets',
+            'roleLabel' => 'CS Pusat',
+            'menus' => app(MenuBuilder::class)->centerSupport(),
+            'active' => 'manual-tickets',
             'tickets' => $tickets,
             'search' => $search,
             'status' => $status,
@@ -47,9 +47,9 @@ class DepartmentTicketController extends Controller
         abort_unless(in_array($ticket->department, $this->departmentsFor($request), true), 403);
 
         return view('paygrid.dept-ticket-show', [
-            'roleLabel' => $this->labelFor($this->departmentsFor($request)),
-            'menus' => app(MenuBuilder::class)->deptTickets(),
-            'active' => 'tickets',
+            'roleLabel' => 'CS Pusat',
+            'menus' => app(MenuBuilder::class)->centerSupport(),
+            'active' => 'manual-tickets',
             'ticket' => $ticket->load(['messages.user', 'merchant']),
             'categories' => app(MerchantTicketService::class),
         ]);
@@ -83,24 +83,8 @@ class DepartmentTicketController extends Controller
 
     private function departmentsFor(Request $request): array
     {
-        $role = $request->user()?->role;
-        if ($role === 'cs_support') {
-            return ['cs'];
-        }
-        if ($role === 'tech_support') {
-            return ['tech'];
-        }
         $department = $request->query('department');
 
         return in_array($department, MerchantTicketService::DEPARTMENTS, true) ? [$department] : MerchantTicketService::DEPARTMENTS;
-    }
-
-    private function labelFor(array $departments): string
-    {
-        if (count($departments) > 1) {
-            return 'CS & Tech Support';
-        }
-
-        return $departments[0] === 'tech' ? 'Tech Support' : 'CS Support';
     }
 }

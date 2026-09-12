@@ -3,6 +3,8 @@
 namespace App\Services\Navigation;
 
 use App\Models\Merchant;
+use App\Models\MerchantTicket;
+use App\Models\SupportTicket;
 
 class MenuBuilder
 {
@@ -57,16 +59,13 @@ class MenuBuilder
 
     public function centerSupport(): array
     {
-        return [
-            ['key' => 'tickets', 'label' => 'Tickets', 'url' => route('center-support.tickets')],
-            ['key' => 'bot-monitoring', 'label' => 'Monitoring Bot Telegram', 'url' => route('center-support.bot-monitoring')],
-        ];
-    }
+        $pendingAuto = SupportTicket::query()->whereNotNull('submitted_to_center_at')->whereNull('center_updated_at')->count();
+        $openManual = MerchantTicket::query()->whereIn('status', ['open', 'in_progress'])->count();
 
-    public function deptTickets(): array
-    {
         return [
-            ['key' => 'tickets', 'label' => 'Tickets', 'url' => route('dept-tickets.index')],
+            ['key' => 'tickets', 'label' => 'Tickets', 'url' => route('center-support.tickets'), 'badge' => $pendingAuto ?: null],
+            ['key' => 'manual-tickets', 'label' => 'Manual Tickets', 'url' => route('dept-tickets.index'), 'badge' => $openManual ?: null],
+            ['key' => 'bot-monitoring', 'label' => 'Monitoring Bot Telegram', 'url' => route('center-support.bot-monitoring')],
         ];
     }
 

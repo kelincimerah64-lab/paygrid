@@ -47,6 +47,18 @@ class TelegramBotMonitoringService
         ];
     }
 
+    public function pendingIpWhitelist(): Collection
+    {
+        $rows = $this->fetchRows(false);
+
+        if ($rows === null) {
+            return collect();
+        }
+
+        return $this->normalize($rows)->filter(fn ($ticket) => str_contains(mb_strtolower((string) ($ticket['category'] ?? '')), 'whitelist')
+            && $ticket['status'] === 'OPEN')->values();
+    }
+
     public function overdueTickets(): Collection
     {
         $rows = $this->fetchRows(false);

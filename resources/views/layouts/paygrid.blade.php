@@ -41,6 +41,8 @@
         .nav a:hover .nav-icon { border-color:#9dbaf1; transform:scale(1.04); }
         .nav a.active .nav-icon { background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.72); color:#fff; box-shadow:none; }
         .nav-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .nav-badge { margin-left:auto; flex:0 0 auto; background:#e0393e; color:#fff; font-size:10px; font-weight:900; min-width:18px; height:18px; line-height:18px; text-align:center; border-radius:999px; padding:0 5px; }
+        .nav a.active .nav-badge { background:#fff; color:#c62828; }
         .nav-scroll { flex:1; min-height:0; overflow-y:auto; }
         .logout { border-top:1px solid var(--line); padding:18px 10px 0; color:#4b5870; }
         .logout > div:first-child { min-height:40px; display:flex; align-items:center; font-weight:650; }
@@ -892,8 +894,9 @@
                         'settlement' => '⇣',
                         'support-ticket' => '✎',
                         'create-ticket' => '✎',
+                        'manual-tickets' => '✉',
                     ][$item['key']] ?? '•')
-                    <a href="{{ $item['url'] }}" class="{{ ($active ?? '') === $item['key'] ? 'active' : '' }}" data-key="{{ $item['key'] }}"><span class="nav-icon" aria-hidden="true">{{ $navIcon }}</span><span class="nav-label">{{ $item['label'] }}</span></a>
+                    <a href="{{ $item['url'] }}" class="{{ ($active ?? '') === $item['key'] ? 'active' : '' }}" data-key="{{ $item['key'] }}"><span class="nav-icon" aria-hidden="true">{{ $navIcon }}</span><span class="nav-label">{{ $item['label'] }}</span>@if(! empty($item['badge']))<span class="nav-badge">{{ $item['badge'] > 99 ? '99+' : $item['badge'] }}</span>@endif</a>
                 @endforeach
             </nav>
         </div>

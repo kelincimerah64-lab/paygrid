@@ -12,6 +12,18 @@
     </div>
 </form>
 
+@php($pendingWhitelist = $pendingIpWhitelist ?? collect())
+@if($pendingWhitelist->isNotEmpty())
+    <section class="card pad section" style="border-left:4px solid #b15a00; background:#fff9ef">
+        <div class="qris-toolbar"><h2>IP Whitelist Menunggu Approval</h2><span class="badge warn">{{ $pendingWhitelist->count() }} tiket</span></div>
+        <div class="approval-detail-grid">
+            @foreach($pendingWhitelist->take(6) as $wl)
+                <div class="fee-pill"><span>{{ $wl['ticket_id'] ?? '-' }}</span><strong class="truncate">{{ $wl['requester_name'] ?? '-' }} &mdash; {{ \Illuminate\Support\Str::limit(trim((string) ($wl['description'] ?? '')), 40) ?: '-' }}</strong></div>
+            @endforeach
+        </div>
+    </section>
+@endif
+
 @php($botResolvedPct = ($bm['kpis']['total'] ?? 0) > 0 ? round((($bm['kpis']['resolved'] ?? 0) / $bm['kpis']['total']) * 100) : 0)
 @php($botFailedPct = ($bm['kpis']['total'] ?? 0) > 0 ? round((($bm['kpis']['failed'] ?? 0) / $bm['kpis']['total']) * 100) : 0)
 @if($bm['error'])

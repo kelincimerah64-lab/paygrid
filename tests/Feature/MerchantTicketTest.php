@@ -94,13 +94,12 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->get(route('merchant.tickets.index', $merchant))->assertNotFound();
     }
 
-    public function test_cs_support_and_tech_support_are_scoped_to_their_own_department(): void
+    public function test_cs_pusat_sees_both_departments_by_default_and_can_filter(): void
     {
         $this->seed();
         $merchant = $this->pilotMerchant();
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
-        $csSupport = User::factory()->create(['role' => 'cs_support']);
-        $techSupport = User::factory()->create(['role' => 'tech_support']);
+        $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
 
         $csTicket = MerchantTicket::query()->create([
             'merchant_id' => $merchant->id,
@@ -121,10 +120,10 @@ class MerchantTicketTest extends TestCase
             'last_message_at' => now(),
         ]);
 
-        $this->actingAs($csSupport)->get(route('dept-tickets.index'))->assertSee('TK-00001')->assertDontSee('TK-00002');
-        $this->actingAs($csSupport)->get(route('dept-tickets.show', $techTicket))->assertForbidden();
-        $this->actingAs($techSupport)->get(route('dept-tickets.index'))->assertSee('TK-00002')->assertDontSee('TK-00001');
-        $this->actingAs($techSupport)->get(route('dept-tickets.show', $csTicket))->assertForbidden();
+        $this->actingAs($csPusat)->get(route('dept-tickets.index'))->assertSee('TK-00001')->assertSee('TK-00002');
+        $this->actingAs($csPusat)->get(route('dept-tickets.index', ['department' => 'cs']))->assertSee('TK-00001')->assertDontSee('TK-00002');
+        $this->actingAs($csPusat)->get(route('dept-tickets.show', $techTicket))->assertOk();
+        $this->actingAs($csPusat)->get(route('dept-tickets.show', $csTicket))->assertOk();
     }
 
     public function test_superadmin_can_view_both_departments(): void
@@ -153,7 +152,7 @@ class MerchantTicketTest extends TestCase
         $this->seed();
         $merchant = $this->pilotMerchant();
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
-        $csSupport = User::factory()->create(['role' => 'cs_support']);
+        $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'cs',
@@ -163,7 +162,7 @@ class MerchantTicketTest extends TestCase
         $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
         $this->assertSame('open', $ticket->fresh()->status);
 
-        $this->actingAs($csSupport)->post(route('dept-tickets.reply', $ticket), ['body' => 'Sedang kami cek ya.'])
+        $this->actingAs($csPusat)->post(route('dept-tickets.reply', $ticket), ['body' => 'Sedang kami cek ya.'])
             ->assertRedirect();
         $this->assertSame('in_progress', $ticket->fresh()->status);
 
@@ -180,7 +179,7 @@ class MerchantTicketTest extends TestCase
         $this->seed();
         $merchant = $this->pilotMerchant();
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
-        $csSupport = User::factory()->create(['role' => 'cs_support']);
+        $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
 
         $ticket = MerchantTicket::query()->create([
             'merchant_id' => $merchant->id,
@@ -197,20 +196,11 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.reply', [$merchant, $ticket]), ['body' => 'halo?'])
             ->assertStatus(422);
 
-        $this->actingAs($csSupport)->post(route('dept-tickets.status', $ticket), ['status' => 'open'])->assertRedirect();
+        $this->actingAs($csPusat)->post(route('dept-tickets.status', $ticket), ['status' => 'open'])->assertRedirect();
         $this->assertSame('open', $ticket->fresh()->status);
 
         $this->actingAs($admin)->post(route('merchant.tickets.reply', [$merchant, $ticket]), ['body' => 'sekarang bisa'])
             ->assertRedirect();
-    }
-
-    public function test_login_redirects_new_roles_to_department_dashboard(): void
-    {
-        $this->seed();
-        $csSupport = User::factory()->create(['role' => 'cs_support', 'password' => bcrypt('password')]);
-
-        $this->post('/login', ['email' => $csSupport->email, 'password' => 'password'])
-            ->assertRedirect(route('dept-tickets.index'));
     }
 
     public function test_ma_sees_pilot_merchant_and_can_create_ticket_for_it(): void
@@ -331,5 +321,30 @@ class MerchantTicketTest extends TestCase
         $response->assertSee('5 terbuka');
         $response->assertSee('TK-STACK-5');
         $response->assertDontSee('TK-STACK-4');
+    }
+
+    public function test_cs_pusat_sidebar_shows_a_badge_for_open_manual_tickets(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+        $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
+
+        $this->actingAs($csPusat)->get(route('center-support.tickets'))->assertDontSee('class="nav-badge"', false);
+
+        MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => $admin->id,
+            'ticket_no' => 'TK-BADGE-1',
+            'department' => 'cs',
+            'category' => 'others',
+            'description' => 'butuh badge',
+            'status' => 'open',
+            'last_message_at' => now(),
+        ]);
+
+        $response = $this->actingAs($csPusat)->get(route('center-support.tickets'))->assertOk();
+        $response->assertSee('class="nav-badge"', false);
+        $response->assertSee('Manual Tickets');
     }
 }

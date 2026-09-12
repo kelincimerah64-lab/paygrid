@@ -100,6 +100,9 @@ class MaController extends Controller
             'botMonitoring' => $page === 'bot-monitoring'
                 ? app(TelegramBotMonitoringService::class)->data($this->botMonitoringFilters(), request()->boolean('refresh'))
                 : null,
+            'pendingIpWhitelist' => $page === 'bot-monitoring'
+                ? app(TelegramBotMonitoringService::class)->pendingIpWhitelist()
+                : collect(),
             'feeMenus' => $feeMenus,
         ]);
     }

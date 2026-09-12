@@ -118,6 +118,29 @@ class TelegramBotMonitoringServiceTest extends TestCase
         $this->assertSame(0.0, $result['kpis']['avg_handling_minutes']);
     }
 
+    public function test_it_returns_open_ip_whitelist_tickets_pending_approval(): void
+    {
+        Cache::flush();
+        $this->configureCredentials();
+
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'fake-token', 'expires_in' => 3600]),
+            'https://sheets.googleapis.com/v4/spreadsheets/sheet-123/values/A:X' => Http::response([
+                'values' => [
+                    ['ticket_id', 'created_at', 'requester_name', 'category', 'status'],
+                    ['T-1', '2026-08-01 10:00:00', 'Budi', 'IP Whitelist / VPN', 'OPEN'],
+                    ['T-2', '2026-08-02 11:00:00', 'Sari', 'Request IP Whitelist', 'RESOLVED'],
+                    ['T-3', '2026-08-03 12:00:00', 'Dedi', 'API Error', 'OPEN'],
+                ],
+            ]),
+        ]);
+
+        $pending = app(TelegramBotMonitoringService::class)->pendingIpWhitelist();
+
+        $this->assertCount(1, $pending);
+        $this->assertSame('T-1', $pending->first()['ticket_id']);
+    }
+
     public function test_it_returns_a_graceful_error_state_when_the_sheets_api_fails(): void
     {
         Cache::flush();

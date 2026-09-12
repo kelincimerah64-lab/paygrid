@@ -139,7 +139,7 @@ Route::post('/portal/{merchant}/tickets/{ticket}/reply', [MerchantTicketControll
 Route::get('/portal/{merchant}/tickets/{ticket}/attachment', [MerchantTicketController::class, 'attachment'])->name('merchant.tickets.attachment');
 });
 
-Route::middleware(['auth', 'role:cs_support,tech_support,superadmin'])->group(function () {
+Route::middleware(['auth', 'role:cs_pusat,superadmin'])->group(function () {
 Route::get('/dept-support/tickets', [DepartmentTicketController::class, 'index'])->name('dept-tickets.index');
 Route::get('/dept-support/tickets/{ticket}', [DepartmentTicketController::class, 'show'])->name('dept-tickets.show');
 Route::post('/dept-support/tickets/{ticket}/reply', [DepartmentTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('dept-tickets.reply');

@@ -67,6 +67,7 @@ class CenterSupportController extends Controller
             'menus' => app(MenuBuilder::class)->centerSupport(),
             'active' => 'bot-monitoring',
             'botMonitoring' => $service->data($this->botMonitoringFilters(), $request->boolean('refresh')),
+            'pendingIpWhitelist' => $service->pendingIpWhitelist(),
             'maNotifications' => $this->botReminders($service),
         ]);
     }
