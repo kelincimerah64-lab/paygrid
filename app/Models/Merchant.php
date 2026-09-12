@@ -8,6 +8,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Merchant extends Model
 {
+    protected $attributes = [
+        'general_ticket_enabled' => true,
+    ];
+
     protected $fillable = [
         'agent_id',
         'slug',

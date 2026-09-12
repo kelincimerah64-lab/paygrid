@@ -72,24 +72,26 @@ class MerchantTicketTest extends TestCase
         ])->assertSessionHasErrors('category');
     }
 
-    public function test_non_pilot_merchant_cannot_access_ticket_feature(): void
+    public function test_merchants_get_the_ticket_feature_by_default(): void
     {
         $this->seed();
         $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
         $admin = User::query()->where('email', 'admin@nnp-cm-bj.local')->firstOrFail();
 
-        $this->actingAs($admin)->get(route('merchant.tickets.index', $merchant))->assertNotFound();
+        $this->assertTrue($merchant->general_ticket_enabled);
+        $this->actingAs($admin)->get(route('merchant.tickets.index', $merchant))->assertOk();
+        $this->actingAs($admin)->get(route('merchant.admin.users', $merchant))->assertSee('Create Ticket');
     }
 
-    public function test_menu_only_shows_create_ticket_for_pilot_merchant(): void
+    public function test_menu_hides_create_ticket_when_explicitly_disabled(): void
     {
         $this->seed();
-        $pilot = $this->pilotMerchant();
-        $pilotAdmin = User::factory()->create(['role' => 'admin', 'merchant_id' => $pilot->id]);
-        $otherAdmin = User::query()->where('email', 'admin@nnp-cm-bj.local')->firstOrFail();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $merchant->forceFill(['general_ticket_enabled' => false])->save();
+        $admin = User::query()->where('email', 'admin@nnp-cm-bj.local')->firstOrFail();
 
-        $this->actingAs($pilotAdmin)->get(route('merchant.admin.users', $pilot))->assertSee('Create Ticket');
-        $this->actingAs($otherAdmin)->get(route('merchant.admin.users', $otherAdmin->merchant))->assertDontSee('Create Ticket');
+        $this->actingAs($admin)->get(route('merchant.admin.users', $merchant))->assertDontSee('Create Ticket');
+        $this->actingAs($admin)->get(route('merchant.tickets.index', $merchant))->assertNotFound();
     }
 
     public function test_cs_support_and_tech_support_are_scoped_to_their_own_department(): void
@@ -231,12 +233,13 @@ class MerchantTicketTest extends TestCase
         $this->assertDatabaseHas('merchant_tickets', ['merchant_id' => $merchant->id, 'created_by_user_id' => $ma->id]);
     }
 
-    public function test_ma_ticket_list_excludes_merchants_without_the_flag(): void
+    public function test_ma_ticket_list_excludes_merchants_explicitly_disabled(): void
     {
         $this->seed();
         $this->pilotMerchant();
         $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
         $bj = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $bj->forceFill(['general_ticket_enabled' => false])->save();
 
         $this->actingAs($ma)->get(route('ma.tickets.index'))
             ->assertOk()
