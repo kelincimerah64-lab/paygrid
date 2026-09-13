@@ -47,7 +47,7 @@
             Lampiran (opsional, maks 3)
             <input type="file" name="attachments[]" id="ticket-attachments" accept="image/*" multiple>
         </label>
-        <span class="muted" id="ticket-attachments-info"></span>
+        <div class="ticket-chip-list" id="ticket-attachments-chips"></div>
         @error('attachments')<span class="badge danger">{{ $message }}</span>@enderror
         @error('attachments.*')<span class="badge danger">{{ $message }}</span>@enderror
         <button class="btn primary compact-btn" style="width:100%; margin:8px 0" type="submit">Submit Tiket</button>
@@ -98,18 +98,52 @@
     var departmentSelect = document.getElementById('ticket-department');
     var categorySelect = document.getElementById('ticket-category');
     var attachmentsInput = document.getElementById('ticket-attachments');
-    var attachmentsInfo = document.getElementById('ticket-attachments-info');
-    if (attachmentsInput && attachmentsInfo) {
+    var chipList = document.getElementById('ticket-attachments-chips');
+    var selectedFiles = [];
+
+    function sameFile(a, b) {
+        return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+    }
+
+    function syncInput() {
+        var transfer = new DataTransfer();
+        selectedFiles.forEach(function (file) { transfer.items.add(file); });
+        attachmentsInput.files = transfer.files;
+    }
+
+    function renderChips() {
+        chipList.innerHTML = '';
+        selectedFiles.forEach(function (file, index) {
+            var chip = document.createElement('span');
+            chip.className = 'ticket-chip';
+            var label = document.createElement('span');
+            label.className = 'ticket-chip-label';
+            label.textContent = file.name;
+            var remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'ticket-chip-remove';
+            remove.setAttribute('aria-label', 'Hapus ' + file.name);
+            remove.textContent = '×';
+            remove.addEventListener('click', function () {
+                selectedFiles.splice(index, 1);
+                syncInput();
+                renderChips();
+            });
+            chip.appendChild(label);
+            chip.appendChild(remove);
+            chipList.appendChild(chip);
+        });
+    }
+
+    if (attachmentsInput && chipList) {
         attachmentsInput.addEventListener('change', function () {
-            var count = attachmentsInput.files.length;
-            if (count > 3) {
-                attachmentsInfo.textContent = 'Maksimal 3 file, hanya 3 pertama yang dipakai.';
-                var limited = new DataTransfer();
-                for (var i = 0; i < 3; i++) limited.items.add(attachmentsInput.files[i]);
-                attachmentsInput.files = limited.files;
-            } else {
-                attachmentsInfo.textContent = count ? count + ' file dipilih.' : '';
-            }
+            Array.prototype.forEach.call(attachmentsInput.files, function (file) {
+                if (selectedFiles.length >= 3) return;
+                if (selectedFiles.some(function (existing) { return sameFile(existing, file); })) return;
+                selectedFiles.push(file);
+            });
+            syncInput();
+            renderChips();
         });
     }
     if (!departmentSelect || !categorySelect) return;

@@ -506,6 +506,11 @@
         .ticket-message-meta { display:flex; justify-content:space-between; gap:14px; font-size:11px; color:var(--muted); margin-bottom:4px; }
         .ticket-message-meta strong { color:var(--ink); font-size:12px; }
         .ticket-message-body { font-size:13px; white-space:pre-wrap; color:var(--ink); }
+        .ticket-chip-list { display:flex; flex-wrap:wrap; gap:8px; }
+        .ticket-chip { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:5px 6px 5px 10px; border:1px solid #c6d5ea; border-radius:999px; background:#f4f8ff; font-size:12px; font-weight:750; color:#1557c2; }
+        .ticket-chip-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; }
+        .ticket-chip-remove { flex:0 0 auto; width:18px; height:18px; line-height:16px; text-align:center; border:none; border-radius:999px; background:#dbe6f9; color:#1557c2; font-size:13px; font-weight:900; cursor:pointer; padding:0; }
+        .ticket-chip-remove:hover { background:#c62828; color:#fff; }
         .empty { padding:24px 18px; color:var(--muted); text-align:center; line-height:1.45; }
         .empty strong { display:block; color:var(--ink); margin-bottom:4px; }
         .ops-panel { display:grid; gap:9px; margin:0 0 18px; }
