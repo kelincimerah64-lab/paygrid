@@ -7,7 +7,9 @@
         'in_progress' => 'warn',
         default => 'danger',
     };
-    $deptLabel = fn ($dept) => $dept === 'tech' ? 'Tech Support' : 'CS';
+    $deptLabel = fn ($dept) => app(App\Services\MerchantTicketService::class)->departmentLabel($dept);
+    $categoryLabel = fn ($ticket) => app(App\Services\MerchantTicketService::class)->categoryLabel($ticket->department, $ticket->category);
+    $departmentFilter = request('department', '');
 @endphp
 
 @section('content')
@@ -25,6 +27,12 @@
 <form class="card filters" method="get">
     <input class="search" name="q" value="{{ $search }}" placeholder="Cari ticket, toko...">
     <div class="actions">
+        <select name="department">
+            <option value="" @selected($departmentFilter === '')>Semua tujuan</option>
+            <option value="cs" @selected($departmentFilter === 'cs')>CS</option>
+            <option value="tech" @selected($departmentFilter === 'tech')>Tech Support</option>
+            <option value="finance" @selected($departmentFilter === 'finance')>Finance</option>
+        </select>
         <select name="status">
             <option value="all" @selected($status === 'all')>Semua status</option>
             <option value="open" @selected($status === 'open')>Open</option>
@@ -44,12 +52,11 @@
             </thead>
             <tbody>
             @forelse($tickets as $ticket)
-                @php($categoryLabel = ($ticket->department === 'tech' ? \App\Services\MerchantTicketService::TECH_CATEGORIES : \App\Services\MerchantTicketService::CS_CATEGORIES)[$ticket->category] ?? $ticket->category)
                 <tr>
                     <td><strong>{{ $ticket->merchant?->name ?: '-' }}</strong></td>
                     <td>{{ $ticket->ticket_no }}</td>
                     <td>{{ $deptLabel($ticket->department) }}</td>
-                    <td><span class="truncate ref-line">{{ $categoryLabel }}</span></td>
+                    <td><span class="truncate ref-line">{{ $categoryLabel($ticket) }}</span></td>
                     <td><span class="muted">{{ $ticket->last_message_at?->timezone('Asia/Jakarta')->format('d M Y H:i') ?? '-' }}</span></td>
                     <td><span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span></td>
                     <td><a class="btn compact-btn" href="{{ route('dept-tickets.show', $ticket) }}">Buka</a></td>

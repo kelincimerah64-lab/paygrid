@@ -10,7 +10,7 @@ use Illuminate\Http\UploadedFile;
 
 class MerchantTicketService
 {
-    public const DEPARTMENTS = ['cs', 'tech'];
+    public const DEPARTMENTS = ['cs', 'tech', 'finance'];
 
     public const CS_CATEGORIES = [
         'settlement' => 'Settlement',
@@ -26,9 +26,36 @@ class MerchantTicketService
         'others' => 'Others',
     ];
 
+    public const FINANCE_CATEGORIES = [
+        'settlement' => 'Settlement',
+        'missing_transaction' => 'Missing Transaction',
+        'discrepancies_amount' => 'Discrepancies Amount',
+        'others' => 'Others',
+    ];
+
+    public const DEPARTMENT_LABELS = [
+        'cs' => 'CS',
+        'tech' => 'Tech Support',
+        'finance' => 'Finance',
+    ];
+
     public function categoriesFor(string $department): array
     {
-        return $department === 'tech' ? self::TECH_CATEGORIES : self::CS_CATEGORIES;
+        return match ($department) {
+            'tech' => self::TECH_CATEGORIES,
+            'finance' => self::FINANCE_CATEGORIES,
+            default => self::CS_CATEGORIES,
+        };
+    }
+
+    public function departmentLabel(string $department): string
+    {
+        return self::DEPARTMENT_LABELS[$department] ?? ucfirst($department);
+    }
+
+    public function categoryLabel(string $department, string $category): string
+    {
+        return $this->categoriesFor($department)[$category] ?? $category;
     }
 
     public function create(Merchant $merchant, User $user, array $data, array $attachments = []): MerchantTicket

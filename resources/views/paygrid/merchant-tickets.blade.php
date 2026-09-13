@@ -7,7 +7,8 @@
         'in_progress' => 'warn',
         default => 'danger',
     };
-    $deptLabel = fn ($dept) => $dept === 'tech' ? 'Tech Support' : 'CS';
+    $deptLabel = fn ($dept) => app(App\Services\MerchantTicketService::class)->departmentLabel($dept);
+    $categoryLabel = fn ($ticket) => app(App\Services\MerchantTicketService::class)->categoryLabel($ticket->department, $ticket->category);
 @endphp
 
 @section('content')
@@ -31,6 +32,7 @@
                 <option value="">Pilih tujuan</option>
                 <option value="cs" @selected(old('department') === 'cs')>CS</option>
                 <option value="tech" @selected(old('department') === 'tech')>Tech Support</option>
+                <option value="finance" @selected(old('department') === 'finance')>Finance</option>
             </select>
         </label>
         <label>Menu
@@ -64,7 +66,7 @@
                 <tr>
                     <td><strong>{{ $ticket->ticket_no }}</strong></td>
                     <td>{{ $deptLabel($ticket->department) }}</td>
-                    <td><span class="truncate ref-line">{{ ($ticket->department === 'tech' ? $techCategories : $csCategories)[$ticket->category] ?? $ticket->category }}</span></td>
+                    <td><span class="truncate ref-line">{{ $categoryLabel($ticket) }}</span></td>
                     <td><span class="muted">{{ $ticket->last_message_at?->timezone('Asia/Jakarta')->format('d M Y H:i') ?? '-' }}</span></td>
                     <td><span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span></td>
                     <td><a class="btn compact-btn" href="{{ route('merchant.tickets.show', [$merchant, $ticket]) }}">Buka</a></td>
@@ -91,6 +93,7 @@
     var categories = {
         cs: @json($csCategories),
         tech: @json($techCategories),
+        finance: @json($financeCategories),
     };
     var departmentSelect = document.getElementById('ticket-department');
     var categorySelect = document.getElementById('ticket-category');

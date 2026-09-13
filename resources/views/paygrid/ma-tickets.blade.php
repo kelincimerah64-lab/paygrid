@@ -1,14 +1,10 @@
 @extends('layouts.paygrid')
 
 @php
-    $deptLabel = fn ($dept) => $dept === 'tech' ? 'Tech' : 'CS';
+    $deptLabel = fn ($dept) => app(App\Services\MerchantTicketService::class)->departmentLabel($dept);
     $statusLabel = fn ($status) => App\Support\PayGridLabels::status($status);
     $statusClass = fn ($status) => $status === 'in_progress' ? 'warn' : 'danger';
-    $categoryLabel = function ($ticket) {
-        $categories = $ticket->department === 'tech' ? \App\Services\MerchantTicketService::TECH_CATEGORIES : \App\Services\MerchantTicketService::CS_CATEGORIES;
-
-        return $categories[$ticket->category] ?? $ticket->category;
-    };
+    $categoryLabel = fn ($ticket) => app(App\Services\MerchantTicketService::class)->categoryLabel($ticket->department, $ticket->category);
 @endphp
 
 @section('content')

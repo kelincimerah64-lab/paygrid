@@ -27,6 +27,7 @@ class MerchantTicketController extends Controller
             'active' => $this->activeFor($request),
             'csCategories' => MerchantTicketService::CS_CATEGORIES,
             'techCategories' => MerchantTicketService::TECH_CATEGORIES,
+            'financeCategories' => MerchantTicketService::FINANCE_CATEGORIES,
             'tickets' => MerchantTicket::query()
                 ->where('merchant_id', $merchant->id)
                 ->latest('last_message_at')

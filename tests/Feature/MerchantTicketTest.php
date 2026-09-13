@@ -61,6 +61,25 @@ class MerchantTicketTest extends TestCase
         ]);
     }
 
+    public function test_finance_department_ticket_can_be_created(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'department' => 'finance',
+            'category' => 'discrepancies_amount',
+            'description' => 'Ada selisih nominal settlement.',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('merchant_tickets', [
+            'merchant_id' => $merchant->id,
+            'department' => 'finance',
+            'category' => 'discrepancies_amount',
+        ]);
+    }
+
     public function test_category_must_match_department(): void
     {
         $this->seed();
@@ -121,11 +140,25 @@ class MerchantTicketTest extends TestCase
             'description' => 'tech ticket',
             'last_message_at' => now(),
         ]);
+        $financeTicket = MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => $admin->id,
+            'ticket_no' => 'TK-00005',
+            'department' => 'finance',
+            'category' => 'missing_transaction',
+            'description' => 'finance ticket',
+            'last_message_at' => now(),
+        ]);
 
-        $this->actingAs($csPusat)->get(route('dept-tickets.index'))->assertSee('TK-00001')->assertSee('TK-00002');
-        $this->actingAs($csPusat)->get(route('dept-tickets.index', ['department' => 'cs']))->assertSee('TK-00001')->assertDontSee('TK-00002');
+        $this->actingAs($csPusat)->get(route('dept-tickets.index'))
+            ->assertSee('TK-00001')->assertSee('TK-00002')->assertSee('TK-00005');
+        $this->actingAs($csPusat)->get(route('dept-tickets.index', ['department' => 'cs']))
+            ->assertSee('TK-00001')->assertDontSee('TK-00002')->assertDontSee('TK-00005');
+        $this->actingAs($csPusat)->get(route('dept-tickets.index', ['department' => 'finance']))
+            ->assertSee('TK-00005')->assertDontSee('TK-00001')->assertDontSee('TK-00002');
         $this->actingAs($csPusat)->get(route('dept-tickets.show', $techTicket))->assertOk();
         $this->actingAs($csPusat)->get(route('dept-tickets.show', $csTicket))->assertOk();
+        $this->actingAs($csPusat)->get(route('dept-tickets.show', $financeTicket))->assertOk();
     }
 
     public function test_superadmin_can_view_both_departments(): void

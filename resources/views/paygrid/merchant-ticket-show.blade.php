@@ -7,8 +7,8 @@
         'in_progress' => 'warn',
         default => 'danger',
     };
-    $deptLabel = $ticket->department === 'tech' ? 'Tech Support' : 'CS';
-    $categoryLabel = ($ticket->department === 'tech' ? \App\Services\MerchantTicketService::TECH_CATEGORIES : \App\Services\MerchantTicketService::CS_CATEGORIES)[$ticket->category] ?? $ticket->category;
+    $deptLabel = app(App\Services\MerchantTicketService::class)->departmentLabel($ticket->department);
+    $categoryLabel = app(App\Services\MerchantTicketService::class)->categoryLabel($ticket->department, $ticket->category);
 @endphp
 
 @section('content')
