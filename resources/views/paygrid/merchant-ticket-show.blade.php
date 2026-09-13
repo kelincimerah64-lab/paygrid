@@ -32,9 +32,9 @@
         <div class="fee-pill"><span>Dibuat</span><strong>{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</strong></div>
     </div>
     <p style="margin-top:12px; white-space:pre-wrap">{{ $ticket->description }}</p>
-    @if($ticket->attachment_path)
-        <a class="btn compact-btn" href="{{ route('merchant.tickets.attachment', [$merchant, $ticket]) }}">Lihat Lampiran</a>
-    @endif
+    @foreach($ticket->attachments ?? [] as $index => $file)
+        <a class="btn compact-btn" style="margin-right:6px" href="{{ route('merchant.tickets.attachment', [$merchant, $ticket, $index]) }}">Lampiran {{ $index + 1 }}</a>
+    @endforeach
 </section>
 
 <section class="card qris-panel section">

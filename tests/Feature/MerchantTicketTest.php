@@ -6,6 +6,8 @@ use App\Models\Merchant;
 use App\Models\MerchantTicket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class MerchantTicketTest extends TestCase
@@ -346,5 +348,52 @@ class MerchantTicketTest extends TestCase
         $response = $this->actingAs($csPusat)->get(route('center-support.tickets'))->assertOk();
         $response->assertSee('class="nav-badge"', false);
         $response->assertSee('Manual Tickets');
+    }
+
+    public function test_ticket_can_be_created_with_up_to_three_attachments(): void
+    {
+        Storage::fake('local');
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'department' => 'cs',
+            'category' => 'others',
+            'description' => 'Ada 2 bukti transfer.',
+            'attachments' => [
+                UploadedFile::fake()->image('bukti-1.jpg'),
+                UploadedFile::fake()->image('bukti-2.jpg'),
+            ],
+        ])->assertRedirect();
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+        $this->assertCount(2, $ticket->attachments);
+        Storage::disk('local')->assertExists($ticket->attachments[0]['path']);
+        Storage::disk('local')->assertExists($ticket->attachments[1]['path']);
+
+        $this->actingAs($admin)->get(route('merchant.tickets.attachment', [$merchant, $ticket, 0]))->assertOk();
+        $this->actingAs($admin)->get(route('merchant.tickets.attachment', [$merchant, $ticket, 1]))->assertOk();
+        $this->actingAs($admin)->get(route('merchant.tickets.attachment', [$merchant, $ticket, 2]))->assertNotFound();
+    }
+
+    public function test_ticket_creation_rejects_more_than_three_attachments(): void
+    {
+        Storage::fake('local');
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'department' => 'cs',
+            'category' => 'others',
+            'description' => 'Kebanyakan lampiran.',
+            'attachments' => [
+                UploadedFile::fake()->image('a.jpg'),
+                UploadedFile::fake()->image('b.jpg'),
+                UploadedFile::fake()->image('c.jpg'),
+                UploadedFile::fake()->image('d.jpg'),
+            ],
+        ])->assertSessionHasErrors('attachments');
     }
 }

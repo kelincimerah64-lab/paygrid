@@ -24,26 +24,28 @@
     <div class="table-wrap">
         <table class="table qris-table">
             <thead>
-                <tr><th>Toko</th><th>Agen</th><th>Isu Terbuka</th><th></th></tr>
+                <tr><th>Toko</th><th>Agen</th><th>Isu Terbuka</th><th>Tujuan</th><th>Menu</th><th></th></tr>
             </thead>
             <tbody>
             @forelse($merchants as $merchant)
+                @php($latest = $merchant->merchantTickets->first())
                 <tr>
                     <td><strong>{{ $merchant->name }}</strong></td>
                     <td>{{ $merchant->agent?->name ?: '-' }}</td>
                     <td>
-                        @php($latest = $merchant->merchantTickets->first())
                         @if($latest)
                             <span class="badge {{ $statusClass($latest->status) }}">{{ $merchant->merchantTickets->count() }} terbuka</span>
-                            <span class="muted truncate ref-line" style="max-width:260px">{{ $latest->ticket_no }} &mdash; {{ $deptLabel($latest->department) }}: {{ $categoryLabel($latest) }}</span>
+                            <span class="muted truncate ref-line" style="max-width:180px">{{ $latest->ticket_no }}</span>
                         @else
                             <span class="muted">Tidak ada tiket terbuka</span>
                         @endif
                     </td>
+                    <td>{{ $latest ? $deptLabel($latest->department) : '-' }}</td>
+                    <td><span class="truncate ref-line" style="max-width:180px">{{ $latest ? $categoryLabel($latest) : '-' }}</span></td>
                     <td><a class="btn primary compact-btn" href="{{ route('merchant.tickets.index', $merchant) }}">Buat Tiket</a></td>
                 </tr>
             @empty
-                <tr><td colspan="4" class="empty">Belum ada toko dengan fitur Create Ticket aktif.</td></tr>
+                <tr><td colspan="6" class="empty">Belum ada toko dengan fitur Create Ticket aktif.</td></tr>
             @endforelse
             </tbody>
         </table>

@@ -136,7 +136,7 @@ Route::get('/portal/{merchant}/tickets', [MerchantTicketController::class, 'inde
 Route::post('/portal/{merchant}/tickets', [MerchantTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.store');
 Route::get('/portal/{merchant}/tickets/{ticket}', [MerchantTicketController::class, 'show'])->name('merchant.tickets.show');
 Route::post('/portal/{merchant}/tickets/{ticket}/reply', [MerchantTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.reply');
-Route::get('/portal/{merchant}/tickets/{ticket}/attachment', [MerchantTicketController::class, 'attachment'])->name('merchant.tickets.attachment');
+Route::get('/portal/{merchant}/tickets/{ticket}/attachment/{index}', [MerchantTicketController::class, 'attachment'])->whereNumber('index')->name('merchant.tickets.attachment');
 });
 
 Route::middleware(['auth', 'role:cs_pusat,superadmin'])->group(function () {

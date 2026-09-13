@@ -41,10 +41,13 @@
         <label>Penjelasan
             <textarea name="description" rows="4" maxlength="2000" required placeholder="Jelaskan detail kendala/kebutuhan...">{{ old('description') }}</textarea>
         </label>
-        <label class="file-pick" title="Lampiran opsional, boleh dikosongkan">
-            Lampiran (opsional)
-            <input type="file" name="attachment" accept="image/*">
+        <label class="file-pick" title="Lampiran opsional, maksimal 3 file">
+            Lampiran (opsional, maks 3)
+            <input type="file" name="attachments[]" id="ticket-attachments" accept="image/*" multiple>
         </label>
+        <span class="muted" id="ticket-attachments-info"></span>
+        @error('attachments')<span class="badge danger">{{ $message }}</span>@enderror
+        @error('attachments.*')<span class="badge danger">{{ $message }}</span>@enderror
         <button class="btn primary compact-btn" style="width:100%; margin:8px 0" type="submit">Submit Tiket</button>
     </form>
 </section>
@@ -91,6 +94,21 @@
     };
     var departmentSelect = document.getElementById('ticket-department');
     var categorySelect = document.getElementById('ticket-category');
+    var attachmentsInput = document.getElementById('ticket-attachments');
+    var attachmentsInfo = document.getElementById('ticket-attachments-info');
+    if (attachmentsInput && attachmentsInfo) {
+        attachmentsInput.addEventListener('change', function () {
+            var count = attachmentsInput.files.length;
+            if (count > 3) {
+                attachmentsInfo.textContent = 'Maksimal 3 file, hanya 3 pertama yang dipakai.';
+                var limited = new DataTransfer();
+                for (var i = 0; i < 3; i++) limited.items.add(attachmentsInput.files[i]);
+                attachmentsInput.files = limited.files;
+            } else {
+                attachmentsInfo.textContent = count ? count + ' file dipilih.' : '';
+            }
+        });
+    }
     if (!departmentSelect || !categorySelect) return;
     departmentSelect.addEventListener('change', function () {
         var options = categories[departmentSelect.value] || null;

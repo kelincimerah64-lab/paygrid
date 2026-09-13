@@ -46,10 +46,11 @@ class MerchantTicketController extends Controller
             'department' => ['required', Rule::in(MerchantTicketService::DEPARTMENTS)],
             'category' => ['required', Rule::in($categoryKeys)],
             'description' => ['required', 'string', 'max:2000'],
-            'attachment' => ['nullable', 'image', 'max:4096'],
+            'attachments' => ['nullable', 'array', 'max:3'],
+            'attachments.*' => ['image', 'max:4096'],
         ]);
 
-        $ticket = $tickets->create($merchant, $request->user(), $data, $request->file('attachment'));
+        $ticket = $tickets->create($merchant, $request->user(), $data, $request->file('attachments', []));
         $audit->record('merchant_ticket.created', $ticket, null, $ticket->only(['merchant_id', 'department', 'category', 'ticket_no']));
 
         return redirect()->route('merchant.tickets.show', [$merchant, $ticket])->with('status', 'Tiket berhasil dibuat: '.$ticket->ticket_no);
@@ -96,13 +97,15 @@ class MerchantTicketController extends Controller
         return back()->with('status', 'Balasan terkirim.');
     }
 
-    public function attachment(Merchant $merchant, MerchantTicket $ticket): StreamedResponse
+    public function attachment(Merchant $merchant, MerchantTicket $ticket, int $index): StreamedResponse
     {
         abort_unless($merchant->general_ticket_enabled, 404);
         abort_unless((int) $ticket->merchant_id === (int) $merchant->id, 404);
-        abort_unless($ticket->attachment_path, 404);
-        abort_unless(Storage::disk($ticket->attachment_disk)->exists($ticket->attachment_path), 404);
 
-        return Storage::disk($ticket->attachment_disk)->download($ticket->attachment_path, $ticket->attachment_name ?: basename($ticket->attachment_path));
+        $attachment = ($ticket->attachments ?? [])[$index] ?? null;
+        abort_unless($attachment && isset($attachment['path']), 404);
+        abort_unless(Storage::disk($attachment['disk'])->exists($attachment['path']), 404);
+
+        return Storage::disk($attachment['disk'])->download($attachment['path'], $attachment['name'] ?? basename($attachment['path']));
     }
 }

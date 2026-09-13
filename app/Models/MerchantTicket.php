@@ -15,15 +15,14 @@ class MerchantTicket extends Model
         'department',
         'category',
         'description',
-        'attachment_disk',
-        'attachment_path',
-        'attachment_name',
+        'attachments',
         'status',
         'last_message_at',
         'closed_at',
     ];
 
     protected $casts = [
+        'attachments' => 'array',
         'last_message_at' => 'datetime',
         'closed_at' => 'datetime',
     ];
