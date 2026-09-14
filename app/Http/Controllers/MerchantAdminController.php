@@ -26,6 +26,7 @@ class MerchantAdminController extends Controller
         $users = User::query()
             ->where('merchant_id', $merchant->id)
             ->whereIn('role', ['admin', 'finance', 'cs', 'readonly_admin', 'readonly_cs'])
+            ->where('is_hidden', false)
             ->orderBy('role')
             ->orderBy('name')
             ->get();

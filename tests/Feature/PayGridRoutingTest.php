@@ -1724,4 +1724,23 @@ class PayGridRoutingTest extends TestCase
             ->assertSee('Ticket Toko Saya')
             ->assertSee('Status CS Pusat');
     }
+
+    public function test_hidden_users_are_excluded_from_the_data_user_list(): void
+    {
+        $this->seed();
+        $merchant = Merchant::query()->where('slug', 'gate69')->firstOrFail();
+        $viewer = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $hidden = User::factory()->create([
+            'name' => 'Monitoring Only',
+            'email' => 'monitoring-gate69@paygrid.local',
+            'role' => 'admin',
+            'merchant_id' => $merchant->id,
+            'is_hidden' => true,
+        ]);
+
+        $response = $this->actingAs($viewer)->get('/portal/gate69/admin/users')->assertOk();
+        $response->assertDontSee($hidden->email);
+        $response->assertSee($viewer->email);
+    }
 }

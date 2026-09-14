@@ -218,7 +218,7 @@
         <div class="table-wrap"><table class="table qris-table ma-store-list-table"><thead><tr><th>Toko</th><th>Merchant</th><th>Agen</th><th>Tipe</th><th>Fee</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
         @forelse($merchants as $m)
             @php
-                $adminUser = \App\Models\User::query()->where('merchant_id', $m->id)->where('role', 'admin')->first();
+                $adminUser = \App\Models\User::query()->where('merchant_id', $m->id)->where('role', 'admin')->where('is_hidden', false)->first();
                 $detailRows = [
                     'Nama Toko' => $m->name,
                     'Slug' => $m->slug,
