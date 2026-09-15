@@ -21,6 +21,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -798,31 +799,35 @@ class MaController extends Controller
 
     private function analyticsPerformance(array $filters): array
     {
-        $rows = TopupRequest::query()
+        $base = TopupRequest::query()
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
             ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
             ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->select('topup_requests.submitted_at', 'topup_requests.status')
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])));
+
+        // Aggregated in SQL (not by loading every row into PHP) so this stays cheap
+        // even for merchants with hundreds of thousands of transactions.
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $dowExpr = $isSqlite ? "CAST(strftime('%w', topup_requests.submitted_at) AS INTEGER)" : 'DAYOFWEEK(topup_requests.submitted_at) - 1';
+        $hourExpr = $isSqlite ? "CAST(strftime('%H', topup_requests.submitted_at) AS INTEGER)" : 'HOUR(topup_requests.submitted_at)';
+
+        $heatRows = (clone $base)
+            ->selectRaw("{$dowExpr} as dow, {$hourExpr} as hr, COUNT(*) as cnt")
+            ->groupBy('dow', 'hr')
             ->get();
 
-        // Day-of-week bucketing done in PHP (not SQL) so it works identically on MySQL and SQLite.
+        // dow here is 0=Minggu..6=Sabtu (both strftime '%w' and DAYOFWEEK()-1 agree). Display order Senin..Minggu.
         $dayLabels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
         $matrix = array_fill(0, 7, array_fill(0, 24, 0));
-        $generated = 0;
-        $succeeded = 0;
-        foreach ($rows as $row) {
-            $generated++;
-            if ($row->status === 'success') {
-                $succeeded++;
-            }
-            if (! $row->submitted_at) {
-                continue;
-            }
-            $local = $row->submitted_at->clone()->timezone('Asia/Jakarta');
-            $matrix[$local->dayOfWeekIso - 1][(int) $local->hour]++;
+        foreach ($heatRows as $row) {
+            $dow = (int) $row->dow;
+            $rowIndex = $dow === 0 ? 6 : $dow - 1;
+            $matrix[$rowIndex][(int) $row->hr] = (int) $row->cnt;
         }
         $maxCell = max(1, ...array_map('max', $matrix));
+
+        $generated = (clone $base)->count();
+        $succeeded = (clone $base)->where('topup_requests.status', 'success')->count();
 
         return [
             'dayLabels' => $dayLabels,
