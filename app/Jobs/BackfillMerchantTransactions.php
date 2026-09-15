@@ -20,11 +20,16 @@ class BackfillMerchantTransactions implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 1;
+    public int $tries = 4;
 
     public int $timeout = 90;
 
     public function __construct(public readonly int $merchantId, public readonly ?string $date = null) {}
+
+    public function backoff(): array
+    {
+        return [15, 45, 90];
+    }
 
     public function handle(GatewayManager $gateways, TransactionIngestionService $ingestion, MetricRollupService $rollups, GatewaySyncDispatcher $dispatcher): void
     {

@@ -112,4 +112,12 @@ class GatewaySyncDateWindowTest extends TestCase
             return ($query['from'] ?? null) === $expectedFrom;
         });
     }
+
+    public function test_backfill_job_retries_with_backoff_instead_of_failing_permanently_on_first_timeout(): void
+    {
+        $job = new BackfillMerchantTransactions(1, '2026-09-01');
+
+        $this->assertSame(4, $job->tries);
+        $this->assertSame([15, 45, 90], $job->backoff());
+    }
 }
