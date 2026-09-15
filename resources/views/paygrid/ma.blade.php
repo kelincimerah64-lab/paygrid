@@ -340,45 +340,12 @@
             <script id="ma-analytics-projection-data" type="application/json">@json($analyticsVolumeProjection)</script>
         </div>
 
-        <div data-ma-panel="performance" class="pad" hidden>
-            <div class="grid qris-metrics section">
-                <div class="card pad qris-metric primary"><span>Transaksi Dibuat</span><strong>{{ number_format($analyticsPerformance['generated'], 0, ',', '.') }}</strong><small>{{ $periodLabel }}</small></div>
-                <div class="card pad qris-metric success"><span>Berhasil Bayar</span><strong>{{ number_format($analyticsPerformance['succeeded'], 0, ',', '.') }}</strong><small>Status sukses</small></div>
-                <div class="card pad qris-metric warn"><span>Conversion Rate</span><strong>{{ $pct($analyticsPerformance['conversionRate']) }}</strong><small>Dibuat &rarr; Berhasil</small></div>
-            </div>
-            <p class="muted" style="margin:0 0 8px">Funnel 2 tahap (data QR di-scan tapi gagal bayar belum tersedia). Heatmap jam &times; hari (WIB), makin gelap makin padat.</p>
-            <div class="table-wrap ma-heatmap-wrap"><table class="table qris-table ma-heatmap-table"><thead><tr><th>Hari</th>@for($h = 0; $h < 24; $h++)<th>{{ $h }}</th>@endfor</tr></thead><tbody>@foreach($analyticsPerformance['dayLabels'] as $i => $day)<tr><td><strong>{{ $day }}</strong></td>@foreach($analyticsPerformance['matrix'][$i] as $cnt)@php($intensity = $analyticsPerformance['maxCell'] > 0 ? $cnt / $analyticsPerformance['maxCell'] : 0)<td class="ma-heatmap-cell" style="background:rgba(21,87,194,{{ number_format($intensity, 3) }})" title="{{ $cnt }} transaksi">{{ $cnt > 0 ? $cnt : '' }}</td>@endforeach</tr>@endforeach</tbody></table></div>
-
-            <h3 style="margin:28px 0 4px">Latency Processing</h3>
-            <p class="muted" style="margin:0 0 12px">Rata-rata waktu dari transaksi masuk sampai berhasil &mdash; rata-rata keseluruhan: <strong>{{ number_format($analyticsLatency['overallAvgSeconds'], 1) }} detik</strong>. Kalau tiba-tiba melonjak, tanda ada masalah di gateway/bank.</p>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Tanggal</th><th>Rata-rata Latency</th></tr></thead><tbody>@forelse($analyticsLatency['labels'] as $i => $label)<tr><td>{{ $label }}</td><td>{{ number_format($analyticsLatency['avgSeconds'][$i], 1) }} detik</td></tr>@empty<tr><td colspan="2" class="empty"><strong>Belum ada data.</strong>Filter periode ini belum memiliki transaksi sukses dengan waktu selesai tercatat.</td></tr>@endforelse</tbody></table></div>
-
-            <h3 style="margin:28px 0 4px">Breakdown Reliabilitas per Bank/Channel</h3>
-            <p class="muted" style="margin:0 0 12px">Persentase sukses per bank/channel pembayaran &mdash; data konkret buat komplain atau negosiasi ke gateway kalau ada bank tertentu yang sering gagal.</p>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Bank/Channel</th><th>Total Transaksi</th><th>Sukses</th><th>% Sukses</th></tr></thead><tbody>@forelse($analyticsChannelReliability['rows'] as $row)<tr><td>{{ $row['channel'] }}</td><td>{{ number_format($row['total'], 0, ',', '.') }}</td><td>{{ number_format($row['successCount'], 0, ',', '.') }}</td><td><span class="badge {{ $row['successRate'] >= 90 ? 'ok' : ($row['successRate'] >= 70 ? 'warn' : 'danger') }}">{{ $pct($row['successRate']) }}</span></td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada data channel.</strong>Filter periode ini belum memiliki transaksi dengan info bank/channel tercatat.</td></tr>@endforelse</tbody></table></div>
+        <div data-ma-panel="performance" data-ma-lazy-tab="performance" class="pad" hidden>
+            <p class="muted">Memuat data performance&hellip;</p>
         </div>
 
-        <div data-ma-panel="operations" class="pad" hidden>
-            <div class="grid qris-metrics section">
-                <div class="card pad qris-metric danger"><span>Total Transaksi Gagal</span><strong>{{ number_format($analyticsOperations['totalFailed'], 0, ',', '.') }}</strong><small>{{ $periodLabel }}</small></div>
-                <div class="card pad qris-metric warn"><span>Ada Tiket Issue Bank/Switching</span><strong>{{ number_format($analyticsOperations['totalWithTicket'], 0, ',', '.') }}</strong><small>Bukti korelasi ke bank</small></div>
-            </div>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Toko</th><th>Transaksi Gagal</th><th>Dengan Tiket Bank/Switching</th><th>% Ada Bukti</th></tr></thead><tbody>@forelse($analyticsOperations['perMerchant'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td>{{ number_format($row['failed_count'], 0, ',', '.') }}</td><td>{{ number_format($row['with_ticket_count'], 0, ',', '.') }}</td><td>{{ $row['failed_count'] > 0 ? $pct(round(($row['with_ticket_count'] / $row['failed_count']) * 100, 2)) : '-' }}</td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada transaksi gagal.</strong>Filter periode ini belum memiliki transaksi gagal/expired/rejected.</td></tr>@endforelse</tbody></table></div>
-
-            <h3 style="margin:28px 0 4px">Deteksi Outlier per Toko</h3>
-            <p class="muted" style="margin:0 0 12px">Transaksi hari ini dibanding rata-rata 7 hari terakhir (tidak terpengaruh filter periode di atas). Toko dengan &plusmn;50% dari rata-rata ditandai outlier.</p>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Toko</th><th>Trx Hari Ini</th><th>Rata-rata 7 Hari</th><th>Deviasi</th></tr></thead><tbody>@forelse($analyticsOutlierDetection['rows'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td>{{ $row['today_trx'] }}</td><td>{{ $row['avg_trx'] }}</td><td>@if($row['deviation_percent'] === null)<span class="muted">-</span>@else<span class="badge {{ $row['is_outlier'] ? 'danger' : 'ok' }}">{{ $row['deviation_percent'] >= 0 ? '+' : '' }}{{ $pct($row['deviation_percent']) }}</span>@endif</td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada data pembanding.</strong>Toko belum punya riwayat 7 hari terakhir.</td></tr>@endforelse</tbody></table></div>
-
-            <h3 style="margin:28px 0 4px">SLA Resolusi Tiket CS</h3>
-            <div class="grid qris-metrics section">
-                <div class="card pad qris-metric success"><span>Dalam SLA (24 jam)</span><strong>{{ $pct($analyticsTicketSla['withinSlaPercent']) }}</strong><small>{{ $analyticsTicketSla['withinSlaCount'] }} dari {{ $analyticsTicketSla['totalResolved'] }} tiket selesai</small></div>
-                <div class="card pad qris-metric primary"><span>Rata-rata Waktu Resolusi</span><strong>{{ number_format($analyticsTicketSla['avgResolutionHours'], 1) }} jam</strong><small>Dari tiket dibuat sampai ditutup</small></div>
-            </div>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>CS</th><th>Tiket Selesai</th><th>Rata-rata Waktu</th><th>% Dalam SLA</th></tr></thead><tbody>@forelse($analyticsTicketSla['perCs'] as $row)<tr><td>{{ $row['cs_name'] }}</td><td>{{ $row['total'] }}</td><td>{{ number_format($row['avg_hours'], 1) }} jam</td><td>{{ $pct(round(($row['within_sla_count'] / $row['total']) * 100, 2)) }}</td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada tiket ditutup.</strong>Filter periode ini belum memiliki tiket yang selesai dan tercatat CS-nya.</td></tr>@endforelse</tbody></table></div>
-
-            <h3 style="margin:28px 0 4px">Aktivitas Akun Internal</h3>
-            <p class="muted" style="margin:0 0 12px">Kapan terakhir tiap akun MA/agen/CS di scope ini login &mdash; diurutkan dari yang paling lama tidak aktif.</p>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Nama</th><th>Role</th><th>Terakhir Login</th></tr></thead><tbody>@forelse($analyticsAccountActivity['rows'] as $row)<tr><td>{{ $row['name'] }}</td><td>{{ $row['role'] }}</td><td>@if($row['last_login'])<span class="badge {{ $row['days_since_login'] > 14 ? 'danger' : ($row['days_since_login'] > 7 ? 'warn' : 'ok') }}">{{ $row['days_since_login'] }} hari lalu</span>@else<span class="badge danger">Belum pernah login</span>@endif</td></tr>@empty<tr><td colspan="3" class="empty"><strong>Belum ada akun terdeteksi.</strong></td></tr>@endforelse</tbody></table></div>
+        <div data-ma-panel="operations" data-ma-lazy-tab="operations" class="pad" hidden>
+            <p class="muted">Memuat data operations&hellip;</p>
         </div>
     </section>
 @endif
@@ -444,6 +411,17 @@ document.addEventListener('DOMContentLoaded', () => {
         button.addEventListener('click', () => {
             document.querySelectorAll('[data-ma-tab]').forEach((item) => item.classList.toggle('active', item === button));
             document.querySelectorAll('[data-ma-panel]').forEach((item) => item.hidden = item.dataset.maPanel !== button.dataset.maTab);
+            const panel = document.querySelector('[data-ma-panel="' + button.dataset.maTab + '"]');
+            if (panel && panel.dataset.maLazyTab && !panel.dataset.maLoaded) {
+                panel.dataset.maLoaded = '1';
+                fetch('/ma/analytics/tab/' + panel.dataset.maLazyTab + window.location.search)
+                    .then((res) => res.ok ? res.text() : Promise.reject(res.status))
+                    .then((html) => { panel.innerHTML = html; })
+                    .catch(() => {
+                        delete panel.dataset.maLoaded;
+                        panel.innerHTML = '<p class="muted">Gagal memuat data, klik tab ini lagi untuk coba ulang.</p>';
+                    });
+            }
         });
     });
     const periodSelect = document.querySelector('[data-ma-period-select]');

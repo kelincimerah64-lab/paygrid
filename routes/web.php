@@ -43,6 +43,7 @@ Route::get('/ma/create-store', fn (MaController $controller) => $controller->pag
 Route::post('/ma/create-store', [MaController::class, 'storeMerchant'])->middleware('throttle:dashboard-writes')->name('ma.create-store.store');
 Route::get('/ma/bot-monitoring', fn (MaController $controller) => $controller->page('bot-monitoring'))->name('ma.bot-monitoring');
 Route::get('/ma/analytics', fn (MaController $controller) => $controller->page('analytics'))->name('ma.analytics');
+Route::get('/ma/analytics/tab/{tab}', [MaController::class, 'analyticsTab'])->name('ma.analytics.tab');
 });
 
 Route::middleware(['auth', 'role:ma,agent,superadmin'])->group(function () {

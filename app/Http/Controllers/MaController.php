@@ -112,14 +112,32 @@ class MaController extends Controller
             'analyticsAmountDistribution' => $page === 'analytics' ? $this->cachedAnalytics('amount-distribution', $dataFilters, fn () => $this->analyticsAmountDistribution($dataFilters)) : [],
             'analyticsVolumeProjection' => $page === 'analytics' ? $this->cachedAnalytics('volume-projection', [], fn () => $this->analyticsVolumeProjection()) : [],
             'analyticsSettlementReconciliation' => $page === 'analytics' ? $this->cachedAnalytics('settlement-reconciliation', $dataFilters, fn () => $this->analyticsSettlementReconciliation($dataFilters)) : [],
-            'analyticsPerformance' => $page === 'analytics' ? $this->cachedAnalytics('performance', $dataFilters, fn () => $this->analyticsPerformance($dataFilters)) : [],
-            'analyticsLatency' => $page === 'analytics' ? $this->cachedAnalytics('latency', $dataFilters, fn () => $this->analyticsLatency($dataFilters)) : [],
-            'analyticsChannelReliability' => $page === 'analytics' ? $this->cachedAnalytics('channel-reliability', $dataFilters, fn () => $this->analyticsChannelReliability($dataFilters)) : [],
-            'analyticsOperations' => $page === 'analytics' ? $this->cachedAnalytics('operations', $dataFilters, fn () => $this->analyticsOperations($dataFilters)) : [],
-            'analyticsOutlierDetection' => $page === 'analytics' ? $this->cachedAnalytics('outlier-detection', [], fn () => $this->analyticsOutlierDetection()) : [],
-            'analyticsTicketSla' => $page === 'analytics' ? $this->cachedAnalytics('ticket-sla', $dataFilters, fn () => $this->analyticsTicketSla($dataFilters)) : [],
-            'analyticsAccountActivity' => $page === 'analytics' ? $this->cachedAnalytics('account-activity', [], fn () => $this->analyticsAccountActivity()) : [],
             'feeMenus' => $feeMenus,
+        ]);
+    }
+
+    public function analyticsTab(string $tab): View
+    {
+        abort_unless(in_array($tab, ['performance', 'operations'], true), 404);
+
+        $dataFilters = $this->periodFilters($this->filters());
+
+        if ($tab === 'performance') {
+            return view('paygrid.partials.ma-analytics-performance', [
+                'periodLabel' => $this->periodLabel($dataFilters),
+                'analyticsPerformance' => $this->cachedAnalytics('performance', $dataFilters, fn () => $this->analyticsPerformance($dataFilters)),
+                'analyticsLatency' => $this->cachedAnalytics('latency', $dataFilters, fn () => $this->analyticsLatency($dataFilters)),
+                'analyticsChannelReliability' => $this->cachedAnalytics('channel-reliability', $dataFilters, fn () => $this->analyticsChannelReliability($dataFilters)),
+            ]);
+        }
+
+        return view('paygrid.partials.ma-analytics-operations', [
+            'periodLabel' => $this->periodLabel($dataFilters),
+            'analyticsOperations' => $this->cachedAnalytics('operations', $dataFilters, fn () => $this->analyticsOperations($dataFilters)),
+            'analyticsOutlierDetection' => $this->cachedAnalytics('outlier-detection', [], fn () => $this->analyticsOutlierDetection()),
+            'analyticsTicketSla' => $this->cachedAnalytics('ticket-sla', $dataFilters, fn () => $this->analyticsTicketSla($dataFilters)),
+            'analyticsAccountActivity' => $this->cachedAnalytics('account-activity', [], fn () => $this->analyticsAccountActivity()),
+            'analyticsProvisioningFailures' => $this->cachedAnalytics('provisioning-failures', [], fn () => $this->analyticsProvisioningFailures()),
         ]);
     }
 
@@ -1261,6 +1279,30 @@ class MaController extends Controller
         })->sortByDesc(fn ($r) => $r['days_since_login'] ?? 99999)->values();
 
         return ['rows' => $rows];
+    }
+
+    private function analyticsProvisioningFailures(): array
+    {
+        $failed = $this->merchants($this->blankFilters())
+            ->where('merchants.provisioning_status', 'failed')
+            ->get();
+
+        $topErrors = $failed
+            ->groupBy(fn ($m) => $m->provisioning_error ?: 'Error tidak tercatat')
+            ->map(fn ($group, $error) => ['error' => $error, 'count' => $group->count()])
+            ->sortByDesc('count')
+            ->values();
+
+        return [
+            'rows' => $failed->map(fn ($m) => [
+                'merchant_name' => $m->name,
+                'error' => $m->provisioning_error ?: '-',
+                'attempts' => (int) $m->provisioning_attempts,
+                'last_attempt' => optional($m->updated_at)->toDateTimeString(),
+            ])->values(),
+            'topErrors' => $topErrors,
+            'totalFailed' => $failed->count(),
+        ];
     }
 
     private function storeRanking(array $filters)

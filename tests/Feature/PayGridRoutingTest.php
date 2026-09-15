@@ -1422,7 +1422,7 @@ class PayGridRoutingTest extends TestCase
 
         $this->actingAs($ma);
 
-        foreach (['/ma', '/ma/report', '/ma/fee', '/ma/approvals', '/ma/mapping', '/ma/stores', '/ma/agents', '/ma/create-store', '/ma/analytics'] as $path) {
+        foreach (['/ma', '/ma/report', '/ma/fee', '/ma/approvals', '/ma/mapping', '/ma/stores', '/ma/agents', '/ma/create-store', '/ma/analytics', '/ma/analytics/tab/performance', '/ma/analytics/tab/operations'] as $path) {
             $this->get($path)->assertOk();
         }
 
@@ -1536,7 +1536,9 @@ class PayGridRoutingTest extends TestCase
         $response->assertSee('Analytics Test Store');
         $response->assertSee('Rp '.number_format($expectedGmv, 0, ',', '.'), false);
         $response->assertSee($expectedTakeRate, false);
-        $response->assertSee('50,000%', false); // this merchant: 1 of its 2 failed transactions has a matching bank/switching ticket
+
+        $operations = $this->actingAs($ma)->get('/ma/analytics/tab/operations?period=all')->assertOk();
+        $operations->assertSee('50,000%', false); // this merchant: 1 of its 2 failed transactions has a matching bank/switching ticket
     }
 
     public function test_ma_analytics_page_computes_settlement_reconciliation(): void
@@ -1626,18 +1628,25 @@ class PayGridRoutingTest extends TestCase
 
         $from = now('Asia/Jakarta')->subDays(5)->startOfDay()->toDateString();
         $to = now('Asia/Jakarta')->toDateString();
-        $response = $this->actingAs($ma)->get("/ma/analytics?period=custom&from={$from}&to={$to}")->assertOk();
+        $query = "period=custom&from={$from}&to={$to}";
 
+        // Bisnis tab is still rendered eagerly on the main page.
+        $response = $this->actingAs($ma)->get("/ma/analytics?{$query}")->assertOk();
         $response->assertSee('Roadmap Test Store');
         // Distribution: our one transaction (Rp40.000) falls in the "< 50rb" bucket.
         $response->assertSee('&lt; 50rb', false);
-        // Latency: 30 seconds average shown somewhere on the Performance tab.
-        $response->assertSee('30.0 detik', false);
+
+        // Performance and Operations are lazy-loaded via their own tab endpoints.
+        $performance = $this->actingAs($ma)->get("/ma/analytics/tab/performance?{$query}")->assertOk();
+        // Latency: 30 seconds average shown on the Performance tab.
+        $performance->assertSee('30.0 detik', false);
+
+        $operations = $this->actingAs($ma)->get("/ma/analytics/tab/operations?{$query}")->assertOk();
         // SLA: our ticket resolved in 2h, well under 24h -> 100% within SLA.
-        $response->assertSee('100,000%', false);
-        $response->assertSee('2.0 jam', false);
+        $operations->assertSee('100,000%', false);
+        $operations->assertSee('2.0 jam', false);
         // Account activity: the CS user logged in 3 days ago.
-        $response->assertSee('3 hari lalu', false);
+        $operations->assertSee('3 hari lalu', false);
     }
 
     public function test_ma_analytics_page_computes_volume_projection(): void
@@ -1721,12 +1730,37 @@ class PayGridRoutingTest extends TestCase
             ]);
         }
 
-        $response = $this->actingAs($ma)->get('/ma/analytics?period=all')->assertOk();
+        $response = $this->actingAs($ma)->get('/ma/analytics/tab/performance?period=all')->assertOk();
         $response->assertSee('Breakdown Reliabilitas per Bank/Channel');
         $response->assertSee('BANK BCA');
         $response->assertSee('75,000%', false);
         $response->assertSee('BANK MANDIRI');
         $response->assertSee('100,000%', false);
+    }
+
+    public function test_ma_analytics_page_computes_provisioning_failures(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        Merchant::query()->create([
+            'slug' => 'provision-fail-store',
+            'name' => 'Provision Fail Store',
+            'agent_id' => $agent->id,
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'approval_status' => 'approved',
+            'provisioning_status' => 'failed',
+            'provisioning_error' => 'HTTP 422: merchant_group_id is required',
+            'provisioning_attempts' => 2,
+        ]);
+
+        $response = $this->actingAs($ma)->get('/ma/analytics/tab/operations?period=all')->assertOk();
+        $response->assertSee('Analitik Kegagalan Provisioning');
+        $response->assertSee('Provision Fail Store');
+        $response->assertSee('merchant_group_id is required');
+        $response->assertDontSee('Tidak ada toko yang gagal provisioning saat ini');
     }
 
     public function test_ma_can_approve_merchant_registration_and_audit_it(): void
