@@ -105,6 +105,10 @@ class TransactionIngestionService
             ?? 'pending'
         ));
 
+        if (Str::lower((string) Arr::get($payload, 'method')) === 'topup') {
+            $status = 'rejected';
+        }
+
         $amount = $this->numericAmount(Arr::get($payload, 'amount') ?? Arr::get($payload, 'total_amount') ?? 0);
         $netAmount = $this->numericAmount(Arr::get($payload, 'response.total') ?? Arr::get($payload, 'net_amount') ?? Arr::get($payload, 'net') ?? $amount);
         $feeAmount = $this->numericAmount(Arr::get($payload, 'fee') ?? Arr::get($payload, 'fee_amount') ?? max(0, $amount - $netAmount));

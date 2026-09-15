@@ -1329,6 +1329,25 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame(202, $result->fee_amount);
     }
 
+    public function test_ingestion_rejects_cash_advance_topup_method_regardless_of_gateway_status(): void
+    {
+        $this->seed();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+
+        $result = app(TransactionIngestionService::class)->ingestForMerchant($merchant, [
+            'id' => 'cash-advance-test-ref',
+            'status' => 'SUCCESS',
+            'method' => 'topup',
+            'merchant_id' => $merchant->merchant_id,
+            'ref_id' => 'topup_test_ref',
+            'amount' => 100000000,
+            'net_amount' => 100000000,
+            'created_at' => now()->getTimestampMs(),
+        ], $merchant->gateway, 'gateway_pull');
+
+        $this->assertSame('rejected', $result->status);
+    }
+
     public function test_dashboard_reads_gateway_balance_from_matching_merchant_cache(): void
     {
         $this->seed();
