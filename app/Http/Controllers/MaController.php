@@ -85,7 +85,7 @@ class MaController extends Controller
                 : collect(),
             'selectedAgent' => $selectedAgent,
             'selectedStore' => $selectedStore,
-            'selectedAgentStores' => $selectedAgent ? $this->selectedAgentStores($filters) : collect(),
+            'selectedAgentStores' => $selectedAgent ? $this->selectedAgentStores($dataFilters) : collect(),
             'merchants' => $merchants,
             'registrations' => $page === 'approval' ? $this->registrations($filters)->get() : collect(),
             'transactions' => $selectedStore ? $this->transactions($dataFilters)->simplePaginate(25)->withQueryString() : null,
