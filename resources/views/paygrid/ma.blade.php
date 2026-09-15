@@ -320,15 +320,15 @@
 
             <h3 style="margin:28px 0 4px">Rekonsiliasi Settlement (Ekspektasi vs Aktual Bank)</h3>
             <p class="muted" style="margin:0 0 12px">Ekspektasi dihitung dari transaksi sukses kita di jendela waktu settlement yang sama. Aktual dari data settlement Hilogate.</p>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Toko</th><th>Tanggal</th><th>Ekspektasi</th><th>Aktual (Bank)</th><th>Selisih</th></tr></thead><tbody>@forelse($analyticsSettlementReconciliation['rows'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td>{{ $row['settlement_date'] }}</td><td>{{ $money($row['expected']) }}</td><td>{{ $money($row['actual']) }}</td><td><span class="badge {{ $row['diff'] == 0 ? 'ok' : 'danger' }}">{{ $money($row['diff']) }}</span></td></tr>@empty<tr><td colspan="5" class="empty"><strong>Belum ada data settlement.</strong>Filter periode ini belum memiliki batch settlement.</td></tr>@endforelse</tbody></table></div>
+            <div class="table-wrap"><table class="table qris-table ma-paginate"><thead><tr><th>Toko</th><th>Tanggal</th><th>Ekspektasi</th><th>Aktual (Bank)</th><th>Selisih</th></tr></thead><tbody>@forelse($analyticsSettlementReconciliation['rows'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td>{{ $row['settlement_date'] }}</td><td>{{ $money($row['expected']) }}</td><td>{{ $money($row['actual']) }}</td><td><span class="badge {{ $row['diff'] == 0 ? 'ok' : 'danger' }}">{{ $money($row['diff']) }}</span></td></tr>@empty<tr><td colspan="5" class="empty"><strong>Belum ada data settlement.</strong>Filter periode ini belum memiliki batch settlement.</td></tr>@endforelse</tbody></table></div>
 
             <h3 style="margin:28px 0 4px">Agent Leaderboard (Growth%)</h3>
             <p class="muted" style="margin:0 0 12px">Dibandingkan dengan periode sebelumnya yang panjangnya sama. Diurutkan dari pertumbuhan tertinggi.</p>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Agen</th><th>Volume Periode Ini</th><th>Volume Periode Lalu</th><th>Growth</th></tr></thead><tbody>@forelse($analyticsAgentLeaderboard['rows'] as $row)<tr><td>{{ $row['agent_name'] }}</td><td>{{ $money($row['current_volume']) }}</td><td>{{ $money($row['previous_volume']) }}</td><td>@if(! $analyticsAgentLeaderboard['hasPrevious'])<span class="muted">n/a (pilih periode custom)</span>@elseif($row['growth_percent'] === null)<span class="badge ok">Baru</span>@else<span class="badge {{ $row['growth_percent'] >= 0 ? 'ok' : 'danger' }}">{{ $row['growth_percent'] >= 0 ? '+' : '' }}{{ $pct($row['growth_percent']) }}</span>@endif</td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada data agen.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div>
+            <div class="table-wrap"><table class="table qris-table ma-paginate"><thead><tr><th>Agen</th><th>Volume Periode Ini</th><th>Volume Periode Lalu</th><th>Growth</th></tr></thead><tbody>@forelse($analyticsAgentLeaderboard['rows'] as $row)<tr><td>{{ $row['agent_name'] }}</td><td>{{ $money($row['current_volume']) }}</td><td>{{ $money($row['previous_volume']) }}</td><td>@if(! $analyticsAgentLeaderboard['hasPrevious'])<span class="muted">n/a (pilih periode custom)</span>@elseif($row['growth_percent'] === null)<span class="badge ok">Baru</span>@else<span class="badge {{ $row['growth_percent'] >= 0 ? 'ok' : 'danger' }}">{{ $row['growth_percent'] >= 0 ? '+' : '' }}{{ $pct($row['growth_percent']) }}</span>@endif</td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada data agen.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div>
 
             <h3 style="margin:28px 0 4px">Revenue Concentration Risk</h3>
             <p class="muted" style="margin:0 0 12px">Top 5 toko menyumbang {{ $pct($analyticsRevenueConcentration['top5Percent']) }} dari total volume &middot; Top 10 menyumbang {{ $pct($analyticsRevenueConcentration['top10Percent']) }}. Kalau ini kelewat tinggi, ada risiko ketergantungan ke sedikit toko.</p>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Toko</th><th>Volume</th><th>% dari Total</th></tr></thead><tbody>@forelse($analyticsRevenueConcentration['rows'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td>{{ $money($row['volume']) }}</td><td>{{ $pct($row['percent']) }}</td></tr>@empty<tr><td colspan="3" class="empty"><strong>Belum ada data.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div>
+            <div class="table-wrap"><table class="table qris-table ma-paginate"><thead><tr><th>Toko</th><th>Volume</th><th>% dari Total</th></tr></thead><tbody>@forelse($analyticsRevenueConcentration['rows'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td>{{ $money($row['volume']) }}</td><td>{{ $pct($row['percent']) }}</td></tr>@empty<tr><td colspan="3" class="empty"><strong>Belum ada data.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div>
 
             <h3 style="margin:28px 0 4px">Distribusi Nominal Transaksi</h3>
             <p class="muted" style="margin:0 0 12px">Jumlah transaksi sukses per rentang nominal &mdash; lihat pola transaksi kecil berulang vs besar sesekali.</p>
@@ -371,6 +371,58 @@ document.addEventListener('input', function (e) {
         paygridWarnBelowFloor(e.target);
     }
 });
+function paygridPaginateTable(table, perPage) {
+    if (table.dataset.maPaginated) return;
+    table.dataset.maPaginated = '1';
+    perPage = perPage || 10;
+    const tbody = table.querySelector('tbody');
+    const wrap = table.closest('.table-wrap');
+    if (! tbody || ! wrap) return;
+    const allRows = Array.from(tbody.querySelectorAll('tr')).filter((r) => ! r.querySelector('.empty'));
+    if (allRows.length <= perPage) return;
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'ma-table-toolbar';
+    toolbar.innerHTML = '<input type="text" class="search" placeholder="Cari...">';
+    wrap.parentNode.insertBefore(toolbar, wrap);
+    const searchInput = toolbar.querySelector('input');
+
+    const pager = document.createElement('div');
+    pager.className = 'qris-pagination pad';
+    wrap.parentNode.insertBefore(pager, wrap.nextSibling);
+
+    let filtered = allRows;
+    let page = 1;
+
+    function render() {
+        const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+        page = Math.min(Math.max(1, page), totalPages);
+        allRows.forEach((r) => { r.style.display = 'none'; });
+        const start = (page - 1) * perPage;
+        filtered.slice(start, start + perPage).forEach((r) => { r.style.display = ''; });
+        const from = filtered.length === 0 ? 0 : start + 1;
+        const to = Math.min(start + perPage, filtered.length);
+        pager.innerHTML = '<div class="pager-summary">Showing ' + from + ' to ' + to + ' of ' + filtered.length + '</div><div class="pager-links">'
+            + '<button type="button" class="pager" data-dir="prev"' + (page === 1 ? ' disabled' : '') + '>Prev</button>'
+            + '<button type="button" class="pager" data-dir="next"' + (page === totalPages ? ' disabled' : '') + '>Next</button></div>';
+        pager.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => {
+            page += btn.dataset.dir === 'next' ? 1 : -1;
+            render();
+        }));
+    }
+
+    searchInput.addEventListener('input', () => {
+        const q = searchInput.value.toLowerCase();
+        filtered = q === '' ? allRows : allRows.filter((r) => r.textContent.toLowerCase().includes(q));
+        page = 1;
+        render();
+    });
+
+    render();
+}
+function paygridPaginateAllTables(root) {
+    (root || document).querySelectorAll('table.ma-paginate').forEach((table) => paygridPaginateTable(table));
+}
 document.addEventListener('DOMContentLoaded', () => {
     const money = (value) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0));
     const badgeClass = (status) => ['approved', 'success', 'Active', 'active', 'done'].includes(String(status)) ? 'ok' : (['rejected', 'failed', 'expired', 'Suspended'].includes(String(status)) ? 'danger' : 'warn');
@@ -416,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 panel.dataset.maLoaded = '1';
                 fetch('/ma/analytics/tab/' + panel.dataset.maLazyTab + window.location.search)
                     .then((res) => res.ok ? res.text() : Promise.reject(res.status))
-                    .then((html) => { panel.innerHTML = html; })
+                    .then((html) => { panel.innerHTML = html; paygridPaginateAllTables(panel); })
                     .catch(() => {
                         delete panel.dataset.maLoaded;
                         panel.innerHTML = '<p class="muted">Gagal memuat data, klik tab ini lagi untuk coba ulang.</p>';
@@ -490,6 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
             item.closest('.approval-modal').hidden = true;
         });
     });
+    paygridPaginateAllTables();
 });
 </script>
 @endpush

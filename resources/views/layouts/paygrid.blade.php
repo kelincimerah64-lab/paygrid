@@ -62,7 +62,8 @@
         .grid { display:grid; gap:16px; }
         .cards { grid-template-columns:repeat(4, minmax(0, 1fr)); }
         .cards-compact { display:flex; flex-wrap:wrap; gap:16px; }
-        .cards-compact .metric { flex:0 1 220px; }
+        .cards-compact .metric { flex:0 1 240px; }
+        .cards-compact .metric strong { font-size:24px; white-space:nowrap; }
         .metric { min-height:130px; container-type:inline-size; }
         .metric strong { display:block; font-size:30px; line-height:1.15; margin-top:12px; white-space:nowrap; }
         @container (max-width: 230px) { .metric strong { font-size:23px; } }
@@ -160,6 +161,8 @@
         .ma-heatmap-table { min-width:920px; table-layout:auto; }
         .ma-heatmap-table th, .ma-heatmap-table td { text-align:center; padding:4px 6px; font-size:11px; }
         .ma-heatmap-table th:first-child, .ma-heatmap-table td:first-child { text-align:left; white-space:nowrap; }
+        .ma-table-toolbar { margin:0 0 8px; }
+        .ma-table-toolbar .search { width:100%; max-width:320px; }
         .ma-store-summary-table { min-width:1040px; table-layout:auto; }
         .qris-table.ma-store-summary-table th { white-space:nowrap; }
         .ma-store-summary-table th:nth-child(1) { width:22%; }

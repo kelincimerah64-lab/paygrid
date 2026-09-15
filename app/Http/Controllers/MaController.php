@@ -901,7 +901,7 @@ class MaController extends Controller
                 'previous_volume' => $prevVol,
                 'growth_percent' => $growth,
             ];
-        })->sortByDesc(fn ($r) => $r['growth_percent'] ?? -1)->values()->take(10);
+        })->sortByDesc(fn ($r) => $r['growth_percent'] ?? -1)->values()->take(50);
 
         return ['rows' => $rows, 'hasPrevious' => (bool) $prevFrom];
     }
@@ -920,7 +920,7 @@ class MaController extends Controller
             ->get();
 
         $totalVolume = (int) $rows->sum('volume');
-        $top = $rows->take(10)->map(fn ($r) => [
+        $top = $rows->take(50)->map(fn ($r) => [
             'merchant_name' => $r->merchant_name,
             'volume' => (int) $r->volume,
             'percent' => $totalVolume > 0 ? round(($r->volume / $totalVolume) * 100, 2) : 0,
@@ -1014,7 +1014,7 @@ class MaController extends Controller
             ->when($filters['from'], fn ($query) => $query->where('settlement_date', '>=', $this->rangeStart($filters['from'])->toDateString()))
             ->when($filters['to'], fn ($query) => $query->where('settlement_date', '<=', $this->rangeEnd($filters['to'])->toDateString()))
             ->orderByDesc('settlement_date')
-            ->limit(30)
+            ->limit(50)
             ->get();
 
         $rows = $settlements->map(function (MerchantSettlement $settlement) {
@@ -1129,7 +1129,7 @@ class MaController extends Controller
             ->groupBy('channel')
             ->havingRaw('channel IS NOT NULL')
             ->orderByDesc('total')
-            ->limit(15)
+            ->limit(50)
             ->get();
 
         return [
@@ -1160,7 +1160,7 @@ class MaController extends Controller
             ->groupBy('merchants.id', 'merchants.name')
             ->having('failed_count', '>', 0)
             ->orderByDesc('failed_count')
-            ->limit(20)
+            ->limit(50)
             ->get();
 
         return [
