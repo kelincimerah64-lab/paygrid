@@ -156,6 +156,10 @@
         .current-agent-box strong { display:block; margin-top:4px; font-size:13px; }
         .ma-store-panel { overflow-x:auto; }
         .ma-store-panel .table-wrap { overflow-x:auto; }
+        .ma-heatmap-wrap { overflow-x:auto; }
+        .ma-heatmap-table { min-width:920px; table-layout:auto; }
+        .ma-heatmap-table th, .ma-heatmap-table td { text-align:center; padding:4px 6px; font-size:11px; }
+        .ma-heatmap-table th:first-child, .ma-heatmap-table td:first-child { text-align:left; white-space:nowrap; }
         .ma-store-summary-table { min-width:1040px; table-layout:auto; }
         .qris-table.ma-store-summary-table th { white-space:nowrap; }
         .ma-store-summary-table th:nth-child(1) { width:22%; }
@@ -727,6 +731,9 @@
             .ma-store-summary-table td:nth-child(4)::before { content:'Volume Sukses'; }
             .ma-store-summary-table td:nth-child(5)::before { content:'Saldo Pending HG'; }
             .ma-store-summary-table td:nth-child(6)::before { content:'Settlement'; }
+            .ma-heatmap-wrap { overflow-x:auto; }
+            .ma-heatmap-table, .ma-heatmap-table thead, .ma-heatmap-table tbody, .ma-heatmap-table tr { display:revert; width:auto; }
+            .ma-heatmap-table th, .ma-heatmap-table td { display:table-cell; height:auto; min-height:0; }
             .ma-report-table { min-width:0; }
             .ma-report-table td:nth-child(1)::before { content:'Masuk'; }
             .ma-report-table td:nth-child(2)::before { content:'Sukses'; }
@@ -900,6 +907,7 @@
                         'support-ticket' => '✎',
                         'create-ticket' => '✎',
                         'manual-tickets' => '✉',
+                        'analytics' => '◫',
                     ][$item['key']] ?? '•')
                     <a href="{{ $item['url'] }}" class="{{ ($active ?? '') === $item['key'] ? 'active' : '' }}" data-key="{{ $item['key'] }}"><span class="nav-icon" aria-hidden="true">{{ $navIcon }}</span><span class="nav-label">{{ $item['label'] }}</span>@if(! empty($item['badge']))<span class="nav-badge">{{ $item['badge'] > 99 ? '99+' : $item['badge'] }}</span>@endif</a>
                 @endforeach

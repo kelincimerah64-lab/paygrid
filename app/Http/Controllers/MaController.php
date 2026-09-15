@@ -39,10 +39,10 @@ class MaController extends Controller
     public function page(string $page = 'overview'): View
     {
         $feeMenus = app(FeeMenuCatalog::class);
-        abort_unless(in_array($page, ['overview', 'report', 'fee', 'approval', 'mapping', 'stores', 'agents', 'create-store', 'bot-monitoring'], true), 404);
+        abort_unless(in_array($page, ['overview', 'report', 'fee', 'approval', 'mapping', 'stores', 'agents', 'create-store', 'bot-monitoring', 'analytics'], true), 404);
 
         $filters = $this->filters();
-        $dataFilters = in_array($page, ['overview', 'report', 'fee'], true) ? $this->periodFilters($filters) : $filters;
+        $dataFilters = in_array($page, ['overview', 'report', 'fee', 'analytics'], true) ? $this->periodFilters($filters) : $filters;
 
         $selectedAgent = $page === 'report' ? $this->selectedAgent($filters) : null;
         $selectedStore = $page === 'report' ? $this->selectedStore($filters) : null;
@@ -72,6 +72,7 @@ class MaController extends Controller
                 'agents' => 'Agen',
                 'create-store' => 'Create Toko',
                 'bot-monitoring' => 'Monitoring Bot Telegram',
+                'analytics' => 'Analytics',
                 default => 'Overview',
             },
             'filters' => $filters,
@@ -103,6 +104,9 @@ class MaController extends Controller
             'pendingIpWhitelist' => $page === 'bot-monitoring'
                 ? app(TelegramBotMonitoringService::class)->pendingIpWhitelist()
                 : collect(),
+            'analyticsBisnis' => $page === 'analytics' ? $this->analyticsBisnis($dataFilters) : [],
+            'analyticsPerformance' => $page === 'analytics' ? $this->analyticsPerformance($dataFilters) : [],
+            'analyticsOperations' => $page === 'analytics' ? $this->analyticsOperations($dataFilters) : [],
             'feeMenus' => $feeMenus,
         ]);
     }
@@ -762,6 +766,100 @@ class MaController extends Controller
                 'meta' => 'Volume '.$trx->amount,
             ];
         })->values()->all();
+    }
+
+    private function analyticsBisnis(array $filters): array
+    {
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->where('topup_requests.status', 'success')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw('DATE(topup_requests.submitted_at) as d')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as gmv')
+            ->selectRaw('COALESCE(SUM(topup_requests.fee_amount), 0) as fee')
+            ->groupBy('d')
+            ->orderBy('d')
+            ->get();
+
+        $totalGmv = (int) $rows->sum('gmv');
+        $totalFee = (int) $rows->sum('fee');
+
+        return [
+            'labels' => $rows->pluck('d')->values(),
+            'gmv' => $rows->pluck('gmv')->map(fn ($v) => (int) $v)->values(),
+            'takeRate' => $rows->map(fn ($r) => $r->gmv > 0 ? round(($r->fee / $r->gmv) * 100, 3) : 0)->values(),
+            'totalGmv' => $totalGmv,
+            'totalFee' => $totalFee,
+            'overallTakeRate' => $totalGmv > 0 ? round(($totalFee / $totalGmv) * 100, 3) : 0,
+        ];
+    }
+
+    private function analyticsPerformance(array $filters): array
+    {
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->select('topup_requests.submitted_at', 'topup_requests.status')
+            ->get();
+
+        // Day-of-week bucketing done in PHP (not SQL) so it works identically on MySQL and SQLite.
+        $dayLabels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+        $matrix = array_fill(0, 7, array_fill(0, 24, 0));
+        $generated = 0;
+        $succeeded = 0;
+        foreach ($rows as $row) {
+            $generated++;
+            if ($row->status === 'success') {
+                $succeeded++;
+            }
+            if (! $row->submitted_at) {
+                continue;
+            }
+            $local = $row->submitted_at->clone()->timezone('Asia/Jakarta');
+            $matrix[$local->dayOfWeekIso - 1][(int) $local->hour]++;
+        }
+        $maxCell = max(1, ...array_map('max', $matrix));
+
+        return [
+            'dayLabels' => $dayLabels,
+            'matrix' => $matrix,
+            'maxCell' => $maxCell,
+            'generated' => $generated,
+            'succeeded' => $succeeded,
+            'conversionRate' => $generated > 0 ? round(($succeeded / $generated) * 100, 2) : 0,
+        ];
+    }
+
+    private function analyticsOperations(array $filters): array
+    {
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->leftJoin('support_tickets', function ($join) {
+                $join->on('support_tickets.topup_request_id', '=', 'topup_requests.id')
+                    ->whereIn('support_tickets.center_status', ['issue_bank', 'issue_switching']);
+            })
+            ->whereIn('topup_requests.status', ['failed', 'expired', 'rejected'])
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw('merchants.id as merchant_id, merchants.name as merchant_name')
+            ->selectRaw('COUNT(DISTINCT topup_requests.id) as failed_count')
+            ->selectRaw('COUNT(DISTINCT support_tickets.id) as with_ticket_count')
+            ->groupBy('merchants.id', 'merchants.name')
+            ->having('failed_count', '>', 0)
+            ->orderByDesc('failed_count')
+            ->limit(20)
+            ->get();
+
+        return [
+            'perMerchant' => $rows,
+            'totalFailed' => (int) $rows->sum('failed_count'),
+            'totalWithTicket' => (int) $rows->sum('with_ticket_count'),
+        ];
     }
 
     private function storeRanking(array $filters)

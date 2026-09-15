@@ -296,7 +296,51 @@
     @include('paygrid.partials.bot-monitoring-panel', ['botRouteName' => 'ma.bot-monitoring'])
 @endif
 
+@if($active === 'analytics')
+    <section class="card pad section ma-period-card"><form method="get" class="ma-period-form"><label>Periode<select name="period" data-ma-period-select><option value="this_month" @selected($filters['period'] === 'this_month')>Bulan Ini</option><option value="last_month" @selected($filters['period'] === 'last_month')>Bulan Lalu</option><option value="last_30_days" @selected($filters['period'] === 'last_30_days')>30 Hari</option><option value="custom" @selected($filters['period'] === 'custom')>Custom</option><option value="all" @selected($filters['period'] === 'all')>Semua Periode</option></select></label><label>Dari<input type="date" name="from" value="{{ $dateInput($dataFilters['from'] ?? $filters['from']) }}" data-ma-period-custom></label><label>Sampai<input type="date" name="to" value="{{ $dateInput($dataFilters['to'] ?? $filters['to']) }}" data-ma-period-custom></label><button class="btn primary compact-btn">Terapkan</button><span class="badge ok">{{ $periodLabel }}</span></form></section>
+
+    <section class="card qris-panel section">
+        <div class="qris-toolbar">
+            <h2>Analytics</h2>
+            <div class="ma-tabs">
+                <button class="btn compact-btn active" type="button" data-ma-tab="bisnis">Bisnis</button>
+                <button class="btn compact-btn" type="button" data-ma-tab="performance">Performance</button>
+                <button class="btn compact-btn" type="button" data-ma-tab="operations">Operations</button>
+            </div>
+        </div>
+
+        <div data-ma-panel="bisnis" class="pad">
+            <div class="grid qris-metrics section">
+                <div class="card pad qris-metric primary"><span>GMV (Volume Sukses)</span><strong>{{ $money($analyticsBisnis['totalGmv']) }}</strong><small>{{ $periodLabel }}</small></div>
+                <div class="card pad qris-metric success"><span>Take Rate</span><strong>{{ $pct($analyticsBisnis['overallTakeRate']) }}</strong><small>Total fee tercatat &divide; GMV</small></div>
+            </div>
+            <p class="muted" style="margin:0 0 12px">Take rate dihitung dari <code>fee_amount</code> yang tercatat per transaksi (fee gateway), bukan margin PayGrid ke merchant.</p>
+            <div style="position:relative;height:280px"><canvas id="ma-analytics-gmv-chart"></canvas></div>
+            <script id="ma-analytics-bisnis-data" type="application/json">@json($analyticsBisnis)</script>
+        </div>
+
+        <div data-ma-panel="performance" class="pad" hidden>
+            <div class="grid qris-metrics section">
+                <div class="card pad qris-metric primary"><span>Transaksi Dibuat</span><strong>{{ number_format($analyticsPerformance['generated'], 0, ',', '.') }}</strong><small>{{ $periodLabel }}</small></div>
+                <div class="card pad qris-metric success"><span>Berhasil Bayar</span><strong>{{ number_format($analyticsPerformance['succeeded'], 0, ',', '.') }}</strong><small>Status sukses</small></div>
+                <div class="card pad qris-metric warn"><span>Conversion Rate</span><strong>{{ $pct($analyticsPerformance['conversionRate']) }}</strong><small>Dibuat &rarr; Berhasil</small></div>
+            </div>
+            <p class="muted" style="margin:0 0 8px">Funnel 2 tahap (data QR di-scan tapi gagal bayar belum tersedia). Heatmap jam &times; hari (WIB), makin gelap makin padat.</p>
+            <div class="table-wrap ma-heatmap-wrap"><table class="table qris-table ma-heatmap-table"><thead><tr><th>Hari</th>@for($h = 0; $h < 24; $h++)<th>{{ $h }}</th>@endfor</tr></thead><tbody>@foreach($analyticsPerformance['dayLabels'] as $i => $day)<tr><td><strong>{{ $day }}</strong></td>@foreach($analyticsPerformance['matrix'][$i] as $cnt)@php($intensity = $analyticsPerformance['maxCell'] > 0 ? $cnt / $analyticsPerformance['maxCell'] : 0)<td class="ma-heatmap-cell" style="background:rgba(21,87,194,{{ number_format($intensity, 3) }})" title="{{ $cnt }} transaksi">{{ $cnt > 0 ? $cnt : '' }}</td>@endforeach</tr>@endforeach</tbody></table></div>
+        </div>
+
+        <div data-ma-panel="operations" class="pad" hidden>
+            <div class="grid qris-metrics section">
+                <div class="card pad qris-metric danger"><span>Total Transaksi Gagal</span><strong>{{ number_format($analyticsOperations['totalFailed'], 0, ',', '.') }}</strong><small>{{ $periodLabel }}</small></div>
+                <div class="card pad qris-metric warn"><span>Ada Tiket Issue Bank/Switching</span><strong>{{ number_format($analyticsOperations['totalWithTicket'], 0, ',', '.') }}</strong><small>Bukti korelasi ke bank</small></div>
+            </div>
+            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Toko</th><th>Transaksi Gagal</th><th>Dengan Tiket Bank/Switching</th><th>% Ada Bukti</th></tr></thead><tbody>@forelse($analyticsOperations['perMerchant'] as $row)<tr><td>{{ $row->merchant_name }}</td><td>{{ number_format($row->failed_count, 0, ',', '.') }}</td><td>{{ number_format($row->with_ticket_count, 0, ',', '.') }}</td><td>{{ $row->failed_count > 0 ? $pct(round(($row->with_ticket_count / $row->failed_count) * 100, 2)) : '-' }}</td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada transaksi gagal.</strong>Filter periode ini belum memiliki transaksi gagal/expired/rejected.</td></tr>@endforelse</tbody></table></div>
+        </div>
+    </section>
+@endif
+
 @push('scripts')
+@if($active === 'analytics')<script src="{{ asset('js/vendor/chart.umd.min.js') }}"></script>@endif
 <script>
 function paygridToggleEngineType(select, engineTypeId) {
     var isEngine = select.value !== 'cm';
@@ -363,6 +407,34 @@ document.addEventListener('DOMContentLoaded', () => {
     customDates.forEach((input) => input.addEventListener('input', () => {
         if (periodSelect) periodSelect.value = 'custom';
     }));
+    if (typeof Chart !== 'undefined') {
+        const bisnisEl = document.getElementById('ma-analytics-bisnis-data');
+        const gmvCanvas = document.getElementById('ma-analytics-gmv-chart');
+        if (bisnisEl && gmvCanvas) {
+            const bisnis = JSON.parse(bisnisEl.textContent || '{}');
+            Chart.defaults.font.size = 11;
+            Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+            new Chart(gmvCanvas, {
+                type: 'line',
+                data: {
+                    labels: bisnis.labels || [],
+                    datasets: [
+                        { label: 'GMV', data: bisnis.gmv || [], borderColor: '#1557c2', backgroundColor: 'rgba(21,87,194,.12)', fill: true, tension: .25, yAxisID: 'y' },
+                        { label: 'Take Rate (%)', data: bisnis.takeRate || [], borderColor: '#008450', backgroundColor: 'transparent', tension: .25, yAxisID: 'y1' },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { position: 'left', ticks: { callback: (v) => new Intl.NumberFormat('id-ID', { notation: 'compact' }).format(v) } },
+                        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (v) => v + '%' } },
+                    },
+                },
+            });
+        }
+    }
     document.querySelectorAll('[data-approval-detail]').forEach((button) => {
         button.addEventListener('click', () => {
             const target = document.getElementById(button.dataset.approvalDetail);

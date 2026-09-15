@@ -1421,7 +1421,7 @@ class PayGridRoutingTest extends TestCase
 
         $this->actingAs($ma);
 
-        foreach (['/ma', '/ma/report', '/ma/fee', '/ma/approvals', '/ma/mapping', '/ma/stores', '/ma/agents', '/ma/create-store'] as $path) {
+        foreach (['/ma', '/ma/report', '/ma/fee', '/ma/approvals', '/ma/mapping', '/ma/stores', '/ma/agents', '/ma/create-store', '/ma/analytics'] as $path) {
             $this->get($path)->assertOk();
         }
 
@@ -1466,6 +1466,76 @@ class PayGridRoutingTest extends TestCase
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('merchants', ['slug' => 'ma-store-local', 'name' => 'MA Store Local', 'approval_status' => 'approved', 'merchant_mdr_percent' => 1.2]);
         $this->assertDatabaseHas('users', ['email' => 'admin-ma-store@paygrid.local', 'role' => 'admin']);
+    }
+
+    public function test_ma_analytics_page_computes_gmv_take_rate_and_ticket_correlation(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $merchant = Merchant::query()->create([
+            'slug' => 'analytics-test-store',
+            'name' => 'Analytics Test Store',
+            'agent_id' => $agent->id,
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'merchant_id' => 'analytics-test-hg-id',
+            'merchant_key' => 'analytics-test-hg-secret',
+            'approval_status' => 'approved',
+        ]);
+
+        TopupRequest::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'analytics-success-1', 'transaction_id' => 'analytics-success-1',
+            'status' => 'success', 'amount' => 100000, 'net_amount' => 99000, 'fee_amount' => 1000,
+            'submitted_at' => now()->subDay(), 'succeeded_at' => now()->subDay(),
+        ]);
+        TopupRequest::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'analytics-success-2', 'transaction_id' => 'analytics-success-2',
+            'status' => 'success', 'amount' => 50000, 'net_amount' => 49500, 'fee_amount' => 500,
+            'submitted_at' => now()->subDay(), 'succeeded_at' => now()->subDay(),
+        ]);
+
+        $failedWithTicket = TopupRequest::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'analytics-failed-1', 'transaction_id' => 'analytics-failed-1',
+            'status' => 'failed', 'amount' => 20000, 'net_amount' => 20000, 'fee_amount' => 0,
+            'submitted_at' => now()->subDay(),
+        ]);
+        SupportTicket::query()->create([
+            'merchant_id' => $merchant->id, 'topup_request_id' => $failedWithTicket->id,
+            'ticket_no' => 'TCK-ANALYTICS-1', 'reference' => 'analytics-failed-1', 'issue' => 'Bank issue',
+            'status' => 'not_started', 'center_status' => 'issue_bank',
+        ]);
+
+        TopupRequest::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'analytics-failed-2', 'transaction_id' => 'analytics-failed-2',
+            'status' => 'failed', 'amount' => 30000, 'net_amount' => 30000, 'fee_amount' => 0,
+            'submitted_at' => now()->subDay(),
+        ]);
+
+        $expectedGmv = (int) TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->join('agents', 'agents.id', '=', 'merchants.agent_id')
+            ->where('agents.ma_user_id', $ma->id)
+            ->where('topup_requests.status', 'success')
+            ->sum('topup_requests.amount');
+        $expectedFee = (int) TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->join('agents', 'agents.id', '=', 'merchants.agent_id')
+            ->where('agents.ma_user_id', $ma->id)
+            ->where('topup_requests.status', 'success')
+            ->sum('topup_requests.fee_amount');
+        $expectedTakeRate = number_format(round(($expectedFee / $expectedGmv) * 100, 3), 3, ',', '.').'%';
+
+        $response = $this->actingAs($ma)->get('/ma/analytics?period=all')->assertOk();
+        $response->assertSee('Analytics Test Store');
+        $response->assertSee('Rp '.number_format($expectedGmv, 0, ',', '.'), false);
+        $response->assertSee($expectedTakeRate, false);
+        $response->assertSee('50,000%', false); // this merchant: 1 of its 2 failed transactions has a matching bank/switching ticket
     }
 
     public function test_ma_can_approve_merchant_registration_and_audit_it(): void
