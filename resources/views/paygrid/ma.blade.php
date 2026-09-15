@@ -352,6 +352,10 @@
             <h3 style="margin:28px 0 4px">Latency Processing</h3>
             <p class="muted" style="margin:0 0 12px">Rata-rata waktu dari transaksi masuk sampai berhasil &mdash; rata-rata keseluruhan: <strong>{{ number_format($analyticsLatency['overallAvgSeconds'], 1) }} detik</strong>. Kalau tiba-tiba melonjak, tanda ada masalah di gateway/bank.</p>
             <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Tanggal</th><th>Rata-rata Latency</th></tr></thead><tbody>@forelse($analyticsLatency['labels'] as $i => $label)<tr><td>{{ $label }}</td><td>{{ number_format($analyticsLatency['avgSeconds'][$i], 1) }} detik</td></tr>@empty<tr><td colspan="2" class="empty"><strong>Belum ada data.</strong>Filter periode ini belum memiliki transaksi sukses dengan waktu selesai tercatat.</td></tr>@endforelse</tbody></table></div>
+
+            <h3 style="margin:28px 0 4px">Breakdown Reliabilitas per Bank/Channel</h3>
+            <p class="muted" style="margin:0 0 12px">Persentase sukses per bank/channel pembayaran &mdash; data konkret buat komplain atau negosiasi ke gateway kalau ada bank tertentu yang sering gagal.</p>
+            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Bank/Channel</th><th>Total Transaksi</th><th>Sukses</th><th>% Sukses</th></tr></thead><tbody>@forelse($analyticsChannelReliability['rows'] as $row)<tr><td>{{ $row['channel'] }}</td><td>{{ number_format($row['total'], 0, ',', '.') }}</td><td>{{ number_format($row['successCount'], 0, ',', '.') }}</td><td><span class="badge {{ $row['successRate'] >= 90 ? 'ok' : ($row['successRate'] >= 70 ? 'warn' : 'danger') }}">{{ $pct($row['successRate']) }}</span></td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada data channel.</strong>Filter periode ini belum memiliki transaksi dengan info bank/channel tercatat.</td></tr>@endforelse</tbody></table></div>
         </div>
 
         <div data-ma-panel="operations" class="pad" hidden>

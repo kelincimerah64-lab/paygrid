@@ -114,6 +114,7 @@ class MaController extends Controller
             'analyticsSettlementReconciliation' => $page === 'analytics' ? $this->cachedAnalytics('settlement-reconciliation', $dataFilters, fn () => $this->analyticsSettlementReconciliation($dataFilters)) : [],
             'analyticsPerformance' => $page === 'analytics' ? $this->cachedAnalytics('performance', $dataFilters, fn () => $this->analyticsPerformance($dataFilters)) : [],
             'analyticsLatency' => $page === 'analytics' ? $this->cachedAnalytics('latency', $dataFilters, fn () => $this->analyticsLatency($dataFilters)) : [],
+            'analyticsChannelReliability' => $page === 'analytics' ? $this->cachedAnalytics('channel-reliability', $dataFilters, fn () => $this->analyticsChannelReliability($dataFilters)) : [],
             'analyticsOperations' => $page === 'analytics' ? $this->cachedAnalytics('operations', $dataFilters, fn () => $this->analyticsOperations($dataFilters)) : [],
             'analyticsOutlierDetection' => $page === 'analytics' ? $this->cachedAnalytics('outlier-detection', [], fn () => $this->analyticsOutlierDetection()) : [],
             'analyticsTicketSla' => $page === 'analytics' ? $this->cachedAnalytics('ticket-sla', $dataFilters, fn () => $this->analyticsTicketSla($dataFilters)) : [],
@@ -1083,6 +1084,41 @@ class MaController extends Controller
             'labels' => $rows->pluck('d')->values(),
             'avgSeconds' => $rows->pluck('avg_seconds')->map(fn ($v) => round((float) $v, 1))->values(),
             'overallAvgSeconds' => round((float) $rows->avg('avg_seconds'), 1),
+        ];
+    }
+
+    private function analyticsChannelReliability(array $filters): array
+    {
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        // "channel" (bank/e-wallet the customer paid from) is never present under both
+        // keys on the same row: QRIS-style payloads use issuer_name, script-style
+        // payloads use bank_name. Coalesce them into one field for the breakdown.
+        $channelExpr = $isSqlite
+            ? "COALESCE(NULLIF(json_extract(topup_requests.gateway_payload, '\$.issuer_name'), ''), NULLIF(json_extract(topup_requests.gateway_payload, '\$.bank_name'), ''))"
+            : "COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(topup_requests.gateway_payload, '\$.issuer_name')), ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(topup_requests.gateway_payload, '\$.bank_name')), ''))";
+
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->whereIn('topup_requests.status', ['success', 'failed', 'expired', 'rejected'])
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw("{$channelExpr} as channel")
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as success_count")
+            ->groupBy('channel')
+            ->havingRaw('channel IS NOT NULL')
+            ->orderByDesc('total')
+            ->limit(15)
+            ->get();
+
+        return [
+            'rows' => $rows->map(fn ($r) => [
+                'channel' => $r->channel,
+                'total' => (int) $r->total,
+                'successCount' => (int) $r->success_count,
+                'successRate' => $r->total > 0 ? round(($r->success_count / $r->total) * 100, 2) : 0,
+            ]),
         ];
     }
 

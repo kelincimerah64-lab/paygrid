@@ -1682,6 +1682,53 @@ class PayGridRoutingTest extends TestCase
         $response->assertSee('Rp '.number_format((int) round($last7DayAvg * 30), 0, ',', '.'), false);
     }
 
+    public function test_ma_analytics_page_computes_channel_reliability(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $merchant = Merchant::query()->create([
+            'slug' => 'channel-test-store',
+            'name' => 'Channel Test Store',
+            'agent_id' => $agent->id,
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'merchant_id' => 'channel-test-hg-id',
+            'merchant_key' => 'channel-test-hg-secret',
+            'approval_status' => 'approved',
+        ]);
+
+        // QRIS-style payload uses issuer_name: 3 success, 1 failed -> 75% success.
+        foreach ([true, true, true, false] as $i => $isSuccess) {
+            TopupRequest::query()->create([
+                'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+                'gateway_ref_id' => "channel-bca-{$i}", 'transaction_id' => "channel-bca-{$i}",
+                'status' => $isSuccess ? 'success' : 'failed', 'amount' => 50000, 'net_amount' => 49500, 'fee_amount' => 500,
+                'submitted_at' => now()->subDay(),
+                'gateway_payload' => ['issuer_name' => 'BANK BCA'],
+            ]);
+        }
+
+        // Script-style payload uses bank_name: 2 success, 0 failed -> 100% success.
+        foreach ([true, true] as $i => $isSuccess) {
+            TopupRequest::query()->create([
+                'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+                'gateway_ref_id' => "channel-mandiri-{$i}", 'transaction_id' => "channel-mandiri-{$i}",
+                'status' => 'success', 'amount' => 30000, 'net_amount' => 29700, 'fee_amount' => 300,
+                'submitted_at' => now()->subDay(),
+                'gateway_payload' => ['bank_name' => 'BANK MANDIRI'],
+            ]);
+        }
+
+        $response = $this->actingAs($ma)->get('/ma/analytics?period=all')->assertOk();
+        $response->assertSee('Breakdown Reliabilitas per Bank/Channel');
+        $response->assertSee('BANK BCA');
+        $response->assertSee('75,000%', false);
+        $response->assertSee('BANK MANDIRI');
+        $response->assertSee('100,000%', false);
+    }
+
     public function test_ma_can_approve_merchant_registration_and_audit_it(): void
     {
         $this->seed();
