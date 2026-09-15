@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\FeeSnapshot;
 use App\Models\Merchant;
 use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
@@ -106,6 +107,8 @@ class MaController extends Controller
                 ? app(TelegramBotMonitoringService::class)->pendingIpWhitelist()
                 : collect(),
             'analyticsBisnis' => $page === 'analytics' ? $this->analyticsBisnis($dataFilters) : [],
+            'analyticsMarginHealth' => $page === 'analytics' ? $this->analyticsMarginHealth($dataFilters) : [],
+            'analyticsSettlementReconciliation' => $page === 'analytics' ? $this->analyticsSettlementReconciliation($dataFilters) : [],
             'analyticsPerformance' => $page === 'analytics' ? $this->analyticsPerformance($dataFilters) : [],
             'analyticsOperations' => $page === 'analytics' ? $this->analyticsOperations($dataFilters) : [],
             'feeMenus' => $feeMenus,
@@ -795,6 +798,61 @@ class MaController extends Controller
             'totalFee' => $totalFee,
             'overallTakeRate' => $totalGmv > 0 ? round(($totalFee / $totalGmv) * 100, 3) : 0,
         ];
+    }
+
+    private function analyticsMarginHealth(array $filters): array
+    {
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->join('fee_snapshots', 'fee_snapshots.topup_request_id', '=', 'topup_requests.id')
+            ->where('topup_requests.status', 'success')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw('merchants.id as merchant_id, merchants.name as merchant_name')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount * fee_snapshots.toko_fee_percent / 100), 0) as margin_amount')
+            ->selectRaw('COALESCE(AVG(fee_snapshots.toko_fee_percent), 0) as avg_margin_percent')
+            ->groupBy('merchants.id', 'merchants.name')
+            ->orderBy('avg_margin_percent')
+            ->limit(30)
+            ->get();
+
+        return ['rows' => $rows];
+    }
+
+    private function analyticsSettlementReconciliation(array $filters): array
+    {
+        $merchantIds = $this->merchants($this->blankFilters())->pluck('id');
+
+        $settlements = MerchantSettlement::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->when($filters['from'], fn ($query) => $query->where('settlement_date', '>=', $this->rangeStart($filters['from'])->toDateString()))
+            ->when($filters['to'], fn ($query) => $query->where('settlement_date', '<=', $this->rangeEnd($filters['to'])->toDateString()))
+            ->orderByDesc('settlement_date')
+            ->limit(30)
+            ->get();
+
+        $rows = $settlements->map(function (MerchantSettlement $settlement) {
+            $windowFrom = CarbonImmutable::parse($settlement->settlement_date->toDateString().' '.($settlement->batch_from ?: '00:00:00'), 'Asia/Jakarta');
+            $windowTo = CarbonImmutable::parse($settlement->settlement_date->toDateString().' '.($settlement->batch_until ?: '23:59:59'), 'Asia/Jakarta');
+
+            $expected = (int) TopupRequest::query()
+                ->where('merchant_id', $settlement->merchant_id)
+                ->where('status', 'success')
+                ->whereBetween('submitted_at', [$windowFrom, $windowTo])
+                ->sum('net_amount');
+
+            return [
+                'merchant_name' => $settlement->merchant_name ?: $settlement->merchant?->name ?: '-',
+                'settlement_date' => $settlement->settlement_date->toDateString(),
+                'expected' => $expected,
+                'actual' => (int) $settlement->net_amount,
+                'diff' => $expected - (int) $settlement->net_amount,
+            ];
+        });
+
+        return ['rows' => $rows];
     }
 
     private function analyticsPerformance(array $filters): array

@@ -1538,6 +1538,54 @@ class PayGridRoutingTest extends TestCase
         $response->assertSee('50,000%', false); // this merchant: 1 of its 2 failed transactions has a matching bank/switching ticket
     }
 
+    public function test_ma_analytics_page_computes_margin_health_and_settlement_reconciliation(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $merchant = Merchant::query()->create([
+            'slug' => 'margin-test-store',
+            'name' => 'Margin Test Store',
+            'agent_id' => $agent->id,
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'merchant_id' => 'margin-test-hg-id',
+            'merchant_key' => 'margin-test-hg-secret',
+            'approval_status' => 'approved',
+        ]);
+
+        $topup = TopupRequest::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'margin-success-1', 'transaction_id' => 'margin-success-1',
+            'status' => 'success', 'amount' => 100000, 'net_amount' => 98800, 'fee_amount' => 1200,
+            'submitted_at' => now('Asia/Jakarta')->subDay(), 'succeeded_at' => now('Asia/Jakarta')->subDay(),
+        ]);
+        FeeSnapshot::query()->create([
+            'topup_request_id' => $topup->id, 'merchant_id' => $merchant->id,
+            'merchant_mdr_percent' => 1.2, 'base_mdr_percent' => 0.5, 'payin_fee_percent' => 0.1,
+            'settlement_fee_percent' => 0.1, 'ma_fee_percent' => 0.2, 'agent_fee_percent' => 0.1,
+            'toko_fee_percent' => 0.2, // 1.2 - 0.5 - 0.1 - 0.1 - 0.2 - 0.1
+        ]);
+
+        $settlementDate = now('Asia/Jakarta')->subDay()->toDateString();
+        MerchantSettlement::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate',
+            'gateway_merchant_id' => $merchant->merchant_id, 'reference' => 'MARGIN-SETTLE-001',
+            'settlement_date' => $settlementDate, 'status' => 'APPROVED',
+            'batch_from' => '00:00:00', 'batch_until' => '23:59:59',
+            'net_amount' => 90000, // deliberately different from our 98800 to produce a visible diff
+        ]);
+
+        $response = $this->actingAs($ma)->get('/ma/analytics?period=all')->assertOk();
+        $response->assertSee('Margin Test Store');
+        $response->assertSee('Rp 200', false); // margin_amount = 100.000 * 0.2% = Rp200
+        $response->assertSee('0,200%', false); // avg margin percent
+        $response->assertSee('Rp 98.800', false); // expected settlement (our net_amount)
+        $response->assertSee('Rp 90.000', false); // actual settlement (bank)
+        $response->assertSee('Rp 8.800', false); // diff = 98.800 - 90.000
+    }
+
     public function test_ma_can_approve_merchant_registration_and_audit_it(): void
     {
         $this->seed();

@@ -317,6 +317,14 @@
             <p class="muted" style="margin:0 0 12px">Take rate dihitung dari <code>fee_amount</code> yang tercatat per transaksi (fee gateway), bukan margin PayGrid ke merchant.</p>
             <div style="position:relative;height:280px"><canvas id="ma-analytics-gmv-chart"></canvas></div>
             <script id="ma-analytics-bisnis-data" type="application/json">@json($analyticsBisnis)</script>
+
+            <h3 style="margin:28px 0 4px">Margin Health per Toko</h3>
+            <p class="muted" style="margin:0 0 12px">Margin = sisa <code>merchant_mdr_percent</code> setelah dikurangi biaya gateway dan fee MA+Agen. Diurutkan dari margin terendah &mdash; toko paling atas paling perlu dievaluasi.</p>
+            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Toko</th><th>Volume Sukses</th><th>Margin (Rp)</th><th>Margin Rata-rata</th></tr></thead><tbody>@forelse($analyticsMarginHealth['rows'] as $row)<tr><td>{{ $row->merchant_name }}</td><td>{{ $money($row->volume) }}</td><td>{{ $money($row->margin_amount) }}</td><td>{{ $pct($row->avg_margin_percent) }}</td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada data margin.</strong>Filter periode ini belum memiliki transaksi sukses dengan fee snapshot.</td></tr>@endforelse</tbody></table></div>
+
+            <h3 style="margin:28px 0 4px">Rekonsiliasi Settlement (Ekspektasi vs Aktual Bank)</h3>
+            <p class="muted" style="margin:0 0 12px">Ekspektasi dihitung dari transaksi sukses kita di jendela waktu settlement yang sama. Aktual dari data settlement Hilogate.</p>
+            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Toko</th><th>Tanggal</th><th>Ekspektasi</th><th>Aktual (Bank)</th><th>Selisih</th></tr></thead><tbody>@forelse($analyticsSettlementReconciliation['rows'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td>{{ $row['settlement_date'] }}</td><td>{{ $money($row['expected']) }}</td><td>{{ $money($row['actual']) }}</td><td><span class="badge {{ $row['diff'] == 0 ? 'ok' : 'danger' }}">{{ $money($row['diff']) }}</span></td></tr>@empty<tr><td colspan="5" class="empty"><strong>Belum ada data settlement.</strong>Filter periode ini belum memiliki batch settlement.</td></tr>@endforelse</tbody></table></div>
         </div>
 
         <div data-ma-panel="performance" class="pad" hidden>
