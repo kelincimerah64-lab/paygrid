@@ -7,6 +7,7 @@ use App\Models\Merchant;
 use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
 use App\Models\MerchantSettlement;
+use App\Models\MerchantTicket;
 use App\Models\Agent;
 use App\Models\AgentOnboardingLink;
 use App\Models\FeeMenu;
@@ -1761,6 +1762,65 @@ class PayGridRoutingTest extends TestCase
         $response->assertSee('Provision Fail Store');
         $response->assertSee('merchant_group_id is required');
         $response->assertDontSee('Tidak ada toko yang gagal provisioning saat ini');
+    }
+
+    public function test_ma_analytics_page_computes_health_score(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $merchant = Merchant::query()->create([
+            'slug' => 'health-score-store',
+            'name' => 'Health Score Store',
+            'agent_id' => $agent->id,
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'merchant_id' => 'health-score-hg-id',
+            'merchant_key' => 'health-score-hg-secret',
+            'approval_status' => 'approved',
+        ]);
+
+        // 6 success (2 still unchecked/backlog) + 2 failed, all within the last 30 days.
+        // failed rate = 2/8 = 25%, backlog rate = 2/6 = 33.3% (capped at 30), 1 open ticket (-5).
+        // score = 100 - 25 - 30 - 5 = 40.
+        foreach (range(1, 4) as $i) {
+            TopupRequest::query()->create([
+                'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+                'gateway_ref_id' => "health-success-checked-{$i}", 'transaction_id' => "health-success-checked-{$i}",
+                'status' => 'success', 'amount' => 50000, 'net_amount' => 49500, 'fee_amount' => 500,
+                'is_processed' => true, 'submitted_at' => now('Asia/Jakarta')->subDays(5),
+            ]);
+        }
+        foreach (range(1, 2) as $i) {
+            TopupRequest::query()->create([
+                'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+                'gateway_ref_id' => "health-success-backlog-{$i}", 'transaction_id' => "health-success-backlog-{$i}",
+                'status' => 'success', 'amount' => 50000, 'net_amount' => 49500, 'fee_amount' => 500,
+                'is_processed' => false, 'submitted_at' => now('Asia/Jakarta')->subDays(5),
+            ]);
+        }
+        foreach (range(1, 2) as $i) {
+            TopupRequest::query()->create([
+                'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+                'gateway_ref_id' => "health-failed-{$i}", 'transaction_id' => "health-failed-{$i}",
+                'status' => 'failed', 'amount' => 50000, 'net_amount' => 50000, 'fee_amount' => 0,
+                'submitted_at' => now('Asia/Jakarta')->subDays(5),
+            ]);
+        }
+        MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'ticket_no' => 'TK-HEALTH-1',
+            'department' => 'tech',
+            'category' => 'technical_issue',
+            'description' => 'Health score test ticket',
+            'status' => 'open',
+        ]);
+
+        $response = $this->actingAs($ma)->get('/ma/analytics/tab/operations?period=all')->assertOk();
+        $response->assertSee('Skor Kesehatan Toko Gabungan');
+        $response->assertSee('Health Score Store');
+        $response->assertSee('>40<', false); // the computed score, rendered inside the badge span
     }
 
     public function test_ma_can_approve_merchant_registration_and_audit_it(): void

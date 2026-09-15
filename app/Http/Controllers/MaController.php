@@ -7,6 +7,7 @@ use App\Models\Merchant;
 use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
 use App\Models\MerchantSettlement;
+use App\Models\MerchantTicket;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
@@ -138,6 +139,7 @@ class MaController extends Controller
             'analyticsTicketSla' => $this->cachedAnalytics('ticket-sla', $dataFilters, fn () => $this->analyticsTicketSla($dataFilters)),
             'analyticsAccountActivity' => $this->cachedAnalytics('account-activity', [], fn () => $this->analyticsAccountActivity()),
             'analyticsProvisioningFailures' => $this->cachedAnalytics('provisioning-failures', [], fn () => $this->analyticsProvisioningFailures()),
+            'analyticsHealthScore' => $this->cachedAnalytics('health-score', [], fn () => $this->analyticsHealthScore()),
         ]);
     }
 
@@ -1303,6 +1305,60 @@ class MaController extends Controller
             'topErrors' => $topErrors,
             'totalFailed' => $failed->count(),
         ];
+    }
+
+    private function analyticsHealthScore(): array
+    {
+        $merchantIds = $this->merchants($this->blankFilters())->pluck('id');
+        $from = now('Asia/Jakarta')->subDays(29)->startOfDay();
+
+        $txStats = TopupRequest::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('submitted_at', '>=', $from)
+            ->selectRaw('merchant_id')
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(CASE WHEN status IN ('failed', 'expired', 'rejected') THEN 1 ELSE 0 END) as failed")
+            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success")
+            ->selectRaw("SUM(CASE WHEN status = 'success' AND is_processed = 0 THEN 1 ELSE 0 END) as backlog")
+            ->groupBy('merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
+
+        // SupportTicket is deliberately excluded here: it's auto-created per failed/expired
+        // transaction and effectively never moves to status=success in bulk (18k+ rows, 0
+        // ever resolved), so it just re-counts the same signal failedRate already captures.
+        // MerchantTicket (manually opened by a store/agent) is the genuine "flagged issue" signal.
+        $openMerchantTickets = MerchantTicket::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->whereIn('status', ['open', 'in_progress'])
+            ->selectRaw('merchant_id, COUNT(*) as cnt')
+            ->groupBy('merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
+
+        $merchants = Merchant::query()->whereIn('id', $merchantIds)->get(['id', 'name'])->keyBy('id');
+
+        $rows = $merchantIds->map(function ($id) use ($txStats, $openMerchantTickets, $merchants) {
+            $stat = $txStats->get($id);
+            $total = (int) ($stat->total ?? 0);
+            $success = (int) ($stat->success ?? 0);
+            $failedRate = $total > 0 ? round(((int) ($stat->failed ?? 0) / $total) * 100, 1) : 0;
+            $backlogCount = (int) ($stat->backlog ?? 0);
+            $backlogRate = $success > 0 ? round(($backlogCount / $success) * 100, 1) : 0;
+            $openTickets = (int) ($openMerchantTickets->get($id)->cnt ?? 0);
+
+            $score = 100 - min(40, $failedRate) - min(30, $backlogRate) - min(30, $openTickets * 5);
+
+            return [
+                'merchant_name' => $merchants->get($id)?->name ?? '-',
+                'score' => (int) round(max(0, $score)),
+                'failedRate' => $failedRate,
+                'backlogCount' => $backlogCount,
+                'openTickets' => $openTickets,
+            ];
+        })->sortBy('score')->values();
+
+        return ['rows' => $rows];
     }
 
     private function storeRanking(array $filters)

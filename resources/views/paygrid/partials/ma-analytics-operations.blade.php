@@ -1,4 +1,9 @@
             @php($pct = fn ($value) => number_format((float) $value, 3, ',', '.').'%')
+            <h3 style="margin:0 0 4px">Skor Kesehatan Toko Gabungan</h3>
+            <p class="muted" style="margin:0 0 12px">Skor 0-100 dari 30 hari terakhir: <code>100 &minus; min(40, %gagal) &minus; min(30, %backlog checklist) &minus; min(30, jumlah tiket terbuka &times; 5)</code>. Diurutkan dari skor terendah &mdash; paling butuh perhatian di atas.</p>
+            <div class="table-wrap"><table class="table qris-table"><thead><tr><th>Toko</th><th>Skor</th><th>% Gagal</th><th>Backlog Checklist</th><th>Tiket Terbuka</th></tr></thead><tbody>@forelse($analyticsHealthScore['rows'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td><span class="badge {{ $row['score'] >= 70 ? 'ok' : ($row['score'] >= 40 ? 'warn' : 'danger') }}">{{ $row['score'] }}</span></td><td>{{ $pct($row['failedRate']) }}</td><td>{{ $row['backlogCount'] }}</td><td>{{ $row['openTickets'] }}</td></tr>@empty<tr><td colspan="5" class="empty"><strong>Belum ada data.</strong>Toko belum punya transaksi 30 hari terakhir.</td></tr>@endforelse</tbody></table></div>
+
+            <h3 style="margin:28px 0 4px">Detail Operasional</h3>
             <div class="grid qris-metrics section">
                 <div class="card pad qris-metric danger"><span>Total Transaksi Gagal</span><strong>{{ number_format($analyticsOperations['totalFailed'], 0, ',', '.') }}</strong><small>{{ $periodLabel }}</small></div>
                 <div class="card pad qris-metric warn"><span>Ada Tiket Issue Bank/Switching</span><strong>{{ number_format($analyticsOperations['totalWithTicket'], 0, ',', '.') }}</strong><small>Bukti korelasi ke bank</small></div>
