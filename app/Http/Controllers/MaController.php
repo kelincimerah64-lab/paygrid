@@ -21,6 +21,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -105,10 +106,17 @@ class MaController extends Controller
             'pendingIpWhitelist' => $page === 'bot-monitoring'
                 ? app(TelegramBotMonitoringService::class)->pendingIpWhitelist()
                 : collect(),
-            'analyticsBisnis' => $page === 'analytics' ? $this->analyticsBisnis($dataFilters) : [],
-            'analyticsSettlementReconciliation' => $page === 'analytics' ? $this->analyticsSettlementReconciliation($dataFilters) : [],
-            'analyticsPerformance' => $page === 'analytics' ? $this->analyticsPerformance($dataFilters) : [],
-            'analyticsOperations' => $page === 'analytics' ? $this->analyticsOperations($dataFilters) : [],
+            'analyticsBisnis' => $page === 'analytics' ? $this->cachedAnalytics('bisnis', $dataFilters, fn () => $this->analyticsBisnis($dataFilters)) : [],
+            'analyticsAgentLeaderboard' => $page === 'analytics' ? $this->cachedAnalytics('agent-leaderboard', $dataFilters, fn () => $this->analyticsAgentLeaderboard($dataFilters)) : [],
+            'analyticsRevenueConcentration' => $page === 'analytics' ? $this->cachedAnalytics('revenue-concentration', $dataFilters, fn () => $this->analyticsRevenueConcentration($dataFilters)) : [],
+            'analyticsAmountDistribution' => $page === 'analytics' ? $this->cachedAnalytics('amount-distribution', $dataFilters, fn () => $this->analyticsAmountDistribution($dataFilters)) : [],
+            'analyticsSettlementReconciliation' => $page === 'analytics' ? $this->cachedAnalytics('settlement-reconciliation', $dataFilters, fn () => $this->analyticsSettlementReconciliation($dataFilters)) : [],
+            'analyticsPerformance' => $page === 'analytics' ? $this->cachedAnalytics('performance', $dataFilters, fn () => $this->analyticsPerformance($dataFilters)) : [],
+            'analyticsLatency' => $page === 'analytics' ? $this->cachedAnalytics('latency', $dataFilters, fn () => $this->analyticsLatency($dataFilters)) : [],
+            'analyticsOperations' => $page === 'analytics' ? $this->cachedAnalytics('operations', $dataFilters, fn () => $this->analyticsOperations($dataFilters)) : [],
+            'analyticsOutlierDetection' => $page === 'analytics' ? $this->cachedAnalytics('outlier-detection', [], fn () => $this->analyticsOutlierDetection()) : [],
+            'analyticsTicketSla' => $page === 'analytics' ? $this->cachedAnalytics('ticket-sla', $dataFilters, fn () => $this->analyticsTicketSla($dataFilters)) : [],
+            'analyticsAccountActivity' => $page === 'analytics' ? $this->cachedAnalytics('account-activity', [], fn () => $this->analyticsAccountActivity()) : [],
             'feeMenus' => $feeMenus,
         ]);
     }
@@ -770,6 +778,28 @@ class MaController extends Controller
         })->values()->all();
     }
 
+    private function cachedAnalytics(string $key, array $filters, \Closure $callback): array
+    {
+        // 'to' for relative periods (e.g. "this_month") resolves to now() fresh on
+        // every request, which would make almost every request a unique cache key.
+        // Bucket from/to to the nearest 3-minute window (matching the TTL below) so
+        // requests landing in the same window actually share a cached result.
+        $bucketed = $filters;
+        foreach (['from', 'to'] as $field) {
+            if (! empty($bucketed[$field])) {
+                $ts = strtotime($bucketed[$field]);
+                $bucketed[$field] = date('Y-m-d H:i:s', $ts - ($ts % 180));
+            }
+        }
+        $cacheKey = 'ma-analytics:'.$this->currentMaId().':'.$key.':'.md5(json_encode($bucketed));
+
+        // Normalize to plain arrays before caching: the database cache driver's
+        // serialize()/unserialize() round-trip does not reliably reconstruct
+        // Collections of stdClass query rows, producing "incomplete object"
+        // data once a cache entry is read back warm.
+        return Cache::remember($cacheKey, 180, fn () => json_decode(json_encode($callback()), true));
+    }
+
     private function analyticsBisnis(array $filters): array
     {
         $rows = TopupRequest::query()
@@ -796,6 +826,114 @@ class MaController extends Controller
             'totalFee' => $totalFee,
             'overallTakeRate' => $totalGmv > 0 ? round(($totalFee / $totalGmv) * 100, 3) : 0,
         ];
+    }
+
+    private function analyticsAgentLeaderboard(array $filters): array
+    {
+        $from = $filters['from'] ? $this->rangeStart($filters['from']) : null;
+        $to = $filters['to'] ? $this->rangeEnd($filters['to']) : now('Asia/Jakarta');
+
+        $prevFrom = null;
+        $prevTo = null;
+        if ($from) {
+            $lengthSeconds = $to->diffInSeconds($from);
+            $prevTo = $from->copy()->subSecond();
+            $prevFrom = $prevTo->copy()->subSeconds($lengthSeconds);
+        }
+
+        $base = fn () => TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->where('topup_requests.status', 'success')
+            ->whereNotNull('merchants.agent_id');
+
+        $current = $base()
+            ->when($from, fn ($query) => $query->where('topup_requests.submitted_at', '>=', $from))
+            ->where('topup_requests.submitted_at', '<=', $to)
+            ->selectRaw('merchants.agent_id, SUM(topup_requests.amount) as volume')
+            ->groupBy('merchants.agent_id')
+            ->get()
+            ->keyBy('agent_id');
+
+        $previous = $prevFrom
+            ? $base()
+                ->where('topup_requests.submitted_at', '>=', $prevFrom)
+                ->where('topup_requests.submitted_at', '<=', $prevTo)
+                ->selectRaw('merchants.agent_id, SUM(topup_requests.amount) as volume')
+                ->groupBy('merchants.agent_id')
+                ->get()
+                ->keyBy('agent_id')
+            : collect();
+
+        $agentIds = $current->keys()->merge($previous->keys())->unique();
+        $agents = Agent::query()->whereIn('id', $agentIds)->get(['id', 'name'])->keyBy('id');
+
+        $rows = $agentIds->map(function ($id) use ($current, $previous, $agents) {
+            $curVol = (int) ($current->get($id)->volume ?? 0);
+            $prevVol = (int) ($previous->get($id)->volume ?? 0);
+            $growth = $prevVol > 0 ? round((($curVol - $prevVol) / $prevVol) * 100, 2) : ($curVol > 0 ? null : 0);
+
+            return [
+                'agent_name' => $agents->get($id)?->name ?? '-',
+                'current_volume' => $curVol,
+                'previous_volume' => $prevVol,
+                'growth_percent' => $growth,
+            ];
+        })->sortByDesc(fn ($r) => $r['growth_percent'] ?? -1)->values()->take(10);
+
+        return ['rows' => $rows, 'hasPrevious' => (bool) $prevFrom];
+    }
+
+    private function analyticsRevenueConcentration(array $filters): array
+    {
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->where('topup_requests.status', 'success')
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw('merchants.id as merchant_id, merchants.name as merchant_name, SUM(topup_requests.amount) as volume')
+            ->groupBy('merchants.id', 'merchants.name')
+            ->orderByDesc('volume')
+            ->get();
+
+        $totalVolume = (int) $rows->sum('volume');
+        $top = $rows->take(10)->map(fn ($r) => [
+            'merchant_name' => $r->merchant_name,
+            'volume' => (int) $r->volume,
+            'percent' => $totalVolume > 0 ? round(($r->volume / $totalVolume) * 100, 2) : 0,
+        ]);
+
+        return [
+            'rows' => $top,
+            'totalVolume' => $totalVolume,
+            'top5Percent' => $totalVolume > 0 ? round(($rows->take(5)->sum('volume') / $totalVolume) * 100, 2) : 0,
+            'top10Percent' => $totalVolume > 0 ? round(($rows->take(10)->sum('volume') / $totalVolume) * 100, 2) : 0,
+        ];
+    }
+
+    private function analyticsAmountDistribution(array $filters): array
+    {
+        $labels = ['< 50rb', '50rb - 100rb', '100rb - 300rb', '300rb - 1jt', '> 1jt'];
+        $caseSql = "CASE
+            WHEN topup_requests.amount < 50000 THEN '< 50rb'
+            WHEN topup_requests.amount < 100000 THEN '50rb - 100rb'
+            WHEN topup_requests.amount < 300000 THEN '100rb - 300rb'
+            WHEN topup_requests.amount < 1000000 THEN '300rb - 1jt'
+            ELSE '> 1jt' END";
+
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->where('topup_requests.status', 'success')
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw("{$caseSql} as bucket, COUNT(*) as cnt")
+            ->groupBy('bucket')
+            ->get()
+            ->keyBy('bucket');
+
+        return ['rows' => collect($labels)->map(fn ($label) => ['label' => $label, 'count' => (int) ($rows->get($label)->cnt ?? 0)])];
     }
 
     private function analyticsSettlementReconciliation(array $filters): array
@@ -874,6 +1012,32 @@ class MaController extends Controller
         ];
     }
 
+    private function analyticsLatency(array $filters): array
+    {
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $diffExpr = $isSqlite
+            ? '(julianday(topup_requests.succeeded_at) - julianday(topup_requests.submitted_at)) * 86400'
+            : 'TIMESTAMPDIFF(SECOND, topup_requests.submitted_at, topup_requests.succeeded_at)';
+
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->where('topup_requests.status', 'success')
+            ->whereNotNull('topup_requests.succeeded_at')
+            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw("DATE(topup_requests.submitted_at) as d, AVG({$diffExpr}) as avg_seconds")
+            ->groupBy('d')
+            ->orderBy('d')
+            ->get();
+
+        return [
+            'labels' => $rows->pluck('d')->values(),
+            'avgSeconds' => $rows->pluck('avg_seconds')->map(fn ($v) => round((float) $v, 1))->values(),
+            'overallAvgSeconds' => round((float) $rows->avg('avg_seconds'), 1),
+        ];
+    }
+
     private function analyticsOperations(array $filters): array
     {
         $rows = TopupRequest::query()
@@ -900,6 +1064,119 @@ class MaController extends Controller
             'totalFailed' => (int) $rows->sum('failed_count'),
             'totalWithTicket' => (int) $rows->sum('with_ticket_count'),
         ];
+    }
+
+    private function analyticsOutlierDetection(): array
+    {
+        $merchantIds = $this->merchants($this->blankFilters())->pluck('id');
+        $today = now('Asia/Jakarta')->toDateString();
+        $sevenDaysAgo = now('Asia/Jakarta')->subDays(7)->startOfDay();
+        $yesterday = now('Asia/Jakarta')->subDay()->endOfDay();
+
+        $todayVolumes = TopupRequest::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('status', 'success')
+            ->whereDate('submitted_at', $today)
+            ->selectRaw('merchant_id, COUNT(*) as trx')
+            ->groupBy('merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
+
+        $avgVolumes = TopupRequest::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('status', 'success')
+            ->whereBetween('submitted_at', [$sevenDaysAgo, $yesterday])
+            ->selectRaw('merchant_id, COUNT(*) / 7 as avg_trx')
+            ->groupBy('merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
+
+        $merchants = Merchant::query()->whereIn('id', $merchantIds)->get(['id', 'name'])->keyBy('id');
+
+        $rows = $merchantIds->map(function ($id) use ($todayVolumes, $avgVolumes, $merchants) {
+            $todayTrx = (int) ($todayVolumes->get($id)->trx ?? 0);
+            $avgTrx = (float) ($avgVolumes->get($id)->avg_trx ?? 0);
+            $deviation = $avgTrx > 0 ? round((($todayTrx - $avgTrx) / $avgTrx) * 100, 1) : null;
+
+            return [
+                'merchant_name' => $merchants->get($id)?->name ?? '-',
+                'today_trx' => $todayTrx,
+                'avg_trx' => round($avgTrx, 1),
+                'deviation_percent' => $deviation,
+                'is_outlier' => $avgTrx >= 5 && $deviation !== null && abs($deviation) >= 50,
+            ];
+        })->filter(fn ($r) => $r['avg_trx'] > 0)->sortBy('deviation_percent')->values();
+
+        return ['rows' => $rows];
+    }
+
+    private function analyticsTicketSla(array $filters): array
+    {
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $hoursExpr = $isSqlite
+            ? '(julianday(support_tickets.closed_at) - julianday(support_tickets.created_at)) * 24'
+            : 'TIMESTAMPDIFF(SECOND, support_tickets.created_at, support_tickets.closed_at) / 3600';
+
+        $base = SupportTicket::query()
+            ->join('merchants', 'merchants.id', '=', 'support_tickets.merchant_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->whereNotNull('support_tickets.closed_at')
+            ->when($filters['from'], fn ($query) => $query->where('support_tickets.created_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('support_tickets.created_at', '<=', $this->rangeEnd($filters['to'])));
+
+        $hours = (clone $base)->selectRaw("{$hoursExpr} as hours")->get()->pluck('hours')->map(fn ($v) => (float) $v);
+        $totalResolved = $hours->count();
+        $withinSlaCount = $hours->filter(fn ($h) => $h <= 24)->count();
+
+        $perCs = (clone $base)
+            ->whereNotNull('support_tickets.center_updated_by_user_id')
+            ->join('users', 'users.id', '=', 'support_tickets.center_updated_by_user_id')
+            ->selectRaw('users.id as cs_id, users.name as cs_name')
+            ->selectRaw("COUNT(*) as total, AVG({$hoursExpr}) as avg_hours")
+            ->selectRaw("SUM(CASE WHEN ({$hoursExpr}) <= 24 THEN 1 ELSE 0 END) as within_sla_count")
+            ->groupBy('users.id', 'users.name')
+            ->orderByDesc('total')
+            ->get();
+
+        return [
+            'totalResolved' => $totalResolved,
+            'withinSlaCount' => $withinSlaCount,
+            'withinSlaPercent' => $totalResolved > 0 ? round(($withinSlaCount / $totalResolved) * 100, 2) : 0,
+            'avgResolutionHours' => round((float) $hours->avg(), 1),
+            'perCs' => $perCs,
+        ];
+    }
+
+    private function analyticsAccountActivity(): array
+    {
+        $maId = $this->currentMaId();
+        $merchantIds = $this->merchants($this->blankFilters())->pluck('id');
+
+        $users = User::query()
+            ->where(fn ($query) => $query->where('ma_user_id', $maId)->orWhereIn('merchant_id', $merchantIds))
+            ->whereIn('role', ['agent', 'cs_agent', 'admin', 'readonly_admin', 'cs', 'readonly_cs', 'finance'])
+            ->get(['id', 'name', 'role']);
+
+        $lastLogins = DB::table('audit_logs')
+            ->where('action', 'auth.login_success')
+            ->whereIn('actor_user_id', $users->pluck('id'))
+            ->selectRaw('actor_user_id, MAX(created_at) as last_login')
+            ->groupBy('actor_user_id')
+            ->get()
+            ->keyBy('actor_user_id');
+
+        $rows = $users->map(function ($user) use ($lastLogins) {
+            $last = $lastLogins->get($user->id)?->last_login;
+
+            return [
+                'name' => $user->name,
+                'role' => $user->role,
+                'last_login' => $last,
+                'days_since_login' => $last ? (int) floor(CarbonImmutable::parse($last)->diffInDays(now())) : null,
+            ];
+        })->sortByDesc(fn ($r) => $r['days_since_login'] ?? 99999)->values();
+
+        return ['rows' => $rows];
     }
 
     private function storeRanking(array $filters)

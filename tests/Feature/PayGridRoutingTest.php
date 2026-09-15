@@ -20,6 +20,7 @@ use App\Services\Gateway\HilogateClient;
 use App\Services\TransactionIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -1576,6 +1577,67 @@ class PayGridRoutingTest extends TestCase
         $response->assertSee('Rp 98.800', false); // expected settlement (our net_amount)
         $response->assertSee('Rp 90.000', false); // actual settlement (bank)
         $response->assertSee('Rp 8.800', false); // diff = 98.800 - 90.000
+    }
+
+    public function test_ma_analytics_page_computes_the_phase2_roadmap_features(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $cs = User::query()->where('email', 'cs-bj@paygrid.local')->firstOrFail();
+
+        $merchant = Merchant::query()->create([
+            'slug' => 'roadmap-test-store',
+            'name' => 'Roadmap Test Store',
+            'agent_id' => $agent->id,
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'merchant_id' => 'roadmap-test-hg-id',
+            'merchant_key' => 'roadmap-test-hg-secret',
+            'approval_status' => 'approved',
+        ]);
+
+        // A 40.000 amount lands in the "< 50rb" distribution bucket; latency is 30s.
+        TopupRequest::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'roadmap-success-1', 'transaction_id' => 'roadmap-success-1',
+            'status' => 'success', 'amount' => 40000, 'net_amount' => 39600, 'fee_amount' => 400,
+            'submitted_at' => now('Asia/Jakarta')->subDays(2)->setTime(10, 0, 0),
+            'succeeded_at' => now('Asia/Jakarta')->subDays(2)->setTime(10, 0, 30),
+        ]);
+
+        // A support ticket resolved in 2 hours (well within the 24h SLA) by the known CS user.
+        $ticket = SupportTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'ticket_no' => 'TCK-ROADMAP-1',
+            'reference' => 'roadmap-ticket-ref',
+            'issue' => 'Test issue',
+            'status' => 'success',
+            'center_status' => 'success',
+            'center_updated_by_user_id' => $cs->id,
+            'closed_at' => now(),
+        ]);
+        DB::table('support_tickets')->where('id', $ticket->id)->update(['created_at' => now()->subHours(2)]);
+
+        DB::table('audit_logs')->insert([
+            'actor_user_id' => $cs->id, 'actor_role' => 'cs', 'action' => 'auth.login_success',
+            'target_type' => 'user', 'target_id' => (string) $cs->id, 'created_at' => now()->subDays(3),
+        ]);
+
+        $from = now('Asia/Jakarta')->subDays(5)->startOfDay()->toDateString();
+        $to = now('Asia/Jakarta')->toDateString();
+        $response = $this->actingAs($ma)->get("/ma/analytics?period=custom&from={$from}&to={$to}")->assertOk();
+
+        $response->assertSee('Roadmap Test Store');
+        // Distribution: our one transaction (Rp40.000) falls in the "< 50rb" bucket.
+        $response->assertSee('&lt; 50rb', false);
+        // Latency: 30 seconds average shown somewhere on the Performance tab.
+        $response->assertSee('30.0 detik', false);
+        // SLA: our ticket resolved in 2h, well under 24h -> 100% within SLA.
+        $response->assertSee('100,000%', false);
+        $response->assertSee('2.0 jam', false);
+        // Account activity: the CS user logged in 3 days ago.
+        $response->assertSee('3 hari lalu', false);
     }
 
     public function test_ma_can_approve_merchant_registration_and_audit_it(): void
