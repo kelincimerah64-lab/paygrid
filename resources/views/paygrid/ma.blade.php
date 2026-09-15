@@ -333,6 +333,11 @@
             <h3 style="margin:28px 0 4px">Distribusi Nominal Transaksi</h3>
             <p class="muted" style="margin:0 0 12px">Jumlah transaksi sukses per rentang nominal &mdash; lihat pola transaksi kecil berulang vs besar sesekali.</p>
             <div class="table-wrap"><table class="table qris-table"><thead><tr>@foreach($analyticsAmountDistribution['rows'] as $bucket)<th>{{ $bucket['label'] }}</th>@endforeach</tr></thead><tbody><tr>@foreach($analyticsAmountDistribution['rows'] as $bucket)<td>{{ number_format($bucket['count'], 0, ',', '.') }}</td>@endforeach</tr></tbody></table></div>
+
+            <h3 style="margin:28px 0 4px">Proyeksi Volume</h3>
+            <p class="muted" style="margin:0 0 12px">Dari rata-rata bergerak 7 hari transaksi sukses (30 hari terakhir, tidak terpengaruh filter periode). Rata-rata 7 hari terakhir: <strong>{{ $money($analyticsVolumeProjection['last7DayAvgVolume']) }}/hari</strong> &mdash; proyeksi 30 hari ke depan: <strong>{{ $money($analyticsVolumeProjection['projectedNextMonthVolume']) }}</strong>.</p>
+            <div style="position:relative;height:260px"><canvas id="ma-analytics-projection-chart"></canvas></div>
+            <script id="ma-analytics-projection-data" type="application/json">@json($analyticsVolumeProjection)</script>
         </div>
 
         <div data-ma-panel="performance" class="pad" hidden>
@@ -466,6 +471,27 @@ document.addEventListener('DOMContentLoaded', () => {
                         y: { position: 'left', ticks: { callback: (v) => new Intl.NumberFormat('id-ID', { notation: 'compact' }).format(v) } },
                         y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (v) => v + '%' } },
                     },
+                },
+            });
+        }
+        const projectionEl = document.getElementById('ma-analytics-projection-data');
+        const projectionCanvas = document.getElementById('ma-analytics-projection-chart');
+        if (projectionEl && projectionCanvas) {
+            const projection = JSON.parse(projectionEl.textContent || '{}');
+            new Chart(projectionCanvas, {
+                type: 'line',
+                data: {
+                    labels: projection.labels || [],
+                    datasets: [
+                        { label: 'Volume Harian', data: projection.daily || [], borderColor: '#94a9c9', backgroundColor: 'transparent', tension: .2, pointRadius: 2 },
+                        { label: 'Rata-rata Bergerak (7 hari)', data: projection.movingAverage || [], borderColor: '#c0630a', backgroundColor: 'transparent', tension: .25, pointRadius: 0, borderWidth: 2, spanGaps: true },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: { y: { ticks: { callback: (v) => new Intl.NumberFormat('id-ID', { notation: 'compact' }).format(v) } } },
                 },
             });
         }

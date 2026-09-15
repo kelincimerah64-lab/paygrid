@@ -110,6 +110,7 @@ class MaController extends Controller
             'analyticsAgentLeaderboard' => $page === 'analytics' ? $this->cachedAnalytics('agent-leaderboard', $dataFilters, fn () => $this->analyticsAgentLeaderboard($dataFilters)) : [],
             'analyticsRevenueConcentration' => $page === 'analytics' ? $this->cachedAnalytics('revenue-concentration', $dataFilters, fn () => $this->analyticsRevenueConcentration($dataFilters)) : [],
             'analyticsAmountDistribution' => $page === 'analytics' ? $this->cachedAnalytics('amount-distribution', $dataFilters, fn () => $this->analyticsAmountDistribution($dataFilters)) : [],
+            'analyticsVolumeProjection' => $page === 'analytics' ? $this->cachedAnalytics('volume-projection', [], fn () => $this->analyticsVolumeProjection()) : [],
             'analyticsSettlementReconciliation' => $page === 'analytics' ? $this->cachedAnalytics('settlement-reconciliation', $dataFilters, fn () => $this->analyticsSettlementReconciliation($dataFilters)) : [],
             'analyticsPerformance' => $page === 'analytics' ? $this->cachedAnalytics('performance', $dataFilters, fn () => $this->analyticsPerformance($dataFilters)) : [],
             'analyticsLatency' => $page === 'analytics' ? $this->cachedAnalytics('latency', $dataFilters, fn () => $this->analyticsLatency($dataFilters)) : [],
@@ -934,6 +935,53 @@ class MaController extends Controller
             ->keyBy('bucket');
 
         return ['rows' => collect($labels)->map(fn ($label) => ['label' => $label, 'count' => (int) ($rows->get($label)->cnt ?? 0)])];
+    }
+
+    private function analyticsVolumeProjection(): array
+    {
+        $from = now('Asia/Jakarta')->subDays(29)->startOfDay();
+        $to = now('Asia/Jakarta');
+
+        $rows = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->where('topup_requests.status', 'success')
+            ->where('topup_requests.submitted_at', '>=', $from)
+            ->where('topup_requests.submitted_at', '<=', $to)
+            ->selectRaw('DATE(topup_requests.submitted_at) as d, COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->groupBy('d')
+            ->orderBy('d')
+            ->get()
+            ->keyBy('d');
+
+        $labels = [];
+        $daily = [];
+        for ($i = 29; $i >= 0; $i--) {
+            $date = now('Asia/Jakarta')->subDays($i)->toDateString();
+            $labels[] = $date;
+            $daily[] = (int) ($rows->get($date)->volume ?? 0);
+        }
+
+        $movingAverage = [];
+        foreach ($daily as $i => $value) {
+            if ($i < 6) {
+                $movingAverage[] = null;
+
+                continue;
+            }
+            $window = array_slice($daily, $i - 6, 7);
+            $movingAverage[] = (int) round(array_sum($window) / 7);
+        }
+
+        $last7DayAvg = count($daily) >= 7 ? array_sum(array_slice($daily, -7)) / 7 : (array_sum($daily) / max(1, count($daily)));
+
+        return [
+            'labels' => $labels,
+            'daily' => $daily,
+            'movingAverage' => $movingAverage,
+            'last7DayAvgVolume' => (int) round($last7DayAvg),
+            'projectedNextMonthVolume' => (int) round($last7DayAvg * 30),
+        ];
     }
 
     private function analyticsSettlementReconciliation(array $filters): array

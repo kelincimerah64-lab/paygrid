@@ -1640,6 +1640,48 @@ class PayGridRoutingTest extends TestCase
         $response->assertSee('3 hari lalu', false);
     }
 
+    public function test_ma_analytics_page_computes_volume_projection(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $merchant = Merchant::query()->create([
+            'slug' => 'projection-test-store',
+            'name' => 'Projection Test Store',
+            'agent_id' => $agent->id,
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'merchant_id' => 'projection-test-hg-id',
+            'merchant_key' => 'projection-test-hg-secret',
+            'approval_status' => 'approved',
+        ]);
+
+        // A flat Rp100.000/day for the last 7 days -> trivially predictable moving average and projection.
+        for ($i = 0; $i < 7; $i++) {
+            TopupRequest::query()->create([
+                'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+                'gateway_ref_id' => "projection-day-{$i}", 'transaction_id' => "projection-day-{$i}",
+                'status' => 'success', 'amount' => 100000, 'net_amount' => 99000, 'fee_amount' => 1000,
+                'submitted_at' => now('Asia/Jakarta')->subDays($i)->setTime(12, 0, 0),
+                'succeeded_at' => now('Asia/Jakarta')->subDays($i)->setTime(12, 0, 5),
+            ]);
+        }
+
+        $last7DayAvg = TopupRequest::query()
+            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+            ->join('agents', 'agents.id', '=', 'merchants.agent_id')
+            ->where('agents.ma_user_id', $ma->id)
+            ->where('topup_requests.status', 'success')
+            ->where('topup_requests.submitted_at', '>=', now('Asia/Jakarta')->subDays(6)->startOfDay())
+            ->sum('topup_requests.amount') / 7;
+
+        $response = $this->actingAs($ma)->get('/ma/analytics?period=all')->assertOk();
+        $response->assertSee('Proyeksi Volume');
+        $response->assertSee('Rp '.number_format((int) round($last7DayAvg), 0, ',', '.').'/hari', false);
+        $response->assertSee('Rp '.number_format((int) round($last7DayAvg * 30), 0, ',', '.'), false);
+    }
+
     public function test_ma_can_approve_merchant_registration_and_audit_it(): void
     {
         $this->seed();
