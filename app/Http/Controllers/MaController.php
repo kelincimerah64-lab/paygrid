@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
-use App\Models\FeeSnapshot;
 use App\Models\Merchant;
 use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
@@ -107,7 +106,6 @@ class MaController extends Controller
                 ? app(TelegramBotMonitoringService::class)->pendingIpWhitelist()
                 : collect(),
             'analyticsBisnis' => $page === 'analytics' ? $this->analyticsBisnis($dataFilters) : [],
-            'analyticsMarginHealth' => $page === 'analytics' ? $this->analyticsMarginHealth($dataFilters) : [],
             'analyticsSettlementReconciliation' => $page === 'analytics' ? $this->analyticsSettlementReconciliation($dataFilters) : [],
             'analyticsPerformance' => $page === 'analytics' ? $this->analyticsPerformance($dataFilters) : [],
             'analyticsOperations' => $page === 'analytics' ? $this->analyticsOperations($dataFilters) : [],
@@ -798,27 +796,6 @@ class MaController extends Controller
             'totalFee' => $totalFee,
             'overallTakeRate' => $totalGmv > 0 ? round(($totalFee / $totalGmv) * 100, 3) : 0,
         ];
-    }
-
-    private function analyticsMarginHealth(array $filters): array
-    {
-        $rows = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->join('fee_snapshots', 'fee_snapshots.topup_request_id', '=', 'topup_requests.id')
-            ->where('topup_requests.status', 'success')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw('merchants.id as merchant_id, merchants.name as merchant_name')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * fee_snapshots.toko_fee_percent / 100), 0) as margin_amount')
-            ->selectRaw('COALESCE(AVG(fee_snapshots.toko_fee_percent), 0) as avg_margin_percent')
-            ->groupBy('merchants.id', 'merchants.name')
-            ->orderBy('avg_margin_percent')
-            ->limit(30)
-            ->get();
-
-        return ['rows' => $rows];
     }
 
     private function analyticsSettlementReconciliation(array $filters): array
