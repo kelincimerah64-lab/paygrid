@@ -163,6 +163,12 @@
         .ma-heatmap-table th:first-child, .ma-heatmap-table td:first-child { text-align:left; white-space:nowrap; }
         .ma-table-toolbar { margin:0 0 8px; }
         .ma-table-toolbar .search { width:100%; max-width:320px; }
+        html { scroll-behavior:smooth; }
+        .qris-panel.ma-analytics-shell { overflow:visible; }
+        .ma-quicknav { position:sticky; top:0; z-index:5; display:flex; gap:6px; overflow-x:auto; align-items:center; background:#fff; border-bottom:1px solid var(--line); padding:8px 0 10px; margin:0 0 14px; scrollbar-width:thin; }
+        .ma-quicknav a { flex:0 0 auto; padding:5px 11px; border-radius:999px; background:#f1f5fb; color:#33465e; font-size:11px; font-weight:800; text-decoration:none; white-space:nowrap; border:1px solid #e2e9f4; }
+        .ma-quicknav a:hover { background:#e5ecf9; }
+        [id^="ma-sec-"] { scroll-margin-top:52px; }
         .ma-store-summary-table { min-width:1040px; table-layout:auto; }
         .qris-table.ma-store-summary-table th { white-space:nowrap; }
         .ma-store-summary-table th:nth-child(1) { width:22%; }
@@ -619,7 +625,7 @@
             .qris-table tr { padding:10px 12px; border-top:1px solid #e7edf6; }
             .qris-table td { display:grid; grid-template-columns:118px minmax(0, 1fr); gap:10px; align-items:center; height:auto; min-height:30px; border-top:0; padding:4px 0; text-align:left !important; }
             .ma-detail-row { grid-template-columns:1fr; gap:5px; }
-            .qris-table td::before { color:#52637a; font-size:10px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; }
+            .qris-table td::before { content:attr(data-label); color:#52637a; font-size:10px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; }
             .topup-table td:nth-child(1)::before { content:'Timestamp'; }
             .topup-table td:nth-child(2)::before { content:'Payment ID'; }
             .topup-table td:nth-child(3)::before { content:'RRN'; }

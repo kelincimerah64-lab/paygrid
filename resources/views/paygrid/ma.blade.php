@@ -299,7 +299,7 @@
 @if($active === 'analytics')
     <section class="card pad section ma-period-card"><form method="get" class="ma-period-form"><label>Periode<select name="period" data-ma-period-select><option value="this_month" @selected($filters['period'] === 'this_month')>Bulan Ini</option><option value="last_month" @selected($filters['period'] === 'last_month')>Bulan Lalu</option><option value="last_30_days" @selected($filters['period'] === 'last_30_days')>30 Hari</option><option value="custom" @selected($filters['period'] === 'custom')>Custom</option><option value="all" @selected($filters['period'] === 'all')>Semua Periode</option></select></label><label>Dari<input type="date" name="from" value="{{ $dateInput($dataFilters['from'] ?? $filters['from']) }}" data-ma-period-custom></label><label>Sampai<input type="date" name="to" value="{{ $dateInput($dataFilters['to'] ?? $filters['to']) }}" data-ma-period-custom></label><button class="btn primary compact-btn">Terapkan</button><span class="badge ok">{{ $periodLabel }}</span></form></section>
 
-    <section class="card qris-panel section">
+    <section class="card qris-panel ma-analytics-shell section">
         <div class="qris-toolbar">
             <h2>Analytics</h2>
             <div class="ma-tabs">
@@ -310,7 +310,8 @@
         </div>
 
         <div data-ma-panel="bisnis" class="pad">
-            <div class="grid qris-metrics section">
+            <nav class="ma-quicknav"><a href="#ma-sec-bisnis-top">Ringkasan</a><a href="#ma-sec-settlement">Settlement</a><a href="#ma-sec-agent-leaderboard">Agent Leaderboard</a><a href="#ma-sec-revenue-concentration">Revenue Concentration</a><a href="#ma-sec-amount-distribution">Distribusi Nominal</a><a href="#ma-sec-volume-projection">Proyeksi Volume</a></nav>
+            <div id="ma-sec-bisnis-top" class="grid qris-metrics section">
                 <div class="card pad qris-metric primary"><span>GMV (Volume Sukses)</span><strong>{{ $money($analyticsBisnis['totalGmv']) }}</strong><small>{{ $periodLabel }}</small></div>
                 <div class="card pad qris-metric success"><span>Take Rate</span><strong>{{ $pct($analyticsBisnis['overallTakeRate']) }}</strong><small>Total fee tercatat &divide; GMV</small></div>
             </div>
@@ -318,23 +319,23 @@
             <div style="position:relative;height:280px"><canvas id="ma-analytics-gmv-chart"></canvas></div>
             <script id="ma-analytics-bisnis-data" type="application/json">@json($analyticsBisnis)</script>
 
-            <h3 style="margin:28px 0 4px">Rekonsiliasi Settlement (Ekspektasi vs Aktual Bank)</h3>
+            <h3 id="ma-sec-settlement" style="margin:28px 0 4px">Rekonsiliasi Settlement (Ekspektasi vs Aktual Bank)</h3>
             <p class="muted" style="margin:0 0 12px">Ekspektasi dihitung dari transaksi sukses kita di jendela waktu settlement yang sama. Aktual dari data settlement Hilogate.</p>
-            <div class="table-wrap"><table class="table qris-table ma-paginate"><thead><tr><th>Toko</th><th>Tanggal</th><th>Ekspektasi</th><th>Aktual (Bank)</th><th>Selisih</th></tr></thead><tbody>@forelse($analyticsSettlementReconciliation['rows'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td>{{ $row['settlement_date'] }}</td><td>{{ $money($row['expected']) }}</td><td>{{ $money($row['actual']) }}</td><td><span class="badge {{ $row['diff'] == 0 ? 'ok' : 'danger' }}">{{ $money($row['diff']) }}</span></td></tr>@empty<tr><td colspan="5" class="empty"><strong>Belum ada data settlement.</strong>Filter periode ini belum memiliki batch settlement.</td></tr>@endforelse</tbody></table></div>
+            <div class="table-wrap"><table class="table qris-table ma-paginate"><thead><tr><th>Toko</th><th>Tanggal</th><th>Ekspektasi</th><th>Aktual (Bank)</th><th>Selisih</th></tr></thead><tbody>@forelse($analyticsSettlementReconciliation['rows'] as $row)<tr><td data-label="Toko">{{ $row['merchant_name'] }}</td><td data-label="Tanggal">{{ $row['settlement_date'] }}</td><td data-label="Ekspektasi">{{ $money($row['expected']) }}</td><td data-label="Aktual (Bank)">{{ $money($row['actual']) }}</td><td data-label="Selisih"><span class="badge {{ $row['diff'] == 0 ? 'ok' : 'danger' }}">{{ $money($row['diff']) }}</span></td></tr>@empty<tr><td colspan="5" class="empty"><strong>Belum ada data settlement.</strong>Filter periode ini belum memiliki batch settlement.</td></tr>@endforelse</tbody></table></div>
 
-            <h3 style="margin:28px 0 4px">Agent Leaderboard (Growth%)</h3>
+            <h3 id="ma-sec-agent-leaderboard" style="margin:28px 0 4px">Agent Leaderboard (Growth%)</h3>
             <p class="muted" style="margin:0 0 12px">Dibandingkan dengan periode sebelumnya yang panjangnya sama. Diurutkan dari pertumbuhan tertinggi.</p>
-            <div class="table-wrap"><table class="table qris-table ma-paginate"><thead><tr><th>Agen</th><th>Volume Periode Ini</th><th>Volume Periode Lalu</th><th>Growth</th></tr></thead><tbody>@forelse($analyticsAgentLeaderboard['rows'] as $row)<tr><td>{{ $row['agent_name'] }}</td><td>{{ $money($row['current_volume']) }}</td><td>{{ $money($row['previous_volume']) }}</td><td>@if(! $analyticsAgentLeaderboard['hasPrevious'])<span class="muted">n/a (pilih periode custom)</span>@elseif($row['growth_percent'] === null)<span class="badge ok">Baru</span>@else<span class="badge {{ $row['growth_percent'] >= 0 ? 'ok' : 'danger' }}">{{ $row['growth_percent'] >= 0 ? '+' : '' }}{{ $pct($row['growth_percent']) }}</span>@endif</td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada data agen.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div>
+            <div class="table-wrap"><table class="table qris-table ma-paginate"><thead><tr><th>Agen</th><th>Volume Periode Ini</th><th>Volume Periode Lalu</th><th>Growth</th></tr></thead><tbody>@forelse($analyticsAgentLeaderboard['rows'] as $row)<tr><td data-label="Agen">{{ $row['agent_name'] }}</td><td data-label="Volume Periode Ini">{{ $money($row['current_volume']) }}</td><td data-label="Volume Periode Lalu">{{ $money($row['previous_volume']) }}</td><td data-label="Growth">@if(! $analyticsAgentLeaderboard['hasPrevious'])<span class="muted">n/a (pilih periode custom)</span>@elseif($row['growth_percent'] === null)<span class="badge ok">Baru</span>@else<span class="badge {{ $row['growth_percent'] >= 0 ? 'ok' : 'danger' }}">{{ $row['growth_percent'] >= 0 ? '+' : '' }}{{ $pct($row['growth_percent']) }}</span>@endif</td></tr>@empty<tr><td colspan="4" class="empty"><strong>Belum ada data agen.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div>
 
-            <h3 style="margin:28px 0 4px">Revenue Concentration Risk</h3>
+            <h3 id="ma-sec-revenue-concentration" style="margin:28px 0 4px">Revenue Concentration Risk</h3>
             <p class="muted" style="margin:0 0 12px">Top 5 toko menyumbang {{ $pct($analyticsRevenueConcentration['top5Percent']) }} dari total volume &middot; Top 10 menyumbang {{ $pct($analyticsRevenueConcentration['top10Percent']) }}. Kalau ini kelewat tinggi, ada risiko ketergantungan ke sedikit toko.</p>
-            <div class="table-wrap"><table class="table qris-table ma-paginate"><thead><tr><th>Toko</th><th>Volume</th><th>% dari Total</th></tr></thead><tbody>@forelse($analyticsRevenueConcentration['rows'] as $row)<tr><td>{{ $row['merchant_name'] }}</td><td>{{ $money($row['volume']) }}</td><td>{{ $pct($row['percent']) }}</td></tr>@empty<tr><td colspan="3" class="empty"><strong>Belum ada data.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div>
+            <div class="table-wrap"><table class="table qris-table ma-paginate"><thead><tr><th>Toko</th><th>Volume</th><th>% dari Total</th></tr></thead><tbody>@forelse($analyticsRevenueConcentration['rows'] as $row)<tr><td data-label="Toko">{{ $row['merchant_name'] }}</td><td data-label="Volume">{{ $money($row['volume']) }}</td><td data-label="% dari Total">{{ $pct($row['percent']) }}</td></tr>@empty<tr><td colspan="3" class="empty"><strong>Belum ada data.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div>
 
-            <h3 style="margin:28px 0 4px">Distribusi Nominal Transaksi</h3>
+            <h3 id="ma-sec-amount-distribution" style="margin:28px 0 4px">Distribusi Nominal Transaksi</h3>
             <p class="muted" style="margin:0 0 12px">Jumlah transaksi sukses per rentang nominal &mdash; lihat pola transaksi kecil berulang vs besar sesekali.</p>
             <div class="table-wrap"><table class="table qris-table"><thead><tr>@foreach($analyticsAmountDistribution['rows'] as $bucket)<th>{{ $bucket['label'] }}</th>@endforeach</tr></thead><tbody><tr>@foreach($analyticsAmountDistribution['rows'] as $bucket)<td>{{ number_format($bucket['count'], 0, ',', '.') }}</td>@endforeach</tr></tbody></table></div>
 
-            <h3 style="margin:28px 0 4px">Proyeksi Volume</h3>
+            <h3 id="ma-sec-volume-projection" style="margin:28px 0 4px">Proyeksi Volume</h3>
             <p class="muted" style="margin:0 0 12px">Dari rata-rata bergerak 7 hari transaksi sukses (30 hari terakhir, tidak terpengaruh filter periode). Rata-rata 7 hari terakhir: <strong>{{ $money($analyticsVolumeProjection['last7DayAvgVolume']) }}/hari</strong> &mdash; proyeksi 30 hari ke depan: <strong>{{ $money($analyticsVolumeProjection['projectedNextMonthVolume']) }}</strong>.</p>
             <div style="position:relative;height:260px"><canvas id="ma-analytics-projection-chart"></canvas></div>
             <script id="ma-analytics-projection-data" type="application/json">@json($analyticsVolumeProjection)</script>
