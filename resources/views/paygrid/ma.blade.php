@@ -306,6 +306,7 @@
                 <button class="btn compact-btn active" type="button" data-ma-tab="bisnis">Bisnis</button>
                 <button class="btn compact-btn" type="button" data-ma-tab="performance">Performance</button>
                 <button class="btn compact-btn" type="button" data-ma-tab="operations">Operations</button>
+                <button class="btn compact-btn" type="button" data-ma-tab="grafana">Grafana</button>
             </div>
         </div>
 
@@ -347,6 +348,11 @@
 
         <div data-ma-panel="operations" data-ma-lazy-tab="operations" class="pad" hidden>
             <p class="muted">Memuat data operations&hellip;</p>
+        </div>
+
+        <div data-ma-panel="grafana" class="pad" hidden>
+            <p class="muted" style="margin:0 0 12px">Dashboard Grafana gabungan semua MA/toko &mdash; data langsung dari database, tidak terpengaruh filter periode di atas.</p>
+            <div class="ma-grafana-embed"><iframe src="https://grandbanister80.grafana.net/public-dashboards/9b8a0b966e3945f48f4e493b3fb36e47" loading="lazy" title="PayGrid Analytics (Company-Wide)"></iframe></div>
         </div>
     </section>
 @endif

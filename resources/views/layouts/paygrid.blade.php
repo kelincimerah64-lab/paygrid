@@ -165,6 +165,8 @@
         .ma-table-toolbar .search { width:100%; max-width:320px; }
         html { scroll-behavior:smooth; }
         .qris-panel.ma-analytics-shell { overflow:visible; }
+        .ma-grafana-embed { width:100%; height:1800px; }
+        .ma-grafana-embed iframe { width:100%; height:100%; border:0; border-radius:8px; }
         .ma-quicknav { position:sticky; top:0; z-index:5; display:flex; gap:6px; overflow-x:auto; align-items:center; background:#fff; border-bottom:1px solid var(--line); padding:8px 0 10px; margin:0 0 14px; scrollbar-width:thin; }
         .ma-quicknav a { flex:0 0 auto; padding:5px 11px; border-radius:999px; background:#f1f5fb; color:#33465e; font-size:11px; font-weight:800; text-decoration:none; white-space:nowrap; border:1px solid #e2e9f4; }
         .ma-quicknav a:hover { background:#e5ecf9; }
