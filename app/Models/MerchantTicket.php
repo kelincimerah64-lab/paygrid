@@ -17,6 +17,10 @@ class MerchantTicket extends Model
         'description',
         'attachments',
         'status',
+        'approval_status',
+        'approval_by',
+        'approval_note',
+        'approval_completed_at',
         'last_message_at',
         'closed_at',
     ];
@@ -25,6 +29,7 @@ class MerchantTicket extends Model
         'attachments' => 'array',
         'last_message_at' => 'datetime',
         'closed_at' => 'datetime',
+        'approval_completed_at' => 'datetime',
     ];
 
     public function merchant(): BelongsTo

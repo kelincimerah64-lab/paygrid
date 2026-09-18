@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'n8n' => [
+        'ip_whitelist_webhook_url' => env('N8N_IP_WHITELIST_WEBHOOK_URL'),
+        'callback_token' => env('N8N_CALLBACK_TOKEN'),
+    ],
+
 ];

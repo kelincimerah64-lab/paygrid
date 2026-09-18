@@ -9,6 +9,8 @@
     };
     $deptLabel = app(App\Services\MerchantTicketService::class)->departmentLabel($ticket->department);
     $categoryLabel = app(App\Services\MerchantTicketService::class)->categoryLabel($ticket->department, $ticket->category);
+    $approvalLabel = match ($ticket->approval_status) { 'waiting' => 'Menunggu Approval', 'approved' => 'Disetujui', 'rejected' => 'Ditolak', default => null };
+    $approvalClass = match ($ticket->approval_status) { 'approved' => 'ok', 'rejected' => 'danger', default => 'warn' };
 @endphp
 
 @section('content')
@@ -25,12 +27,15 @@
 @endif
 
 <section class="card qris-panel section">
-    <div class="qris-toolbar"><h2>Detail Tiket</h2><span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span></div>
+    <div class="qris-toolbar"><h2>Detail Tiket</h2><span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span>@if($approvalLabel)<span class="badge {{ $approvalClass }}" style="margin-left:6px">{{ $approvalLabel }}</span>@endif</div>
     <div class="approval-detail-grid">
         <div class="fee-pill"><span>Tujuan</span><strong>{{ $deptLabel }}</strong></div>
         <div class="fee-pill"><span>Menu</span><strong>{{ $categoryLabel }}</strong></div>
         <div class="fee-pill"><span>Dibuat</span><strong>{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</strong></div>
     </div>
+    @if($ticket->approval_status === 'rejected' && $ticket->approval_note)
+        <p class="muted" style="margin-top:8px"><strong>Alasan penolakan:</strong> {{ $ticket->approval_note }}</p>
+    @endif
     <p style="margin-top:12px; white-space:pre-wrap">{{ $ticket->description }}</p>
     @foreach($ticket->attachments ?? [] as $index => $file)
         <a class="btn compact-btn" style="margin-right:6px" href="{{ route('merchant.tickets.attachment', [$merchant, $ticket, $index]) }}">Lampiran {{ $index + 1 }}</a>

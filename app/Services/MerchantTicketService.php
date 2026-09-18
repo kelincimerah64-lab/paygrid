@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\NotifyIpWhitelistApproval;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
 use App\Models\MerchantTicketMessage;
@@ -60,6 +61,8 @@ class MerchantTicketService
 
     public function create(Merchant $merchant, User $user, array $data, array $attachments = []): MerchantTicket
     {
+        $needsApproval = $data['department'] === 'tech' && $data['category'] === 'ip_whitelist';
+
         $ticket = MerchantTicket::query()->create([
             'merchant_id' => $merchant->id,
             'created_by_user_id' => $user->id,
@@ -68,10 +71,15 @@ class MerchantTicketService
             'category' => $data['category'],
             'description' => $data['description'],
             'attachments' => $this->storeAttachments($merchant, $attachments),
+            'approval_status' => $needsApproval ? 'waiting' : null,
             'last_message_at' => now(),
         ]);
 
         $ticket->forceFill(['ticket_no' => 'TK-'.str_pad((string) $ticket->id, 5, '0', STR_PAD_LEFT)])->save();
+
+        if ($needsApproval) {
+            NotifyIpWhitelistApproval::dispatch($ticket->id);
+        }
 
         return $ticket;
     }

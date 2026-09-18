@@ -410,6 +410,146 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->get(route('merchant.tickets.attachment', [$merchant, $ticket, 2]))->assertNotFound();
     }
 
+    public function test_ip_whitelist_ticket_starts_waiting_for_approval_and_other_categories_do_not(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'department' => 'tech',
+            'category' => 'ip_whitelist',
+            'description' => 'Butuh whitelist IP VPS baru.',
+        ])->assertRedirect();
+
+        $ipTicket = MerchantTicket::query()->where('merchant_id', $merchant->id)->where('category', 'ip_whitelist')->firstOrFail();
+        $this->assertSame('waiting', $ipTicket->approval_status);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'department' => 'tech',
+            'category' => 'technical_issue',
+            'description' => 'Kendala teknis lain.',
+        ])->assertRedirect();
+
+        $otherTicket = MerchantTicket::query()->where('merchant_id', $merchant->id)->where('category', 'technical_issue')->firstOrFail();
+        $this->assertNull($otherTicket->approval_status);
+    }
+
+    public function test_n8n_callback_requires_valid_bearer_token(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        config(['services.n8n.callback_token' => 'secret-token']);
+        $ticket = MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => User::factory()->create()->id,
+            'ticket_no' => 'TK-IP-0001',
+            'department' => 'tech',
+            'category' => 'ip_whitelist',
+            'description' => 'butuh whitelist',
+            'approval_status' => 'waiting',
+            'last_message_at' => now(),
+        ]);
+
+        $this->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', ['status' => 'approved'])
+            ->assertStatus(401);
+
+        $this->withHeader('Authorization', 'Bearer wrong-token')
+            ->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', ['status' => 'approved'])
+            ->assertStatus(401);
+
+        $this->assertSame('waiting', $ticket->fresh()->approval_status);
+    }
+
+    public function test_n8n_callback_approves_ticket_and_leaves_it_open(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        config(['services.n8n.callback_token' => 'secret-token']);
+        $ticket = MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => User::factory()->create()->id,
+            'ticket_no' => 'TK-IP-0002',
+            'department' => 'tech',
+            'category' => 'ip_whitelist',
+            'description' => 'butuh whitelist',
+            'approval_status' => 'waiting',
+            'last_message_at' => now(),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer secret-token')
+            ->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', [
+                'status' => 'approved',
+                'approved_by' => 'Budi (WA)',
+            ])
+            ->assertOk()
+            ->assertJson(['ok' => true]);
+
+        $ticket->refresh();
+        $this->assertSame('approved', $ticket->approval_status);
+        $this->assertSame('Budi (WA)', $ticket->approval_by);
+        $this->assertSame('open', $ticket->status);
+        $this->assertNotNull($ticket->approval_completed_at);
+        $this->assertDatabaseHas('merchant_ticket_messages', [
+            'merchant_ticket_id' => $ticket->id,
+            'is_staff' => true,
+        ]);
+    }
+
+    public function test_n8n_callback_rejects_ticket_and_closes_it_with_note(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        config(['services.n8n.callback_token' => 'secret-token']);
+        $ticket = MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => User::factory()->create()->id,
+            'ticket_no' => 'TK-IP-0003',
+            'department' => 'tech',
+            'category' => 'ip_whitelist',
+            'description' => 'butuh whitelist',
+            'approval_status' => 'waiting',
+            'last_message_at' => now(),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer secret-token')
+            ->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', [
+                'status' => 'rejected',
+                'approved_by' => 'Budi (WA)',
+                'note' => 'IP tidak valid.',
+            ])
+            ->assertOk();
+
+        $ticket->refresh();
+        $this->assertSame('rejected', $ticket->approval_status);
+        $this->assertSame('IP tidak valid.', $ticket->approval_note);
+        $this->assertSame('closed', $ticket->status);
+        $this->assertNotNull($ticket->closed_at);
+    }
+
+    public function test_n8n_callback_cannot_be_replayed_once_ticket_no_longer_waiting(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        config(['services.n8n.callback_token' => 'secret-token']);
+        $ticket = MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => User::factory()->create()->id,
+            'ticket_no' => 'TK-IP-0004',
+            'department' => 'tech',
+            'category' => 'ip_whitelist',
+            'description' => 'butuh whitelist',
+            'approval_status' => 'approved',
+            'last_message_at' => now(),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer secret-token')
+            ->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', ['status' => 'rejected'])
+            ->assertStatus(422);
+
+        $this->assertSame('approved', $ticket->fresh()->approval_status);
+    }
+
     public function test_ticket_creation_rejects_more_than_three_attachments(): void
     {
         Storage::fake('local');

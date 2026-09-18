@@ -9,6 +9,8 @@
     };
     $deptLabel = fn ($dept) => app(App\Services\MerchantTicketService::class)->departmentLabel($dept);
     $categoryLabel = fn ($ticket) => app(App\Services\MerchantTicketService::class)->categoryLabel($ticket->department, $ticket->category);
+    $approvalLabel = fn ($status) => match ($status) { 'waiting' => 'Menunggu Approval', 'approved' => 'Disetujui', 'rejected' => 'Ditolak', default => null };
+    $approvalClass = fn ($status) => match ($status) { 'approved' => 'ok', 'rejected' => 'danger', default => 'warn' };
 @endphp
 
 @section('content')
@@ -68,7 +70,7 @@
                     <td>{{ $deptLabel($ticket->department) }}</td>
                     <td><span class="truncate ref-line">{{ $categoryLabel($ticket) }}</span></td>
                     <td><span class="muted">{{ $ticket->last_message_at?->timezone('Asia/Jakarta')->format('d M Y H:i') ?? '-' }}</span></td>
-                    <td><span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span></td>
+                    <td><span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span>@if($approvalLabel($ticket->approval_status))<br><span class="badge {{ $approvalClass($ticket->approval_status) }}" style="margin-top:4px">{{ $approvalLabel($ticket->approval_status) }}</span>@endif</td>
                     <td><a class="btn compact-btn" href="{{ route('merchant.tickets.show', [$merchant, $ticket]) }}">Buka</a></td>
                 </tr>
             @empty
