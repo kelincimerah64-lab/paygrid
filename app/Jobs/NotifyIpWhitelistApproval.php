@@ -37,7 +37,7 @@ class NotifyIpWhitelistApproval implements ShouldQueue
             'merchant_name' => $merchant->name,
             'reported_by' => $ticket->createdBy?->name ?? '-',
             'description' => $ticket->description,
-            'callback_url' => url('/api/n8n/tickets/'.$ticket->id.'/approval'),
+            'callback_url' => url('/api/n8n/tickets/'.$ticket->ticket_no.'/approval'),
         ]);
 
         if ($response->failed()) {

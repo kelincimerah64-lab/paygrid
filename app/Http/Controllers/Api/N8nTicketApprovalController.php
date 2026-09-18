@@ -11,12 +11,13 @@ use Illuminate\Validation\Rule;
 
 class N8nTicketApprovalController extends Controller
 {
-    public function update(Request $request, MerchantTicket $ticket): JsonResponse
+    public function update(Request $request, string $ticketNo): JsonResponse
     {
         $token = (string) config('services.n8n.callback_token');
         $provided = (string) $request->bearerToken();
         abort_unless($token !== '' && hash_equals($token, $provided), 401);
 
+        $ticket = MerchantTicket::query()->where('ticket_no', $ticketNo)->firstOrFail();
         abort_unless($ticket->approval_status === 'waiting', 422, 'Tiket ini tidak sedang menunggu approval.');
 
         $data = $request->validate([

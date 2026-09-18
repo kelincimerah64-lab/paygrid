@@ -451,11 +451,11 @@ class MerchantTicketTest extends TestCase
             'last_message_at' => now(),
         ]);
 
-        $this->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', ['status' => 'approved'])
+        $this->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', ['status' => 'approved'])
             ->assertStatus(401);
 
         $this->withHeader('Authorization', 'Bearer wrong-token')
-            ->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', ['status' => 'approved'])
+            ->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', ['status' => 'approved'])
             ->assertStatus(401);
 
         $this->assertSame('waiting', $ticket->fresh()->approval_status);
@@ -478,7 +478,7 @@ class MerchantTicketTest extends TestCase
         ]);
 
         $this->withHeader('Authorization', 'Bearer secret-token')
-            ->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', [
+            ->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', [
                 'status' => 'approved',
                 'approved_by' => 'Budi (WA)',
             ])
@@ -513,7 +513,7 @@ class MerchantTicketTest extends TestCase
         ]);
 
         $this->withHeader('Authorization', 'Bearer secret-token')
-            ->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', [
+            ->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', [
                 'status' => 'rejected',
                 'approved_by' => 'Budi (WA)',
                 'note' => 'IP tidak valid.',
@@ -544,7 +544,7 @@ class MerchantTicketTest extends TestCase
         ]);
 
         $this->withHeader('Authorization', 'Bearer secret-token')
-            ->postJson('/api/n8n/tickets/'.$ticket->id.'/approval', ['status' => 'rejected'])
+            ->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', ['status' => 'rejected'])
             ->assertStatus(422);
 
         $this->assertSame('approved', $ticket->fresh()->approval_status);

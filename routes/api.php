@@ -8,4 +8,4 @@ Route::post('/callbacks/{gateway}/{type}', [GatewayCallbackController::class, 'r
     ->whereIn('gateway', ['hilogate', 'artageto'])
     ->whereIn('type', ['transaction', 'withdrawal', 'payin']);
 
-Route::post('/n8n/tickets/{ticket}/approval', [N8nTicketApprovalController::class, 'update']);
+Route::post('/n8n/tickets/{ticketNo}/approval', [N8nTicketApprovalController::class, 'update']);
