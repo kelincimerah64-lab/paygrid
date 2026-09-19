@@ -69,6 +69,7 @@ class MerchantTicketService
             'ticket_no' => 'PENDING',
             'department' => $data['department'],
             'category' => $data['category'],
+            'title' => $data['title'],
             'description' => $data['description'],
             'attachments' => $this->storeAttachments($merchant, $attachments),
             'approval_status' => $needsApproval ? 'waiting' : null,

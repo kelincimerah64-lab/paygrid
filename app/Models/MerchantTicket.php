@@ -14,6 +14,7 @@ class MerchantTicket extends Model
         'ticket_no',
         'department',
         'category',
+        'title',
         'description',
         'attachments',
         'status',

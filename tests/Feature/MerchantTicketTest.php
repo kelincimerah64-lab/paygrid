@@ -31,6 +31,7 @@ class MerchantTicketTest extends TestCase
         $response = $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'cs',
             'category' => 'topup',
+            'title' => 'Test title',
             'description' => 'Topup belum masuk ke saldo toko.',
         ]);
 
@@ -51,6 +52,7 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'tech',
             'category' => 'ip_whitelist',
+            'title' => 'Test title',
             'description' => 'Butuh whitelist IP VPS baru.',
         ])->assertRedirect();
 
@@ -58,6 +60,7 @@ class MerchantTicketTest extends TestCase
             'merchant_id' => $merchant->id,
             'department' => 'tech',
             'category' => 'ip_whitelist',
+            'title' => 'Test title',
         ]);
     }
 
@@ -70,6 +73,7 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'finance',
             'category' => 'discrepancies_amount',
+            'title' => 'Test title',
             'description' => 'Ada selisih nominal settlement.',
         ])->assertRedirect();
 
@@ -77,6 +81,7 @@ class MerchantTicketTest extends TestCase
             'merchant_id' => $merchant->id,
             'department' => 'finance',
             'category' => 'discrepancies_amount',
+            'title' => 'Test title',
         ]);
     }
 
@@ -89,6 +94,7 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'cs',
             'category' => 'ip_whitelist',
+            'title' => 'Test title',
             'description' => 'Kategori tech dikirim ke department cs.',
         ])->assertSessionHasErrors('category');
     }
@@ -128,6 +134,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-00001',
             'department' => 'cs',
             'category' => 'topup',
+            'title' => 'Test title',
             'description' => 'cs ticket',
             'last_message_at' => now(),
         ]);
@@ -137,6 +144,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-00002',
             'department' => 'tech',
             'category' => 'ip_whitelist',
+            'title' => 'Test title',
             'description' => 'tech ticket',
             'last_message_at' => now(),
         ]);
@@ -146,6 +154,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-00005',
             'department' => 'finance',
             'category' => 'missing_transaction',
+            'title' => 'Test title',
             'description' => 'finance ticket',
             'last_message_at' => now(),
         ]);
@@ -174,6 +183,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-00003',
             'department' => 'tech',
             'category' => 'technical_issue',
+            'title' => 'Test title',
             'description' => 'tech ticket',
             'last_message_at' => now(),
         ]);
@@ -192,6 +202,7 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'cs',
             'category' => 'settlement',
+            'title' => 'Test title',
             'description' => 'Settlement belum masuk.',
         ]);
         $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
@@ -222,6 +233,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-00004',
             'department' => 'cs',
             'category' => 'others',
+            'title' => 'Test title',
             'description' => 'closed ticket test',
             'status' => 'closed',
             'closed_at' => now(),
@@ -252,6 +264,7 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($ma)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'cs',
             'category' => 'others',
+            'title' => 'Test title',
             'description' => 'Dibuat oleh MA untuk toko.',
         ])->assertRedirect();
 
@@ -304,6 +317,7 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($agentUser)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'tech',
             'category' => 'technical_issue',
+            'title' => 'Test title',
             'description' => 'Dibuat oleh agen untuk toko.',
         ])->assertRedirect();
 
@@ -322,6 +336,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-00099',
             'department' => 'cs',
             'category' => 'settlement',
+            'title' => 'Test title',
             'description' => 'Settlement belum cair',
             'status' => 'open',
             'last_message_at' => now(),
@@ -346,6 +361,7 @@ class MerchantTicketTest extends TestCase
                 'ticket_no' => 'TK-STACK-'.$i,
                 'department' => 'cs',
                 'category' => 'others',
+                'title' => 'Test title',
                 'description' => 'Tiket ke-'.$i,
                 'status' => 'open',
                 'last_message_at' => now()->addSeconds($i),
@@ -373,6 +389,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-BADGE-1',
             'department' => 'cs',
             'category' => 'others',
+            'title' => 'Test title',
             'description' => 'butuh badge',
             'status' => 'open',
             'last_message_at' => now(),
@@ -383,7 +400,7 @@ class MerchantTicketTest extends TestCase
         $response->assertSee('Manual Tickets');
     }
 
-    public function test_ticket_can_be_created_with_up_to_three_attachments(): void
+    public function test_ticket_can_be_created_with_multiple_attachments(): void
     {
         Storage::fake('local');
         $this->seed();
@@ -393,6 +410,7 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'cs',
             'category' => 'others',
+            'title' => 'Test title',
             'description' => 'Ada 2 bukti transfer.',
             'attachments' => [
                 UploadedFile::fake()->image('bukti-1.jpg'),
@@ -419,6 +437,7 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'tech',
             'category' => 'ip_whitelist',
+            'title' => 'Test title',
             'description' => 'Butuh whitelist IP VPS baru.',
         ])->assertRedirect();
 
@@ -428,6 +447,7 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'tech',
             'category' => 'technical_issue',
+            'title' => 'Test title',
             'description' => 'Kendala teknis lain.',
         ])->assertRedirect();
 
@@ -446,6 +466,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-IP-0001',
             'department' => 'tech',
             'category' => 'ip_whitelist',
+            'title' => 'Test title',
             'description' => 'butuh whitelist',
             'approval_status' => 'waiting',
             'last_message_at' => now(),
@@ -472,6 +493,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-IP-0002',
             'department' => 'tech',
             'category' => 'ip_whitelist',
+            'title' => 'Test title',
             'description' => 'butuh whitelist',
             'approval_status' => 'waiting',
             'last_message_at' => now(),
@@ -507,6 +529,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-IP-0003',
             'department' => 'tech',
             'category' => 'ip_whitelist',
+            'title' => 'Test title',
             'description' => 'butuh whitelist',
             'approval_status' => 'waiting',
             'last_message_at' => now(),
@@ -538,6 +561,7 @@ class MerchantTicketTest extends TestCase
             'ticket_no' => 'TK-IP-0004',
             'department' => 'tech',
             'category' => 'ip_whitelist',
+            'title' => 'Test title',
             'description' => 'butuh whitelist',
             'approval_status' => 'approved',
             'last_message_at' => now(),
@@ -550,7 +574,7 @@ class MerchantTicketTest extends TestCase
         $this->assertSame('approved', $ticket->fresh()->approval_status);
     }
 
-    public function test_ticket_creation_rejects_more_than_three_attachments(): void
+    public function test_ticket_creation_rejects_more_than_five_attachments(): void
     {
         Storage::fake('local');
         $this->seed();
@@ -560,13 +584,76 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'department' => 'cs',
             'category' => 'others',
+            'title' => 'Test title',
             'description' => 'Kebanyakan lampiran.',
             'attachments' => [
                 UploadedFile::fake()->image('a.jpg'),
                 UploadedFile::fake()->image('b.jpg'),
                 UploadedFile::fake()->image('c.jpg'),
                 UploadedFile::fake()->image('d.jpg'),
+                UploadedFile::fake()->image('e.jpg'),
+                UploadedFile::fake()->image('f.jpg'),
             ],
         ])->assertSessionHasErrors('attachments');
+    }
+
+    public function test_ticket_creation_accepts_pdf_and_video_attachments(): void
+    {
+        Storage::fake('local');
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'department' => 'cs',
+            'category' => 'others',
+            'title' => 'Test title',
+            'description' => 'Lampiran PDF dan video.',
+            'attachments' => [
+                UploadedFile::fake()->create('bukti.pdf', 500, 'application/pdf'),
+                UploadedFile::fake()->create('rekaman.mp4', 500, 'video/mp4'),
+            ],
+        ])->assertRedirect();
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+        $this->assertCount(2, $ticket->attachments);
+    }
+
+    public function test_ma_can_create_ticket_via_unified_form(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+
+        $this->actingAs($ma)->post(route('ma.tickets.store'), [
+            'merchant_id' => $merchant->id,
+            'department' => 'tech',
+            'category' => 'ip_whitelist',
+            'title' => 'Whitelist IP baru',
+            'description' => 'Butuh whitelist IP dari form terpusat MA.',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('merchant_tickets', [
+            'merchant_id' => $merchant->id,
+            'title' => 'Whitelist IP baru',
+            'created_by_user_id' => $ma->id,
+        ]);
+    }
+
+    public function test_agent_cannot_create_ticket_for_merchant_outside_their_scope(): void
+    {
+        $this->seed();
+        $this->pilotMerchant();
+        $agentUser = User::query()->where('username', 'AG-OTHER')->firstOrFail();
+        $bj = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $bj->forceFill(['general_ticket_enabled' => true])->save();
+
+        $this->actingAs($agentUser)->post(route('ma.tickets.store'), [
+            'merchant_id' => $bj->id,
+            'department' => 'cs',
+            'category' => 'others',
+            'title' => 'Coba tembus scope',
+            'description' => 'Harusnya ditolak.',
+        ])->assertSessionHasErrors('merchant_id');
     }
 }

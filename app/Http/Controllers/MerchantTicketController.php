@@ -46,9 +46,10 @@ class MerchantTicketController extends Controller
         $data = $request->validate([
             'department' => ['required', Rule::in(MerchantTicketService::DEPARTMENTS)],
             'category' => ['required', Rule::in($categoryKeys)],
+            'title' => ['required', 'string', 'max:100'],
             'description' => ['required', 'string', 'max:2000'],
-            'attachments' => ['nullable', 'array', 'max:3'],
-            'attachments.*' => ['image', 'max:4096'],
+            'attachments' => ['nullable', 'array', 'max:5'],
+            'attachments.*' => ['mimes:jpg,jpeg,png,pdf,mp4', 'max:10240'],
         ]);
 
         $ticket = $tickets->create($merchant, $request->user(), $data, $request->file('attachments', []));

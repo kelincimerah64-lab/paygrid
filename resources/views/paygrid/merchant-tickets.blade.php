@@ -42,14 +42,18 @@
                 <option value="">Pilih tujuan dulu</option>
             </select>
         </label>
-        <label>Penjelasan
-            <textarea name="description" rows="4" maxlength="2000" required placeholder="Jelaskan detail kendala/kebutuhan...">{{ old('description') }}</textarea>
+        <label>Judul / Ringkasan Masalah
+            <input type="text" name="title" maxlength="100" required placeholder="Contoh: Transaksi gagal, refund belum diterima, dsb." value="{{ old('title') }}">
         </label>
-        <label class="file-pick" title="Lampiran opsional, maksimal 3 file">
-            Lampiran (opsional, maks 3)
-            <input type="file" name="attachments[]" id="ticket-attachments" accept="image/*" multiple>
+        <label>Penjelasan Detail
+            <textarea name="description" rows="4" maxlength="2000" required placeholder="Jelaskan detail kendala/kebutuhan secara lengkap...">{{ old('description') }}</textarea>
+        </label>
+        <label class="file-pick" title="Lampiran opsional, maksimal 5 file">
+            Lampiran (Opsional, Maks 5)
+            <input type="file" name="attachments[]" id="ticket-attachments" accept=".jpg,.jpeg,.png,.pdf,.mp4" multiple>
         </label>
         <div class="ticket-chip-list" id="ticket-attachments-chips"></div>
+        @error('title')<span class="badge danger">{{ $message }}</span>@enderror
         @error('attachments')<span class="badge danger">{{ $message }}</span>@enderror
         @error('attachments.*')<span class="badge danger">{{ $message }}</span>@enderror
         <button class="btn primary compact-btn" style="width:100%; margin:8px 0" type="submit">Submit Tiket</button>
@@ -140,7 +144,7 @@
     if (attachmentsInput && chipList) {
         attachmentsInput.addEventListener('change', function () {
             Array.prototype.forEach.call(attachmentsInput.files, function (file) {
-                if (selectedFiles.length >= 3) return;
+                if (selectedFiles.length >= 5) return;
                 if (selectedFiles.some(function (existing) { return sameFile(existing, file); })) return;
                 selectedFiles.push(file);
             });

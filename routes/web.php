@@ -48,6 +48,7 @@ Route::get('/ma/analytics/tab/{tab}', [MaController::class, 'analyticsTab'])->na
 
 Route::middleware(['auth', 'role:ma,agent,superadmin'])->group(function () {
 Route::get('/ma/tickets', [MaTicketController::class, 'index'])->name('ma.tickets.index');
+Route::post('/ma/tickets', [MaTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('ma.tickets.store');
 });
 
 Route::middleware(['auth', 'role:superadmin'])->group(function () {

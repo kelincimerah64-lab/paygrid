@@ -36,7 +36,10 @@
     @if($ticket->approval_status === 'rejected' && $ticket->approval_note)
         <p class="muted" style="margin-top:8px"><strong>Alasan penolakan:</strong> {{ $ticket->approval_note }}</p>
     @endif
-    <p style="margin-top:12px; white-space:pre-wrap">{{ $ticket->description }}</p>
+    @if($ticket->title)
+        <h3 style="margin:12px 0 4px">{{ $ticket->title }}</h3>
+    @endif
+    <p style="margin-top:4px; white-space:pre-wrap">{{ $ticket->description }}</p>
     @foreach($ticket->attachments ?? [] as $index => $file)
         <a class="btn compact-btn" style="margin-right:6px" href="{{ route('merchant.tickets.attachment', [$merchant, $ticket, $index]) }}">Lampiran {{ $index + 1 }}</a>
     @endforeach
