@@ -9,6 +9,7 @@
     };
     $deptLabel = app(App\Services\MerchantTicketService::class)->departmentLabel($ticket->department);
     $categoryLabel = app(App\Services\MerchantTicketService::class)->categoryLabel($ticket->department, $ticket->category);
+    $ticketsService = app(App\Services\MerchantTicketService::class);
 @endphp
 
 @section('content')
@@ -31,6 +32,14 @@
         <div class="fee-pill"><span>Menu</span><strong>{{ $categoryLabel }}</strong></div>
         <div class="fee-pill"><span>Dibuat</span><strong>{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</strong></div>
     </div>
+    @if(!empty($ticket->metadata))
+        <div class="approval-detail-grid" style="margin-top:8px">
+            @foreach($ticket->metadata as $key => $value)
+                @continue($value === null || $value === '')
+                <div class="fee-pill"><span>{{ $ticketsService->fieldLabel($ticket->category, $key) }}</span><strong>{{ $ticketsService->fieldType($ticket->category, $key) === 'number' ? 'Rp'.number_format((float) $value, 0, ',', '.') : $value }}</strong></div>
+            @endforeach
+        </div>
+    @endif
     <p style="margin-top:12px; white-space:pre-wrap">{{ $ticket->description }}</p>
     @foreach($ticket->attachments ?? [] as $index => $file)
         <a class="btn compact-btn" style="margin-right:6px" href="{{ route('merchant.tickets.attachment', [$ticket->merchant, $ticket, $index]) }}">Lampiran {{ $index + 1 }}</a>

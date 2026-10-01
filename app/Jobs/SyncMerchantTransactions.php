@@ -43,9 +43,8 @@ class SyncMerchantTransactions implements ShouldQueue
 
             $client = $gateways->for($merchant);
             $filters = $this->filters;
-            $pullMode = $filters['pull_mode'] ?? null;
+            $requestedMode = $filters['pull_mode'] ?? null;
 
-            $page = 1;
             $total = 0;
             $skipped = 0;
             $dates = [];
@@ -55,31 +54,41 @@ class SyncMerchantTransactions implements ShouldQueue
             unset($filters['page_size']);
             $statusChecks = $this->syncPendingReferences($merchant, $client, $ingestion, $dates);
 
-            do {
-                [$rows, $pullMode] = $this->pullTransactions($client, $merchant, array_merge($filters, [
-                    'page' => $page,
-                    'page_size' => $pageSize,
-                    'pull_mode' => $pullMode,
-                ]));
+            $modes = $this->modesToTry($merchant, $requestedMode);
+            $pagesUsed = 0;
+            $hitPageLimit = false;
 
-                foreach ($rows as $payload) {
-                    $amount = (int) preg_replace('/\D+/', '', (string) ($payload['amount'] ?? 0));
-                    if ((float) ($payload['amount'] ?? 0) <= 0 || $amount <= 0) {
-                        $skipped++;
-                        continue;
+            foreach ($modes as $mode) {
+                $page = 1;
+                do {
+                    $rows = $this->pullTransactions($client, $merchant, array_merge($filters, [
+                        'page' => $page,
+                        'page_size' => $pageSize,
+                        'pull_mode' => $mode,
+                    ]));
+
+                    foreach ($rows as $payload) {
+                        $amount = (int) preg_replace('/\D+/', '', (string) ($payload['amount'] ?? 0));
+                        if ((float) ($payload['amount'] ?? 0) <= 0 || $amount <= 0) {
+                            $skipped++;
+                            continue;
+                        }
+
+                        $request = $ingestion->ingestForMerchant($merchant, $payload, $merchant->gateway, $merchant->gateway.'_pull', true);
+                        if ($request->submitted_at) {
+                            $dates[$request->submitted_at->toDateString()] = true;
+                        }
+                        $total++;
                     }
 
-                    $request = $ingestion->ingestForMerchant($merchant, $payload, $merchant->gateway, $merchant->gateway.'_pull', true);
-                    if ($request->submitted_at) {
-                        $dates[$request->submitted_at->toDateString()] = true;
-                    }
-                    $total++;
+                    $page++;
+                    $pagesUsed++;
+                } while (count($rows) === $pageSize && $page <= $maxPages);
+
+                if (count($rows) === $pageSize && $page > $maxPages) {
+                    $hitPageLimit = true;
                 }
-
-                $page++;
-            } while (count($rows) === $pageSize && $page <= $maxPages);
-
-            $hitPageLimit = count($rows) === $pageSize && $page > $maxPages;
+            }
 
             foreach (array_keys($dates) as $date) {
                 $rollups->rebuildMerchantDay($merchant, $date, $merchant->gateway.'_pull');
@@ -100,7 +109,7 @@ class SyncMerchantTransactions implements ShouldQueue
                     'last_synced_at' => now('Asia/Jakarta'),
                     'last_gateway_ref_id' => $latest?->gateway_ref_id,
                     'last_payload_at' => $latest?->submitted_at,
-                    'meta' => ['pages' => $page - 1, 'transactions' => $total, 'skipped' => $skipped, 'status_checks' => $statusChecks, 'hit_page_limit' => $hitPageLimit],
+                    'meta' => ['modes' => $modes, 'pages' => $pagesUsed, 'transactions' => $total, 'skipped' => $skipped, 'status_checks' => $statusChecks, 'hit_page_limit' => $hitPageLimit],
                 ],
             );
 
@@ -111,12 +120,12 @@ class SyncMerchantTransactions implements ShouldQueue
                     'direction' => 'pull',
                     'endpoint' => $merchant->gateway === 'artageto'
                         ? '/api/v1/merchants/{merchant_id}/qris'
-                        : (($pullMode ?? config('paygrid.gateway.hilogate.pull_mode', 'qris')) === 'transactions' ? '/api/v1/transactions' : '/api/v1/merchants/{merchant_id}/qris'),
+                        : implode(',', array_map(fn ($mode) => $mode === 'transactions' ? '/api/v1/transactions' : '/api/v1/merchants/{merchant_id}/qris', $modes)),
                     'http_status' => 200,
                     'status' => 'success',
                     'message' => $hitPageLimit ? 'Gateway polling completed; page limit reached.' : 'Gateway polling completed.',
                     'request_meta' => ['filters' => $this->filters],
-                    'response_meta' => ['pages' => $page - 1, 'transactions' => $total, 'skipped' => $skipped, 'status_checks' => $statusChecks, 'hit_page_limit' => $hitPageLimit],
+                    'response_meta' => ['modes' => $modes, 'pages' => $pagesUsed, 'transactions' => $total, 'skipped' => $skipped, 'status_checks' => $statusChecks, 'hit_page_limit' => $hitPageLimit],
                     'started_at' => $startedAt,
                     'finished_at' => now(),
                 ]);
@@ -220,28 +229,32 @@ class SyncMerchantTransactions implements ShouldQueue
     private function pullTransactions(GatewayClientInterface $client, Merchant $merchant, array $filters): array
     {
         if ($merchant->gateway !== 'hilogate') {
-            return [$client->pullTransactions($merchant, $filters), null];
+            return $client->pullTransactions($merchant, $filters);
         }
 
         $filters += $this->defaultHilogateWindow();
 
-        $requestedMode = $filters['pull_mode'] ?? null;
-        $modes = $requestedMode
-            ? [$requestedMode]
-            : ($merchant->merchant_type === 'script' ? ['transactions', 'qris'] : ['qris', 'transactions']);
+        return $client->pullTransactions($merchant, $filters);
+    }
 
-        $lastRows = [];
-        $lastMode = $modes[0];
-        foreach ($modes as $mode) {
-            $rows = $client->pullTransactions($merchant, array_merge($filters, ['pull_mode' => $mode]));
-            $lastRows = $rows;
-            $lastMode = $mode;
-            if ($rows !== [] || (int) ($filters['page'] ?? 1) > 1) {
-                break;
-            }
+    /**
+     * Hilogate exposes transaction data through two independent endpoints
+     * (/api/v1/transactions and /api/v1/merchants/{id}/qris). Which one carries
+     * a given merchant's real traffic is not predictable from merchant_type alone
+     * (some merchants' live QRIS activity only shows up on one of the two), so both
+     * are always polled rather than stopping at the first endpoint that returns rows.
+     */
+    private function modesToTry(Merchant $merchant, ?string $requestedMode): array
+    {
+        if ($merchant->gateway !== 'hilogate') {
+            return [null];
         }
 
-        return [$lastRows, $lastMode];
+        if ($requestedMode) {
+            return [$requestedMode];
+        }
+
+        return $merchant->merchant_type === 'script' ? ['transactions', 'qris'] : ['qris', 'transactions'];
     }
 
     private function defaultHilogateWindow(): array

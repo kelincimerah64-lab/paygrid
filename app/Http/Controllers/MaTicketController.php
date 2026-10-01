@@ -37,9 +37,13 @@ class MaTicketController extends Controller
             'active' => 'create-ticket',
             'merchants' => $merchants,
             'groupedMerchants' => $groupedMerchants,
-            'csCategories' => MerchantTicketService::CS_CATEGORIES,
-            'techCategories' => MerchantTicketService::TECH_CATEGORIES,
-            'financeCategories' => MerchantTicketService::FINANCE_CATEGORIES,
+            'cards' => MerchantTicketService::CARDS,
+            'categoriesByDepartment' => [
+                'cs' => MerchantTicketService::CS_CATEGORIES,
+                'tech' => MerchantTicketService::TECH_CATEGORIES,
+                'finance' => MerchantTicketService::FINANCE_CATEGORIES,
+            ],
+            'categoryMeta' => MerchantTicketService::CATEGORY_META,
         ]);
     }
 
@@ -51,22 +55,30 @@ class MaTicketController extends Controller
             ? Merchant::query()->where('general_ticket_enabled', true)->pluck('id')
             : $scope->merchantIds($user);
 
-        $data = $request->validate([
+        $cardKey = $request->input('card');
+        $cardDef = MerchantTicketService::CARDS[$cardKey] ?? null;
+        $department = $cardDef['department'] ?? null;
+        $categoryKeys = $department ? array_keys($tickets->categoriesFor($department)) : [];
+        $categoryKey = (string) $request->input('category');
+
+        $validated = $request->validate(array_merge([
             'merchant_id' => ['required', Rule::in($merchantIds)],
-            'department' => ['required', Rule::in(MerchantTicketService::DEPARTMENTS)],
-            'category' => ['required'],
-            'title' => ['required', 'string', 'max:100'],
-            'description' => ['required', 'string', 'max:2000'],
+            'card' => ['required', Rule::in(array_keys(MerchantTicketService::CARDS))],
+            'category' => ['required', Rule::in($categoryKeys)],
+            'description' => ['required', 'string', 'max:500'],
             'attachments' => ['nullable', 'array', 'max:5'],
             'attachments.*' => ['mimes:jpg,jpeg,png,pdf,mp4', 'max:10240'],
-        ]);
+        ], $tickets->fieldRules($categoryKey)));
 
-        $categoryKeys = array_keys($tickets->categoriesFor($data['department']));
-        if (! in_array($data['category'], $categoryKeys, true)) {
-            return back()->withErrors(['category' => 'Menu tidak sesuai dengan tujuan yang dipilih.'])->withInput();
-        }
+        $data = [
+            'department' => $department,
+            'category' => $validated['category'],
+            'title' => $validated['title'] ?? null,
+            'description' => $validated['description'],
+            'metadata' => $tickets->metadataFrom($categoryKey, $validated),
+        ];
 
-        $merchant = Merchant::query()->where('general_ticket_enabled', true)->findOrFail($data['merchant_id']);
+        $merchant = Merchant::query()->where('general_ticket_enabled', true)->findOrFail($validated['merchant_id']);
 
         $ticket = $tickets->create($merchant, $user, $data, $request->file('attachments', []));
         $audit->record('merchant_ticket.created', $ticket, null, $ticket->only(['merchant_id', 'department', 'category', 'ticket_no']));

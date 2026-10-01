@@ -1,0 +1,14 @@
+{
+  "name": "PayGrid Toko",
+  "short_name": "PayGrid Toko",
+  "description": "Ringkasan transaksi toko - PayGrid",
+  "start_url": "/mobile/dashboard",
+  "scope": "/mobile/",
+  "display": "standalone",
+  "background_color": "#f5f8fc",
+  "theme_color": "#1557c2",
+  "icons": [
+    { "src": "/images/mobile-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/images/mobile-icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

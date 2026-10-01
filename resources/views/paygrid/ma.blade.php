@@ -9,14 +9,6 @@
 @endphp
 
 @section('content')
-<section class="qris-hero">
-    <div>
-        <div class="eyebrow">MA</div>
-        <h1>{{ $title }}</h1>
-        <div class="sub">Dashboard MA berbasis DB PayGrid lokal: transaksi, merchant, agen, approval, fee, dan mapping.</div>
-    </div>
-    @if($active === 'report')<a class="btn primary" href="{{ route('ma.report.export', request()->query()) }}">Export Excel</a>@endif
-</section>
 
 @if(session('status'))<section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>@endif
 @if($errors->any())<section class="card pad section"><span class="badge danger">{{ $errors->first() }}</span></section>@endif
@@ -40,47 +32,139 @@
 @endif
 
 @if($active === 'overview')
-    @php
-        $overviewCards = [
-            'volume_success' => ['label' => 'Volume Sukses', 'value' => $money($summary['volume_success']), 'class' => 'success', 'note' => 'Klik untuk list trx sukses'],
-            'pending_transaction_amount' => ['label' => 'Pending Transaksi', 'value' => $money($summary['pending_transaction_amount'] ?? $summary['pending_balance'] ?? 0), 'class' => 'pending', 'note' => 'Nominal trx pending dari topup_requests'],
-            'total_settlement' => ['label' => 'Settlement', 'value' => $money($summary['total_settlement']), 'class' => '', 'note' => 'Net dari trx sukses'],
-            'hg_settlement' => ['label' => 'Settlement Real HG', 'value' => $money($summary['hg_settlement']), 'class' => 'primary', 'note' => 'Status final dari endpoint HG'],
-            'trx_total' => ['label' => 'Transaksi Sukses', 'value' => number_format($summary['trx_total'], 0, ',', '.'), 'class' => 'success', 'note' => 'Hanya status sukses'],
-            'trx_pending' => ['label' => 'Pending Transaksi', 'value' => number_format($summary['trx_pending'], 0, ',', '.'), 'class' => 'pending', 'note' => 'Klik untuk lihat list'],
-            'trx_expired' => ['label' => 'Expired Transaksi', 'value' => number_format($summary['trx_expired'], 0, ',', '.'), 'class' => 'expired', 'note' => 'Klik untuk lihat list'],
-            'issue_total' => ['label' => 'Total Issue', 'value' => number_format($summary['issue_total'], 0, ',', '.'), 'class' => '', 'note' => $summary['issue_solved'].' solved'],
-            'issue_solved' => ['label' => 'Issue Solved', 'value' => number_format($summary['issue_solved'], 0, ',', '.'), 'class' => 'success', 'note' => 'Ticket status done'],
-            'agent_total' => ['label' => 'Total Agen', 'value' => number_format($summary['agent_total'], 0, ',', '.'), 'class' => '', 'note' => 'Klik untuk list agen'],
-            'merchant_total' => ['label' => 'Total Toko', 'value' => number_format($summary['merchant_total'], 0, ',', '.'), 'class' => '', 'note' => 'Klik untuk list toko'],
-            'unassigned' => ['label' => 'Belum Assign Agen', 'value' => number_format($summary['unassigned'], 0, ',', '.'), 'class' => 'pending', 'note' => 'Toko tanpa agen'],
-            'fee_ma' => ['label' => 'Fee MA', 'value' => $money($summary['fee_ma']), 'class' => 'primary', 'note' => 'Dari trx sukses'],
-            'fee_agent' => ['label' => 'Fee Agen', 'value' => $money($summary['fee_agent']), 'class' => '', 'note' => 'Dari trx sukses'],
-        ];
-    @endphp
     <section class="card pad section" style="padding-bottom:12px"><span class="muted">Periode data di bawah ini:</span> <span class="badge ok">{{ $periodLabel }}</span></section>
     <div data-live-root data-live-interval="15000">
-    <section class="grid qris-metrics history-metrics section" data-live-region="ma-overview-cards">
-        @foreach($overviewCards as $key => $card)<button class="card pad qris-metric ma-metric-card {{ $card['class'] }}" type="button" data-ma-detail="{{ $key }}"><span>{{ $card['label'] }}</span><strong>{{ $card['value'] }}</strong><small>{{ $card['note'] }}</small></button>@endforeach
+
+    @php
+        $statTiles = [
+            'revenue_today' => ['title' => 'Collection Volume', 'label' => 'Revenue Today', 'trxLabel' => 'Collection TRX', 'icon' => '$', 'money' => true, 'color' => 'navy'],
+            'successful_volume' => ['title' => 'Disbursement Volume', 'label' => 'Successful Volume', 'trxLabel' => 'Withdrawal TRX', 'icon' => '&#10003;', 'money' => true, 'color' => 'teal'],
+        ];
+    @endphp
+
+    <section class="grid ma-hero-grid section">
+        <div class="card pad ma-hero-card">
+            <div class="ma-hero-row">
+                <div class="ma-hero-main"><span class="eyebrow">Total Liquidity (Volume Sukses)</span><div class="ma-hero-value">{{ $money($summary['volume_success']) }}</div></div>
+                <div class="ma-hero-chips">
+                    <div class="ma-hero-chip"><span>Available Balance</span><strong>{{ $money($summary['available_balance']) }}</strong></div>
+                    <div class="ma-hero-chip"><span>Pending Settlement</span><strong>{{ $money($summary['pending_settlement']) }}</strong></div>
+                    <div class="ma-hero-chip"><span>Success Rate</span><strong>{{ number_format($summary['success_rate'], 2, ',', '.') }}%</strong></div>
+                    <div class="ma-hero-chip"><span>Fee MA</span><strong>{{ $money($summary['fee_ma']) }}</strong></div>
+                    <div class="ma-hero-chip"><span>Fee Agent</span><strong>{{ $money($summary['fee_agent']) }}</strong></div>
+                    <div class="ma-hero-chip"><span>Fee Marketing</span><strong>-</strong></div>
+                    <div class="ma-hero-chip"><span>Fee Disbursement</span><strong>-</strong></div>
+                </div>
+                <div class="ma-hero-spark-box"><canvas data-spark="{{ json_encode($overviewQuickStats['successful_volume']['spark'] ?? []) }}" data-spark-color="#1557c2"></canvas></div>
+            </div>
+        </div>
     </section>
-    <section class="card qris-panel section" data-live-region="ma-ranking"><div class="qris-toolbar"><h2>Analytics Top 10 Terendah</h2><span class="muted">Periode {{ $periodLabel }} | hanya trx sukses</span><div class="ma-tabs"><button class="btn compact-btn active" type="button" data-ma-tab="toko">Toko</button><button class="btn compact-btn" type="button" data-ma-tab="agen">Agen</button></div></div><div data-ma-panel="toko"><table class="table qris-table ma-ranking-store-table"><thead><tr><th>Toko</th><th>TRX Sukses</th><th>Volume Sukses</th></tr></thead><tbody>@forelse($storeRanking as $row)<tr><td>{{ $row->merchant?->name ?: '-' }}</td><td>{{ $row->trx }}</td><td>{{ $money($row->volume) }}</td></tr>@empty<tr><td colspan="3" class="empty"><strong>Belum ada data toko.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div><div data-ma-panel="agen" hidden><table class="table qris-table ma-ranking-agent-table"><thead><tr><th>Agen</th><th>TRX Sukses</th><th>Volume Sukses</th></tr></thead><tbody>@forelse($agentRanking as $row)<tr><td>{{ $row->agent?->name ?: '-' }}</td><td>{{ $row->trx }}</td><td>{{ $money($row->volume) }}</td></tr>@empty<tr><td colspan="3" class="empty"><strong>Belum ada data agen.</strong>Filter periode ini belum memiliki transaksi sukses.</td></tr>@endforelse</tbody></table></div></section>
-    <section class="card qris-panel ma-store-panel section" data-live-region="ma-store-summary"><div class="qris-toolbar"><h2>List Toko</h2><span class="muted">Top 10 trx sukses terendah | {{ $periodLabel }}</span></div><div class="table-wrap sticky-head"><table class="table qris-table ma-store-summary-table"><thead><tr><th>Nama Toko</th><th>Agen</th><th>Transaksi Sukses</th><th>Volume Sukses</th><th>Saldo Pending HG</th><th>Settlement</th></tr></thead><tbody>@forelse($storeSummaries as $store)<tr><td><strong>{{ $store['name'] }}</strong></td><td>{{ $store['agent'] }}</td><td>{{ number_format($store['trx_total'], 0, ',', '.') }}</td><td>{{ $money($store['volume_success']) }}</td><td>{{ $money($store['pending_balance']) }}</td><td>{{ $money($store['settlement']) }}</td></tr>@empty<tr><td colspan="6" class="empty"><strong>Belum ada toko.</strong>Belum ada toko sesuai filter ini.</td></tr>@endforelse</tbody></table></div></section>
+
+    <section class="grid ma-stat-tiles section">
+        @foreach($statTiles as $key => $tile)
+            @php $stat = $overviewQuickStats[$key] ?? ['value' => 0, 'change' => null, 'spark' => []]; @endphp
+            <div class="card pad ma-stat-tile">
+                <div class="ma-stat-tile-title">{{ $tile['title'] }}</div>
+                <div class="ma-stat-tile-head"><span class="ma-stat-icon {{ $tile['color'] }}">{!! $tile['icon'] !!}</span><span>{{ $tile['label'] }}</span></div>
+                <strong>{{ $tile['money'] ? $money($stat['value']) : number_format($stat['value'], 2, ',', '.').'%' }}</strong>
+                <div class="ma-stat-trend {{ $stat['change'] === null ? '' : ($stat['change'] >= 0 ? 'up' : 'down') }}">{!! $stat['change'] === null ? '-' : (($stat['change'] >= 0 ? '&#9650; ' : '&#9660; ').number_format(abs($stat['change']), 1, ',', '.').'%') !!} vs Kemarin</div>
+                <div class="ma-spark-box"><canvas data-spark="{{ json_encode($stat['spark']) }}" data-spark-color="#1557c2"></canvas></div>
+                <div class="ma-stat-tile-foot">#{{ $tile['trxLabel'] }} <strong>{{ number_format($overviewDisbursement['total_trx'] ?? 0, 0, ',', '.') }}</strong></div>
+            </div>
+        @endforeach
+    </section>
+
+    <section class="card pad section">
+        <div class="ma-flow-head"><div><h2>Disbursement Hari Ini</h2><span class="muted">Data 00:00:00 &ndash; Present (WIB)</span></div></div>
+        <div class="grid ma-disb-tiles">
+            <div class="ma-disb-tile"><span>Total Disbursement</span><strong>{{ $money($overviewDisbursement['total'] ?? 0) }}</strong></div>
+            <div class="ma-disb-tile"><span>Total Disbursement Transaction</span><strong>{{ number_format($overviewDisbursement['total_trx'] ?? 0, 0, ',', '.') }}</strong></div>
+            <div class="ma-disb-tile"><span>Total Disbursement Pending</span><strong>{{ $money($overviewDisbursement['pending'] ?? 0) }}</strong></div>
+            <div class="ma-disb-tile"><span>Total Disbursement Pending Transaction</span><strong>{{ number_format($overviewDisbursement['pending_trx'] ?? 0, 0, ',', '.') }}</strong></div>
+        </div>
+    </section>
+
+    <section class="card pad ma-flow-card section">
+        <div class="ma-flow-head">
+            <div>
+                <h2>Transaction Flow</h2>
+                <span class="muted">Today vs Kemarin (WIB)</span>
+            </div>
+            <div class="ma-flow-controls">
+                <div class="ma-tabs" data-flow-metric-group><button class="btn compact-btn active" type="button" data-flow-metric="volume">Volume</button><button class="btn compact-btn" type="button" data-flow-metric="withdrawal">Withdrawal</button><button class="btn compact-btn" type="button" data-flow-metric="pending_amount">Pending Amount</button><button class="btn compact-btn" type="button" data-flow-metric="pending_trx">Pending TRX</button></div>
+                <div class="ma-tabs" data-flow-range-group><button class="btn compact-btn active" type="button" data-flow-range="1d">1D</button><button class="btn compact-btn" type="button" data-flow-range="7d">7D</button><button class="btn compact-btn" type="button" data-flow-range="month">Month</button></div>
+            </div>
+        </div>
+        <div class="ma-flow-chart-box"><canvas id="ma-overview-flow-chart"></canvas></div>
+    </section>
+
+    <section class="grid ma-bottom-grid section">
+        <div class="card pad ma-mini-panel">
+            <div class="ma-mini-panel-head"><h3>QRIS Source</h3><a class="ma-view-all" href="{{ route('ma.report') }}">View All</a></div>
+            <div class="ma-mini-list">
+                @php $sourceMax = $topPaymentSources->max('volume') ?: 1; @endphp
+                @forelse($topPaymentSources as $i => $row)
+                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['channel'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $sourceMax * 100) }}%"></span></span></span><strong>{{ $money($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
+                @empty
+                    <p class="muted" style="margin:0">Belum ada transaksi sukses hari ini.</p>
+                @endforelse
+            </div>
+        </div>
+        <div class="card pad ma-mini-panel">
+            <div class="ma-mini-panel-head"><h3>Top Ten Merchant Daily</h3><a class="ma-view-all" href="{{ route('ma.stores') }}">View All</a></div>
+            <div class="ma-mini-list">
+                @php $topMax = $topMerchants->max('volume') ?: 1; @endphp
+                @forelse($topMerchants as $i => $row)
+                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row->merchant?->name ?: '-' }}<span class="ma-mini-bar"><span style="width:{{ round($row->volume / $topMax * 100) }}%"></span></span></span><strong>{{ $money($row->volume) }}<small class="muted" style="display:block;font-weight:700">Withdrawal: {{ $money($row->withdrawal) }}</small></strong></div>
+                @empty
+                    <p class="muted" style="margin:0">Belum ada data toko.</p>
+                @endforelse
+            </div>
+        </div>
+        <div class="card pad ma-mini-panel">
+            <h3>Analytics</h3>
+            <p class="muted" style="margin:0">Segera hadir.</p>
+        </div>
+    </section>
+
+    <section class="grid ma-withdrawal-grid section">
+        <div class="card pad ma-mini-panel">
+            <div class="ma-mini-panel-head"><h3>Withdrawal Selesai per Bank</h3><span class="muted" style="font-size:11px">Hari ini</span></div>
+            <div class="ma-mini-list">
+                @php $wdCompletedMax = $withdrawalsCompletedByBank->max('volume') ?: 1; @endphp
+                @forelse($withdrawalsCompletedByBank as $i => $row)
+                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['bank_name'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $wdCompletedMax * 100) }}%"></span></span></span><strong>{{ $money($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
+                @empty
+                    <p class="muted" style="margin:0">Belum ada withdrawal selesai hari ini.</p>
+                @endforelse
+            </div>
+        </div>
+        <div class="card pad ma-mini-panel">
+            <div class="ma-mini-panel-head"><h3>Withdrawal Nyangkut per Bank</h3><span class="muted" style="font-size:11px">Semua periode</span></div>
+            <div class="ma-mini-list">
+                @php $wdPendingMax = $withdrawalsPendingByBank->max('volume') ?: 1; @endphp
+                @forelse($withdrawalsPendingByBank as $i => $row)
+                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['bank_name'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $wdPendingMax * 100) }}%"></span></span></span><strong>{{ $money($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
+                @empty
+                    <p class="muted" style="margin:0">Gak ada withdrawal yang nyangkut.</p>
+                @endforelse
+            </div>
+        </div>
+    </section>
+
     </div>
-    <script type="application/json" id="ma-overview-details">@json($overviewDetails)</script>
+    <script type="application/json" id="ma-overview-flow-data">@json($overviewDailySeries)</script>
+    <script type="application/json" id="ma-overview-hourly-flow-data">@json($overviewHourlyFlow)</script>
 @endif
 
 @if($active === 'report')
     <section class="card pad section ma-period-card"><form method="get" class="ma-period-form"><input type="hidden" name="agent_id" value="{{ $filters['agent_id'] }}"><input type="hidden" name="store_id" value="{{ $filters['store_id'] }}"><input type="hidden" name="agents_view" value="{{ $filters['agents_view'] }}"><label>Periode<select name="period" data-ma-period-select><option value="this_month" @selected($filters['period'] === 'this_month')>Bulan Ini</option><option value="last_month" @selected($filters['period'] === 'last_month')>Bulan Lalu</option><option value="last_30_days" @selected($filters['period'] === 'last_30_days')>30 Hari</option><option value="custom" @selected($filters['period'] === 'custom')>Custom</option><option value="all" @selected($filters['period'] === 'all')>Semua Periode</option></select></label><label>Dari<input type="date" name="from" value="{{ $dateInput($dataFilters['from'] ?? $filters['from']) }}" data-ma-period-custom></label><label>Sampai<input type="date" name="to" value="{{ $dateInput($dataFilters['to'] ?? $filters['to']) }}" data-ma-period-custom></label><button class="btn primary compact-btn">Terapkan</button><span class="badge ok">{{ $periodLabel }}</span></form></section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Report per Agen</h2><p class="muted" style="margin:4px 0 0">Default menampilkan 5 agen teratas. Klik baris agen untuk melihat toko, lalu klik toko untuk membuka transaksi toko tersebut.</p></div><a class="btn compact-btn" href="{{ route('ma.report', $filters['agents_view'] === 'all' ? request()->except(['page', 'agents_view']) : array_merge(request()->except('page'), ['agents_view' => 'all'])) }}">{{ $filters['agents_view'] === 'all' ? 'Top 5 Agen' : 'Semua Agen' }}</a></div><div class="table-wrap"><table class="table qris-table ma-agent-report-table"><thead><tr><th>Nama Agent</th><th>Toko</th><th>Total IDR Sukses</th><th>Total Pending</th><th>Settled</th></tr></thead><tbody>@forelse($reportAgents as $agent)<tr class="ma-click-row {{ (string) $filters['agent_id'] === (string) $agent['id'] ? 'active' : '' }}" onclick="window.location='{{ route('ma.report', array_merge(request()->except(['page', 'store_id']), ['agent_id' => $agent['id']])) }}'"><td><strong>{{ $agent['name'] }}</strong></td><td>{{ number_format($agent['stores'], 0, ',', '.') }}</td><td>{{ number_format($agent['volume'], 0, ',', '.') }}</td><td>{{ number_format($agent['pending'], 0, ',', '.') }}</td><td>{{ number_format($agent['settled'], 0, ',', '.') }}</td></tr>@empty<tr><td colspan="5" class="empty">Belum ada agen.</td></tr>@endforelse</tbody></table></div></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Report per Agen</h2><p class="muted" style="margin:4px 0 0">Default menampilkan 5 agen teratas. Klik baris agen untuk melihat toko, lalu klik toko untuk membuka transaksi toko tersebut.</p></div><div style="display:flex;gap:8px"><a class="btn compact-btn" href="{{ route('ma.report.export', request()->query()) }}">Export Excel</a><a class="btn compact-btn" href="{{ route('ma.report', $filters['agents_view'] === 'all' ? request()->except(['page', 'agents_view']) : array_merge(request()->except('page'), ['agents_view' => 'all'])) }}">{{ $filters['agents_view'] === 'all' ? 'Top 5 Agen' : 'Semua Agen' }}</a></div></div><div class="table-wrap"><table class="table qris-table ma-agent-report-table"><thead><tr><th>Nama Agent</th><th>Toko</th><th>Total IDR Sukses</th><th>Total Pending</th><th>Settled</th></tr></thead><tbody>@forelse($reportAgents as $agent)<tr class="ma-click-row {{ (string) $filters['agent_id'] === (string) $agent['id'] ? 'active' : '' }}" onclick="window.location='{{ route('ma.report', array_merge(request()->except(['page', 'store_id']), ['agent_id' => $agent['id']])) }}'"><td><strong>{{ $agent['name'] }}</strong></td><td>{{ number_format($agent['stores'], 0, ',', '.') }}</td><td>{{ number_format($agent['volume'], 0, ',', '.') }}</td><td>{{ number_format($agent['pending'], 0, ',', '.') }}</td><td>{{ number_format($agent['settled'], 0, ',', '.') }}</td></tr>@empty<tr><td colspan="5" class="empty">Belum ada agen.</td></tr>@endforelse</tbody></table></div></section>
     @if($selectedAgent)
-        <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Toko {{ $selectedAgent->name }}</h2><p class="muted" style="margin:4px 0 0">Pilih toko untuk menampilkan transaksi toko di tabel report.</p></div><a class="btn compact-btn" href="{{ route('ma.report', request()->except(['page', 'store_id'])) }}">Semua Toko</a></div><div class="ma-report-shops">@forelse($selectedAgentStores as $store)<a class="report-pill {{ (string) $filters['store_id'] === (string) $store->id ? 'active' : '' }}" href="{{ route('ma.report', array_merge(request()->except('page'), ['agent_id' => $selectedAgent->id, 'store_id' => $store->id])) }}"><b>{{ $store->name }}</b><span>{{ number_format((int) ($store->metric_trx_total ?? 0), 0, ',', '.') }} trx | {{ $money((int) ($store->metric_volume_success ?? 0)) }}</span></a>@empty<p class="muted">Agen ini belum punya toko.</p>@endforelse</div></section>
+        <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Toko {{ $selectedAgent->name }}</h2><p class="muted" style="margin:4px 0 0">Pilih toko untuk menampilkan transaksi toko di tabel report.</p></div><a class="btn compact-btn" href="{{ route('ma.report', request()->except(['page', 'store_id'])) }}">Semua Toko</a></div><div class="ma-report-shops">@forelse($selectedAgentStores as $store)<a class="report-pill {{ (string) $filters['store_id'] === (string) $store->id ? 'active' : '' }}" href="{{ route('ma.report', array_merge(request()->except('page'), ['agent_id' => $selectedAgent->id, 'store_id' => $store->id])) }}"><b>{{ $store->name }}</b><span>{{ number_format((int) ($store->metric_trx_total ?? 0), 0, ',', '.') }} trx | {{ $money((int) ($store->metric_volume_success ?? 0)) }}</span><span class="muted">{{ $store->metric_last_transaction_at ? $store->metric_last_transaction_at->timezone('Asia/Jakarta')->format('d M Y H:i') : 'Belum ada transaksi' }}</span></a>@empty<p class="muted">Agen ini belum punya toko.</p>@endforelse</div></section>
     @endif
-    @if($selectedStore)
-        <div data-live-root data-live-interval="15000"><section class="grid qris-metrics section" data-live-region="ma-report-cards"><div class="card pad qris-metric success"><span>TRX Sukses</span><strong>{{ number_format($selectedStoreStats['trx_total'] ?? 0, 0, ',', '.') }}</strong><small>{{ $selectedStore->name }}</small></div><div class="card pad qris-metric success"><span>Sukses</span><strong>{{ number_format($selectedStoreStats['trx_success'] ?? 0, 0, ',', '.') }}</strong><small>{{ $periodLabel }}</small></div><div class="card pad qris-metric pending"><span>Pending Transaksi</span><strong>{{ number_format($selectedStoreStats['trx_pending'] ?? 0, 0, ',', '.') }}</strong><small>Total sesuai periode</small></div><div class="card pad qris-metric primary"><span>Settlement</span><strong>{{ $money($selectedStoreStats['settlement'] ?? 0) }}</strong><small>Net dari trx sukses</small></div></section>
-        <section class="card qris-panel section" data-live-region="ma-report-table"><div class="qris-toolbar"><h2>Transaksi {{ $selectedStore->name }}</h2><span class="muted">25 transaksi per halaman | {{ $periodLabel }}</span></div><div class="table-wrap sticky-head"><table class="table qris-table ma-report-table"><thead><tr><th>Masuk</th><th>Sukses</th><th>Durasi</th><th>Toko</th><th>Agen</th><th>Status</th><th>Amount</th><th>Reference</th><th>RRN</th><th>Payment ID</th><th>Net</th><th>Settlement</th><th>Sumber TRX</th></tr></thead><tbody>@forelse($transactions as $trx)<tr data-agent-id="{{ $trx->merchant?->agent?->id }}" data-store-id="{{ $trx->merchant?->id }}"><td class="time-cell">{{ $trx->submitted_at?->format('d/m/y') }}<span>{{ $trx->submitted_at?->format('H.i') }} WIB</span></td><td class="time-cell">{{ $trx->succeeded_at?->format('d/m/y') ?? '-' }}<span>{{ $trx->succeeded_at?->format('H.i') ? $trx->succeeded_at?->format('H.i').' WIB' : '-' }}</span></td><td>{{ $trx->successDurationLabel() }}</td><td>{{ $trx->merchant?->name ?: '-' }}</td><td>{{ $trx->merchant?->agent?->name ?: '-' }}</td><td><span class="badge {{ $badge($trx->status) }}">{{ App\Support\PayGridLabels::status($trx->status) }}</span></td><td>{{ $money($trx->amount) }}</td><td>{{ $trx->customer_reference ?: $trx->gateway_ref_id ?: '-' }}</td><td>{{ $trx->rrn ?: '-' }}</td><td>{{ $trx->payment_id ?: '-' }}</td><td>{{ $money($trx->net_amount) }}</td><td>{{ $trx->status === 'success' ? 'Settleable' : 'Pending Transaksi' }}</td><td>{{ $trx->data_source }}</td></tr>@empty<tr><td colspan="13" class="empty"><strong>Belum ada transaksi.</strong>Pilih periode/status lain atau tunggu sync Hilogate berikutnya.</td></tr>@endforelse</tbody></table></div><div class="qris-pagination pad"><div class="pager-summary">Showing {{ $transactions->firstItem() ?? 0 }} to {{ $transactions->lastItem() ?? 0 }}</div><div class="pager-links">@if($transactions->onFirstPage())<span class="pager disabled">Prev</span>@else<a class="pager" href="{{ $transactions->previousPageUrl() }}">Prev</a>@endif @if($transactions->hasMorePages())<a class="pager" href="{{ $transactions->nextPageUrl() }}">Next</a>@else<span class="pager disabled">Next</span>@endif</div></div></section></div>
-    @else
-        <section class="card pad section"><h2>Pilih Toko</h2><p class="muted">Transaksi tidak dimuat dulu supaya report tetap ringan. Pilih agen, lalu pilih toko untuk melihat transaksi paginated dari topup_requests.</p></section>
-    @endif
+    <div data-live-root data-live-interval="15000"><section class="grid qris-metrics section" data-live-region="ma-report-cards"><div class="card pad qris-metric success"><span>TRX Sukses</span><strong>{{ number_format($selectedStoreStats['trx_total'] ?? 0, 0, ',', '.') }}</strong><small>{{ $selectedStore->name ?? 'Semua Toko' }}</small></div><div class="card pad qris-metric success"><span>Sukses</span><strong>{{ number_format($selectedStoreStats['trx_success'] ?? 0, 0, ',', '.') }}</strong><small>{{ $periodLabel }}</small></div><div class="card pad qris-metric pending"><span>Pending Transaksi</span><strong>{{ number_format($selectedStoreStats['trx_pending'] ?? 0, 0, ',', '.') }}</strong><small>Total sesuai periode</small></div><div class="card pad qris-metric primary"><span>Settlement</span><strong>{{ $money($selectedStoreStats['settlement'] ?? 0) }}</strong><small>Net dari trx sukses</small></div></section>
+        <section class="card qris-panel section" data-live-region="ma-report-table"><div class="qris-toolbar"><h2>Transaksi {{ $selectedStore->name ?? 'Semua Toko' }}</h2><span class="muted">25 transaksi per halaman | {{ $periodLabel }}</span></div><div class="table-wrap sticky-head"><table class="table qris-table ma-report-table"><thead><tr><th>Masuk</th><th>Sukses</th><th>Durasi</th><th>Toko</th><th>Agen</th><th>Status</th><th>Amount</th><th>Reference</th><th>RRN</th><th>Payment ID</th><th>Net</th><th>Settlement</th><th>Sumber TRX</th></tr></thead><tbody>@forelse($transactions as $trx)<tr data-agent-id="{{ $trx->merchant?->agent?->id }}" data-store-id="{{ $trx->merchant?->id }}"><td class="time-cell">{{ $trx->submitted_at?->timezone('Asia/Jakarta')->format('d/m/y') }}<span>{{ $trx->submitted_at?->timezone('Asia/Jakarta')->format('H.i') }} WIB</span></td><td class="time-cell">{{ $trx->succeeded_at?->timezone('Asia/Jakarta')->format('d/m/y') ?? '-' }}<span>{{ $trx->succeeded_at?->timezone('Asia/Jakarta')->format('H.i') ? $trx->succeeded_at?->timezone('Asia/Jakarta')->format('H.i').' WIB' : '-' }}</span></td><td>{{ $trx->successDurationLabel() }}</td><td>{{ $trx->merchant?->name ?: '-' }}</td><td>{{ $trx->merchant?->agent?->name ?: '-' }}</td><td><span class="badge {{ $badge($trx->status) }}">{{ App\Support\PayGridLabels::status($trx->status) }}</span></td><td>{{ $money($trx->amount) }}</td><td>{{ $trx->customer_reference ?: $trx->gateway_ref_id ?: '-' }}</td><td>{{ $trx->rrn ?: '-' }}</td><td>{{ $trx->payment_id ?: '-' }}</td><td>{{ $money($trx->net_amount) }}</td><td>{{ $trx->status === 'success' ? 'Settleable' : 'Pending Transaksi' }}</td><td>{{ $trx->data_source }}</td></tr>@empty<tr><td colspan="13" class="empty"><strong>Belum ada transaksi.</strong>Pilih periode/status lain atau tunggu sync Hilogate berikutnya.</td></tr>@endforelse</tbody></table></div><div class="qris-pagination pad"><div class="pager-summary">Showing {{ $transactions->firstItem() ?? 0 }} to {{ $transactions->lastItem() ?? 0 }}</div><div class="pager-links">@if($transactions->onFirstPage())<span class="pager disabled">Prev</span>@else<a class="pager" href="{{ $transactions->previousPageUrl() }}">Prev</a>@endif @if($transactions->hasMorePages())<a class="pager" href="{{ $transactions->nextPageUrl() }}">Next</a>@else<span class="pager disabled">Next</span>@endif</div></div></section></div>
 @endif
 
 @if($active === 'fee')
@@ -170,13 +254,13 @@
             ];
         @endphp
         <tr>
-            <td><strong>{{ $r->store_name }}</strong><br><span class="muted truncate" style="display:block; max-width:180px">{{ $payload['topup_url'] ?? $merchant?->topup_url ?? $r->engine_name ?? '-' }}</span></td>
-            <td>{{ $r->agent?->name ?: '-' }}</td>
-            <td>{{ $requestFeeMenu ? ($requestMenuOptions[$requestFeeMenu]['label'] ?? $requestFeeMenu) : '-' }}</td>
-            <td>{{ $pct($merchantMdr) }}</td>
-            <td>{{ $adminName }}<br><span class="muted truncate" style="display:block; max-width:180px">{{ $adminEmail }}</span></td>
-            <td><span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></td>
-            <td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="approval-detail-{{ $r->id }}">Detail</button>
+            <td data-label="Toko"><strong>{{ $r->store_name }}</strong><br><span class="muted truncate" style="display:block; max-width:180px">{{ $payload['topup_url'] ?? $merchant?->topup_url ?? $r->engine_name ?? '-' }}</span></td>
+            <td data-label="Agen">{{ $r->agent?->name ?: '-' }}</td>
+            <td data-label="Menu Fee">{{ $requestFeeMenu ? ($requestMenuOptions[$requestFeeMenu]['label'] ?? $requestFeeMenu) : '-' }}</td>
+            <td data-label="Merchant MDR">{{ $pct($merchantMdr) }}</td>
+            <td data-label="Admin">{{ $adminName }}<br><span class="muted truncate" style="display:block; max-width:180px">{{ $adminEmail }}</span></td>
+            <td data-label="Status"><span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></td>
+            <td data-label=""><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="approval-detail-{{ $r->id }}">Detail</button>
             <div class="approval-modal" id="approval-detail-{{ $r->id }}" hidden><div class="approval-modal-card">
                 <div class="qris-toolbar"><div><h2>{{ $r->store_name }}</h2><p class="muted" style="margin:4px 0 0">Agen: {{ $r->agent?->name ?: '-' }} &mdash; <span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
                 <div class="user-access-card"><strong>ADMIN</strong><h2>{{ $adminName }}</h2><div class="muted truncate">{{ $adminEmail }}</div><b>PW: {{ $adminPassword }}</b></div>
@@ -209,13 +293,13 @@
 @endif
 
 @if($active === 'mapping')
-    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Mapping Agen</h2><p class="muted" style="margin:4px 0 0">Ubah agen per toko. Perubahan disimpan ke DB lokal merchant dan fee agen/MA dihitung ulang.</p></div></div><table class="table qris-table ma-mapping-table"><thead><tr><th>Toko</th><th>Agen Sekarang</th><th>Pilih Agen</th><th>Simpan</th></tr></thead><tbody>@forelse($merchants as $m)<tr><td><strong>{{ $m->name }}</strong><br><span class="muted">Status: {{ ucfirst($m->approval_status) }}</span><br><span class="muted">{{ $m->merchant_id ?: $m->slug }}</span></td><td><div class="current-agent-box"><span>Agen Sekarang</span><strong>{{ $m->agent?->name ?: 'Belum assign' }}</strong></div></td><td><form id="map-{{ $m->id }}" method="post" action="{{ route('ma.mapping.update', $m) }}">@csrf<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}" @selected($m->agent_id === $a->id)>{{ $a->name }}</option>@endforeach</select></form></td><td><button form="map-{{ $m->id }}" class="btn primary compact-btn">Simpan Agen</button></td></tr>@empty<tr><td colspan="4" class="empty">Belum ada toko untuk mapping.</td></tr>@endforelse</tbody></table></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Mapping Agen</h2><p class="muted" style="margin:4px 0 0">Ubah agen per toko. Perubahan disimpan ke DB lokal merchant dan fee agen/MA dihitung ulang.</p></div></div><table class="table qris-table ma-mapping-table"><thead><tr><th>Toko</th><th>Agen Sekarang</th><th>Pilih Agen</th><th>Simpan</th></tr></thead><tbody>@forelse($merchants as $m)<tr><td data-label="Toko"><strong>{{ $m->name }}</strong><br><span class="muted">Status: {{ ucfirst($m->approval_status) }}</span><br><span class="muted">{{ $m->merchant_id ?: $m->slug }}</span></td><td data-label="Agen Sekarang"><div class="current-agent-box"><span>Agen Sekarang</span><strong>{{ $m->agent?->name ?: 'Belum assign' }}</strong></div></td><td data-label="Pilih Agen"><form id="map-{{ $m->id }}" method="post" action="{{ route('ma.mapping.update', $m) }}">@csrf<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}" @selected($m->agent_id === $a->id)>{{ $a->name }}</option>@endforeach</select></form></td><td data-label="Simpan"><button form="map-{{ $m->id }}" class="btn primary compact-btn">Simpan Agen</button></td></tr>@empty<tr><td colspan="4" class="empty">Belum ada toko untuk mapping.</td></tr>@endforelse</tbody></table></section>
 @endif
 
 @if($active === 'stores')
     <section class="card qris-panel section ma-store-list-panel">
         <div class="qris-toolbar"><div><h2>List Toko</h2><p class="muted" style="margin:4px 0 0">Compact table. Klik Details untuk data lengkap, Edit Fee untuk ubah fee toko.</p></div><a class="btn primary compact-btn" href="{{ route('ma.create-store') }}">Create Toko</a></div>
-        <div class="table-wrap"><table class="table qris-table ma-store-list-table"><thead><tr><th>Toko</th><th>Merchant</th><th>Agen</th><th>Tipe</th><th>Fee</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
+        <div class="table-wrap"><table class="table qris-table ma-store-list-table"><thead><tr><th>Toko</th><th>Merchant</th><th>Agen</th><th>Tipe</th><th>Fee</th><th>Aktivitas</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
         @forelse($merchants as $m)
             @php
                 $adminUser = \App\Models\User::query()->where('merchant_id', $m->id)->where('role', 'admin')->where('is_hidden', false)->first();
@@ -244,13 +328,13 @@
                     'Provisioning Status' => $m->provisioning_status ?: '-',
                 ];
             @endphp
-            <tr><td><strong>{{ $m->name }}</strong><br><span class="muted">{{ $m->slug }}</span></td><td>{{ $m->merchant_id ?: '-' }}</td><td>{{ $m->agent?->name ?: '-' }}</td><td><span class="badge {{ $m->merchant_type === 'cm' ? 'ok' : 'warn' }}">{{ strtoupper($m->merchant_type) }}</span></td><td>MDR {{ $pct($m->merchant_mdr_percent) }}<br><span class="muted">Margin MA {{ $pct((float) $m->agent_fee_percent - (float) $m->ma_fee_percent) }} / Margin Agent {{ $pct((float) $m->merchant_mdr_percent - (float) $m->agent_fee_percent) }}</span></td><td><span class="badge {{ $badge($m->approval_status) }}">{{ $m->approval_status }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="store-detail-{{ $m->id }}">Details</button><button class="btn primary compact-btn approval-detail-open" type="button" data-approval-detail="store-fee-{{ $m->id }}">Edit Fee</button>
+            <tr><td><strong>{{ $m->name }}</strong><br><span class="muted">{{ $m->slug }}</span></td><td><span class="truncate" style="display:block; max-width:190px">{{ $m->merchant_id ?: '-' }}</span></td><td>{{ $m->agent?->name ?: '-' }}</td><td><span class="badge {{ $m->merchant_type === 'cm' ? 'ok' : 'warn' }}">{{ strtoupper($m->merchant_type) }}</span></td><td>MDR {{ $pct($m->merchant_mdr_percent) }}<br><span class="muted">Margin MA {{ $pct((float) $m->agent_fee_percent - (float) $m->ma_fee_percent) }} / Margin Agent {{ $pct((float) $m->merchant_mdr_percent - (float) $m->agent_fee_percent) }}</span></td><td>{{ number_format($m->activity_trx_total, 0, ',', '.') }}T | {{ $money($m->activity_volume_success) }}<br><span class="muted">{{ $m->activity_last_transaction_at ? $m->activity_last_transaction_at->timezone('Asia/Jakarta')->format('d M Y H:i') : 'Belum ada transaksi' }}</span></td><td><span class="badge {{ $badge($m->approval_status) }}">{{ $m->approval_status }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="store-detail-{{ $m->id }}">Details</button><button class="btn primary compact-btn approval-detail-open" type="button" data-approval-detail="store-fee-{{ $m->id }}">Edit Fee</button>
             <div class="approval-modal" id="store-detail-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Toko</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><div class="approval-detail-grid">@foreach($detailRows as $label => $value)<div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>@endforeach</div></div></div>
             <div class="approval-modal" id="store-fee-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Edit Fee</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><form method="post" action="{{ route('ma.stores.fee.update', $m) }}" class="form-grid pad">@csrf
                 @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $m->fee_menu_rates ?? []])
                 <label>Pay In Fee %<input name="payin_fee_percent" value="{{ $pctInput($m->payin_fee_percent) }}" required></label><div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
         @empty
-            <tr><td colspan="7" class="empty">Belum ada toko.</td></tr>
+            <tr><td colspan="8" class="empty">Belum ada toko.</td></tr>
         @endforelse
         </tbody></table></div>
     </section>
@@ -258,11 +342,11 @@
 
 @if($active === 'agents')
     <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Agen</h2></div><table class="table qris-table super-create-table"><thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Tipe</th><th class="fee-menu-col">Fee per Menu</th><th>Password</th><th>Aksi</th></tr></thead><tbody><tr>
-        <td><form id="agent-create" method="post" action="{{ route('ma.agents.store') }}">@csrf</form><input form="agent-create" name="name" required></td>
-        <td><input form="agent-create" name="email" type="email" required></td>
-        <td><input form="agent-create" name="contact"></td>
-        <td><select form="agent-create" name="status"><option>Active</option><option>Review</option><option>Suspended</option></select></td>
-        <td>
+        <td data-label="Nama"><form id="agent-create" method="post" action="{{ route('ma.agents.store') }}">@csrf</form><input form="agent-create" name="name" required></td>
+        <td data-label="Email"><input form="agent-create" name="email" type="email" required></td>
+        <td data-label="Kontak"><input form="agent-create" name="contact"></td>
+        <td data-label="Status"><select form="agent-create" name="status"><option>Active</option><option>Review</option><option>Suspended</option></select></td>
+        <td data-label="Tipe">
             <select form="agent-create" name="connection_type" id="agent-create-type" onchange="paygridToggleEngineType(this, 'agent-create-engine-type')">
                 <option value="cm">CM</option>
                 <option value="script">Engine</option>
@@ -272,9 +356,9 @@
                 <option value="api">API</option>
             </select>
         </td>
-        <td>@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'agent-create'])</td>
-        <td><input form="agent-create" name="password" value="{{ config('paygrid.demo_password') }}"></td>
-        <td><button form="agent-create" class="btn primary compact-btn">Buat</button></td>
+        <td data-label="Fee per Menu">@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'agent-create'])</td>
+        <td data-label="Password"><input form="agent-create" name="password" value="{{ config('paygrid.demo_password') }}"></td>
+        <td data-label=""><button form="agent-create" class="btn primary compact-btn">Buat</button></td>
     </tr></tbody></table></section>
     <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Agen</h2></div><table class="table qris-table ma-agent-list-table"><thead><tr><th>Agen</th><th>Email</th><th>Kontak</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead><tbody>@foreach($agents as $a)
         <tr><td><strong>{{ $a->name }}</strong><br><span class="muted">{{ $a->code }}</span></td><td>{{ $a->email ?: '-' }}</td><td>{{ $a->contact ?: '-' }}</td><td>{{ $feeMenus->ratesSummary($a->fee_menu_rates ?? [], 'agent') }}</td><td><span class="badge {{ $a->is_active ? 'ok' : 'danger' }}">{{ $a->is_active ? 'Active' : 'Suspended' }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-fee-{{ $a->id }}">Edit Fee</button>
@@ -311,7 +395,7 @@
         </div>
 
         <div data-ma-panel="bisnis" class="pad">
-            <nav class="ma-quicknav"><a href="#ma-sec-bisnis-top">Ringkasan</a><a href="#ma-sec-settlement">Settlement</a><a href="#ma-sec-agent-leaderboard">Agent Leaderboard</a><a href="#ma-sec-revenue-concentration">Revenue Concentration</a><a href="#ma-sec-amount-distribution">Distribusi Nominal</a><a href="#ma-sec-volume-projection">Proyeksi Volume</a></nav>
+            <nav class="ma-quicknav"><a href="#ma-sec-bisnis-top">Ringkasan</a><a href="#ma-sec-hourly-traffic">Trx per Jam/Hari</a><a href="#ma-sec-settlement">Settlement</a><a href="#ma-sec-agent-leaderboard">Agent Leaderboard</a><a href="#ma-sec-revenue-concentration">Revenue Concentration</a><a href="#ma-sec-amount-distribution">Distribusi Nominal</a><a href="#ma-sec-volume-projection">Proyeksi Volume</a></nav>
             <div id="ma-sec-bisnis-top" class="grid qris-metrics section">
                 <div class="card pad qris-metric primary"><span>GMV (Volume Sukses)</span><strong>{{ $money($analyticsBisnis['totalGmv']) }}</strong><small>{{ $periodLabel }}</small></div>
                 <div class="card pad qris-metric success"><span>Take Rate</span><strong>{{ $pct($analyticsBisnis['overallTakeRate']) }}</strong><small>Total fee tercatat &divide; GMV</small></div>
@@ -319,6 +403,39 @@
             <p class="muted" style="margin:0 0 12px">Take rate dihitung dari <code>fee_amount</code> yang tercatat per transaksi (fee gateway), bukan margin PayGrid ke merchant.</p>
             <div style="position:relative;height:280px"><canvas id="ma-analytics-gmv-chart"></canvas></div>
             <script id="ma-analytics-bisnis-data" type="application/json">@json($analyticsBisnis)</script>
+
+            <h3 id="ma-sec-hourly-traffic" style="margin:28px 0 4px">Trx per Jam/Hari</h3>
+            <p class="muted" style="margin:0 0 12px">Volume (Rp) dan jumlah transaksi sukses, per Agent/Toko. Pilih "Per Hari" untuk rentang tanggal, atau "Per Jam" untuk breakdown 24 jam di satu tanggal.</p>
+            <form method="get" class="ma-period-form" id="ma-hourly-filter-form">
+                <input type="hidden" name="period" value="{{ $filters['period'] }}">
+                <input type="hidden" name="from" value="{{ $filters['from'] }}">
+                <input type="hidden" name="to" value="{{ $filters['to'] }}">
+                <label>Agent
+                    <select name="hourly_agent_id" id="hourly-agent-select">
+                        <option value="all" @selected($hourlyTrafficFilters['agent_id'] === 'all')>Semua Agen</option>
+                        @foreach($allAgents as $a)<option value="{{ $a->id }}" @selected($hourlyTrafficFilters['agent_id'] === (string) $a->id)>{{ $a->name }}</option>@endforeach
+                    </select>
+                </label>
+                <label>Toko
+                    <select name="hourly_merchant_id" id="hourly-merchant-select">
+                        <option value="all">Semua Toko</option>
+                    </select>
+                </label>
+                <label>Tampilan
+                    <select name="hourly_mode" id="hourly-mode-select">
+                        <option value="days" @selected($hourlyTrafficFilters['mode'] === 'days')>Per Hari</option>
+                        <option value="hours" @selected($hourlyTrafficFilters['mode'] === 'hours')>Per Jam</option>
+                    </select>
+                </label>
+                <label data-hourly-field="days">Dari<input type="date" name="hourly_from" value="{{ $hourlyTrafficFilters['from'] }}"></label>
+                <label data-hourly-field="days">Sampai<input type="date" name="hourly_to" value="{{ $hourlyTrafficFilters['to'] }}"></label>
+                <label data-hourly-field="hours">Tanggal<input type="date" name="hourly_date" value="{{ $hourlyTrafficFilters['date'] }}"></label>
+                <button class="btn primary compact-btn">Terapkan</button>
+            </form>
+            <div style="position:relative;height:280px"><canvas id="ma-analytics-hourly-chart"></canvas></div>
+            <script id="ma-analytics-hourly-data" type="application/json">@json($analyticsHourlyTraffic)</script>
+            <script id="ma-analytics-hourly-merchants" type="application/json">@json($groupedMerchantsForAnalytics)</script>
+            <script id="ma-analytics-hourly-selected-merchant" type="application/json">@json($hourlyTrafficFilters['merchant_id'])</script>
 
             <h3 id="ma-sec-settlement" style="margin:28px 0 4px">Rekonsiliasi Settlement (Ekspektasi vs Aktual Bank)</h3>
             <p class="muted" style="margin:0 0 12px">Ekspektasi dihitung dari transaksi sukses kita di jendela waktu settlement yang sama. Aktual dari data settlement Hilogate.</p>
@@ -334,7 +451,7 @@
 
             <h3 id="ma-sec-amount-distribution" style="margin:28px 0 4px">Distribusi Nominal Transaksi</h3>
             <p class="muted" style="margin:0 0 12px">Jumlah transaksi sukses per rentang nominal &mdash; lihat pola transaksi kecil berulang vs besar sesekali.</p>
-            <div class="table-wrap"><table class="table qris-table"><thead><tr>@foreach($analyticsAmountDistribution['rows'] as $bucket)<th>{{ $bucket['label'] }}</th>@endforeach</tr></thead><tbody><tr>@foreach($analyticsAmountDistribution['rows'] as $bucket)<td>{{ number_format($bucket['count'], 0, ',', '.') }}</td>@endforeach</tr></tbody></table></div>
+            <div class="table-wrap"><table class="table qris-table"><thead><tr>@foreach($analyticsAmountDistribution['rows'] as $bucket)<th>{{ $bucket['label'] }}</th>@endforeach</tr></thead><tbody><tr>@foreach($analyticsAmountDistribution['rows'] as $bucket)<td data-label="{{ $bucket['label'] }}">{{ number_format($bucket['count'], 0, ',', '.') }}</td>@endforeach</tr></tbody></table></div>
 
             <h3 id="ma-sec-volume-projection" style="margin:28px 0 4px">Proyeksi Volume</h3>
             <p class="muted" style="margin:0 0 12px">Dari rata-rata bergerak 7 hari transaksi sukses (30 hari terakhir, tidak terpengaruh filter periode). Rata-rata 7 hari terakhir: <strong>{{ $money($analyticsVolumeProjection['last7DayAvgVolume']) }}/hari</strong> &mdash; proyeksi 30 hari ke depan: <strong>{{ $money($analyticsVolumeProjection['projectedNextMonthVolume']) }}</strong>.</p>
@@ -358,7 +475,7 @@
 @endif
 
 @push('scripts')
-@if($active === 'analytics')<script src="{{ asset('js/vendor/chart.umd.min.js') }}"></script>@endif
+@if(in_array($active, ['analytics', 'overview'], true))<script src="{{ asset('js/vendor/chart.umd.min.js') }}"></script>@endif
 <script>
 function paygridToggleEngineType(select, engineTypeId) {
     var isEngine = select.value !== 'cm';
@@ -431,41 +548,6 @@ function paygridPaginateAllTables(root) {
     (root || document).querySelectorAll('table.ma-paginate').forEach((table) => paygridPaginateTable(table));
 }
 document.addEventListener('DOMContentLoaded', () => {
-    const money = (value) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0));
-    const badgeClass = (status) => ['approved', 'success', 'Active', 'active', 'done'].includes(String(status)) ? 'ok' : (['rejected', 'failed', 'expired', 'Suspended'].includes(String(status)) ? 'danger' : 'warn');
-    const detailsEl = document.getElementById('ma-overview-details');
-    let panel = document.querySelector('[data-ma-detail-panel]');
-    const details = detailsEl ? JSON.parse(detailsEl.textContent || '{}') : {};
-    const detailState = { page: 1, perPage: 10 };
-    const renderItems = (detail, page = 1) => {
-        if (!detail) return;
-        if (!panel) {
-            const metrics = document.querySelector('.history-metrics');
-            panel = document.createElement('section');
-            panel.className = 'card pad section ma-detail-panel';
-            panel.dataset.maDetailPanel = 'true';
-            metrics?.insertAdjacentElement('afterend', panel);
-        }
-        const items = detail.items || [];
-        const totalPages = Math.max(1, Math.ceil(items.length / detailState.perPage));
-        detailState.page = Math.min(Math.max(1, page), totalPages);
-        const start = (detailState.page - 1) * detailState.perPage;
-        const visibleItems = items.slice(start, start + detailState.perPage);
-        const rows = visibleItems.map((item) => `<div class="ma-detail-row"><div><b>${item.title || '-'}</b><span>${item.subtitle || item.date || '-'}</span></div><span class="badge ${badgeClass(item.status)}">${item.status || '-'}</span><strong>${item.amount === null || item.amount === undefined ? (item.meta || '-') : money(item.amount)}</strong></div>`).join('');
-        const pager = items.length > detailState.perPage ? `<div class="qris-pagination" style="padding-top:14px"><div class="pager-summary">Showing ${start + 1} to ${Math.min(start + detailState.perPage, items.length)} of ${items.length}</div><div class="pager-links"><button class="pager" type="button" data-ma-detail-page="prev" ${detailState.page === 1 ? 'disabled' : ''}>Prev</button><button class="pager" type="button" data-ma-detail-page="next" ${detailState.page === totalPages ? 'disabled' : ''}>Next</button></div></div>` : '';
-        panel.innerHTML = `<div class="qris-toolbar"><h2>${detail.title}</h2><span class="muted">${items.length} item | ${detailState.perPage} per halaman</span></div>` + (items.length ? `<div class="ma-detail-list">${rows}</div>${pager}` : '<p class="muted">Belum ada data.</p>');
-        panel.querySelectorAll('[data-ma-detail-page]').forEach((button) => {
-            button.addEventListener('click', () => renderItems(detail, detailState.page + (button.dataset.maDetailPage === 'next' ? 1 : -1)));
-        });
-        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    };
-    document.querySelectorAll('[data-ma-detail]').forEach((card) => {
-        card.addEventListener('click', () => {
-            document.querySelectorAll('[data-ma-detail]').forEach((item) => item.classList.remove('active'));
-            card.classList.add('active');
-            renderItems(details[card.dataset.maDetail], 1);
-        });
-    });
     document.querySelectorAll('[data-ma-tab]').forEach((button) => {
         button.addEventListener('click', () => {
             document.querySelectorAll('[data-ma-tab]').forEach((item) => item.classList.toggle('active', item === button));
@@ -488,13 +570,133 @@ document.addEventListener('DOMContentLoaded', () => {
     customDates.forEach((input) => input.addEventListener('input', () => {
         if (periodSelect) periodSelect.value = 'custom';
     }));
+
+    (function () {
+        const groupedMerchantsEl = document.getElementById('ma-analytics-hourly-merchants');
+        const selectedMerchantEl = document.getElementById('ma-analytics-hourly-selected-merchant');
+        const agentSelect = document.getElementById('hourly-agent-select');
+        const merchantSelect = document.getElementById('hourly-merchant-select');
+        const modeSelect = document.getElementById('hourly-mode-select');
+        if (!groupedMerchantsEl || !agentSelect || !merchantSelect || !modeSelect) return;
+
+        const groupedMerchants = JSON.parse(groupedMerchantsEl.textContent || '{}');
+        const selectedMerchantId = JSON.parse(selectedMerchantEl?.textContent || '"all"');
+
+        function populateMerchants() {
+            const agentName = agentSelect.options[agentSelect.selectedIndex]?.text;
+            merchantSelect.innerHTML = '';
+            merchantSelect.appendChild(new Option('Semua Toko', 'all'));
+            const lists = agentSelect.value === 'all' ? Object.values(groupedMerchants).flat() : (groupedMerchants[agentName] || []);
+            lists.forEach((m) => merchantSelect.appendChild(new Option(m.name, m.id)));
+            merchantSelect.value = lists.some((m) => String(m.id) === String(selectedMerchantId)) ? selectedMerchantId : 'all';
+        }
+        populateMerchants();
+        agentSelect.addEventListener('change', populateMerchants);
+
+        function toggleModeFields() {
+            // .ma-period-form label sets display:grid with higher specificity than the
+            // browser's default [hidden] rule, so the native hidden attribute alone
+            // would not actually hide these - force it via inline style instead.
+            document.querySelectorAll('[data-hourly-field="days"]').forEach((el) => el.style.display = modeSelect.value !== 'days' ? 'none' : '');
+            document.querySelectorAll('[data-hourly-field="hours"]').forEach((el) => el.style.display = modeSelect.value !== 'hours' ? 'none' : '');
+        }
+        toggleModeFields();
+        modeSelect.addEventListener('change', toggleModeFields);
+    })();
     if (typeof Chart !== 'undefined') {
+        Chart.defaults.font.size = 11;
+        Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+        document.querySelectorAll('canvas[data-spark]').forEach((canvas) => {
+            const values = JSON.parse(canvas.dataset.spark || '[]');
+            if (!values.length) return;
+            const color = canvas.dataset.sparkColor || '#1557c2';
+            new Chart(canvas, {
+                type: 'line',
+                data: { labels: values.map((_, i) => i), datasets: [{ data: values, borderColor: color, backgroundColor: 'transparent', borderWidth: 1.5, tension: .3, pointRadius: 0 }] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: { x: { display: false }, y: { display: false } },
+                    elements: { line: { borderJoinStyle: 'round' } },
+                },
+            });
+        });
+
+        const flowDailyEl = document.getElementById('ma-overview-flow-data');
+        const flowHourlyEl = document.getElementById('ma-overview-hourly-flow-data');
+        const flowCanvas = document.getElementById('ma-overview-flow-chart');
+        if (flowDailyEl && flowHourlyEl && flowCanvas) {
+            const dailySeries = JSON.parse(flowDailyEl.textContent || '[]');
+            const hourly = JSON.parse(flowHourlyEl.textContent || '{}');
+            const fmt = (v) => new Intl.NumberFormat('id-ID', { notation: 'compact' }).format(v);
+            const dailyField = { volume: 'volume_success', withdrawal: 'withdrawal', pending_amount: 'pending_amount', pending_trx: 'trx_pending' };
+            const hourlyField = {
+                volume: ['todayVolume', 'yesterdayVolume'],
+                withdrawal: ['todayWithdrawal', 'yesterdayWithdrawal'],
+                pending_amount: ['todayPendingAmount', 'yesterdayPendingAmount'],
+                pending_trx: ['todayPendingTrx', 'yesterdayPendingTrx'],
+            };
+            const metricLabel = { volume: 'Volume', withdrawal: 'Withdrawal', pending_amount: 'Pending Amount', pending_trx: 'Pending TRX' };
+            let metric = 'volume';
+            let range = '1d';
+
+            const flowChart = new Chart(flowCanvas, {
+                type: 'line',
+                data: { labels: [], datasets: [
+                    { label: 'Today', data: [], borderColor: '#1557c2', backgroundColor: 'rgba(21,87,194,.12)', fill: true, tension: .25, pointRadius: 2 },
+                    { label: 'Yesterday', data: [], borderColor: '#94a9c9', backgroundColor: 'transparent', borderDash: [5, 4], tension: .25, pointRadius: 0 },
+                ] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: { y: { ticks: { callback: fmt } } },
+                },
+            });
+
+            function renderFlow() {
+                if (range === '7d' || range === 'month') {
+                    const field = dailyField[metric];
+                    const take = range === '7d' ? 7 : dailySeries.length;
+                    const slice = dailySeries.slice(-take);
+                    flowChart.data.labels = slice.map((row) => row.date);
+                    flowChart.data.datasets[0].data = slice.map((row) => row[field] ?? 0);
+                    flowChart.data.datasets[0].label = metricLabel[metric];
+                    flowChart.data.datasets[1].data = [];
+                    flowChart.data.datasets[1].label = '';
+                } else {
+                    const currentHour = Number.isInteger(hourly.currentHour) ? hourly.currentHour : 23;
+                    const [todayKey, yesterdayKey] = hourlyField[metric];
+                    const today = hourly[todayKey] || [];
+                    const yesterday = hourly[yesterdayKey] || [];
+                    const labels = (hourly.labels || []).slice(0, currentHour + 1);
+                    flowChart.data.labels = labels;
+                    flowChart.data.datasets[0].data = today.slice(0, currentHour + 1);
+                    flowChart.data.datasets[0].label = 'Hari ini';
+                    flowChart.data.datasets[1].data = yesterday.slice(0, currentHour + 1);
+                    flowChart.data.datasets[1].label = 'Kemarin';
+                }
+                flowChart.update();
+            }
+            renderFlow();
+
+            document.querySelectorAll('[data-flow-metric]').forEach((btn) => btn.addEventListener('click', () => {
+                metric = btn.dataset.flowMetric;
+                document.querySelectorAll('[data-flow-metric]').forEach((b) => b.classList.toggle('active', b === btn));
+                renderFlow();
+            }));
+            document.querySelectorAll('[data-flow-range]').forEach((btn) => btn.addEventListener('click', () => {
+                range = btn.dataset.flowRange;
+                document.querySelectorAll('[data-flow-range]').forEach((b) => b.classList.toggle('active', b === btn));
+                renderFlow();
+            }));
+        }
         const bisnisEl = document.getElementById('ma-analytics-bisnis-data');
         const gmvCanvas = document.getElementById('ma-analytics-gmv-chart');
         if (bisnisEl && gmvCanvas) {
             const bisnis = JSON.parse(bisnisEl.textContent || '{}');
-            Chart.defaults.font.size = 11;
-            Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
             new Chart(gmvCanvas, {
                 type: 'line',
                 data: {
@@ -511,6 +713,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     scales: {
                         y: { position: 'left', ticks: { callback: (v) => new Intl.NumberFormat('id-ID', { notation: 'compact' }).format(v) } },
                         y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (v) => v + '%' } },
+                    },
+                },
+            });
+        }
+        const hourlyEl = document.getElementById('ma-analytics-hourly-data');
+        const hourlyCanvas = document.getElementById('ma-analytics-hourly-chart');
+        if (hourlyEl && hourlyCanvas) {
+            const hourly = JSON.parse(hourlyEl.textContent || '{}');
+            new Chart(hourlyCanvas, {
+                type: 'bar',
+                data: {
+                    labels: hourly.labels || [],
+                    datasets: [
+                        { label: 'Volume (Rp)', data: hourly.amount || [], backgroundColor: 'rgba(21,87,194,.55)', yAxisID: 'y', order: 2 },
+                        { label: 'Jumlah Trx', data: hourly.trx || [], type: 'line', borderColor: '#008450', backgroundColor: 'transparent', tension: .25, yAxisID: 'y1', order: 1 },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { position: 'left', ticks: { callback: (v) => new Intl.NumberFormat('id-ID', { notation: 'compact' }).format(v) } },
+                        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { precision: 0 } },
                     },
                 },
             });

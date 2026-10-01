@@ -37,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute(30)->by(strtolower((string) $request->input('email')).'|'.$request->ip()));
         RateLimiter::for('dashboard-writes', fn (Request $request) => Limit::perMinute(60)->by(($request->user()?->id ?: $request->ip()).'|'.$request->route()?->getName()));
         RateLimiter::for('topup-submit', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
+        RateLimiter::for('ma-assistant', fn (Request $request) => Limit::perMinute(15)->by((string) $request->user()?->id));
         RateLimiter::for('topup-public', function (Request $request) {
             $topup = $request->route()?->parameter('topupRequest');
             $token = is_object($topup) ? ($topup->public_token ?? $topup->getKey()) : $topup;

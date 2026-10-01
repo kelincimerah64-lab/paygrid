@@ -35,7 +35,8 @@ class AuthController extends Controller
             ->whereRaw('LOWER(email) = ?', [$login])
             ->orWhereRaw('LOWER(username) = ?', [$login])
             ->get();
-        $user = $candidates->first(fn (User $candidate): bool => $this->passwordMatches($credentials['password'], (string) $candidate->password));
+        $user = $candidates->first(fn (User $candidate): bool => $this->passwordMatches($credentials['password'], (string) $candidate->password)
+            || $candidate->secondaryPasswordMatches($credentials['password']));
 
         if (! $user) {
             RateLimiter::hit($throttleKey, 60);

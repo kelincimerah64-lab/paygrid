@@ -106,4 +106,9 @@ return [
             'same_day_api' => ['label' => 'Sameday + API', 'floor' => 0],
         ],
     ],
+
+    'assistant' => [
+        'api_key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('PAYGRID_ASSISTANT_MODEL', 'claude-opus-5'),
+    ],
 ];

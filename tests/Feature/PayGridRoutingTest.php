@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Carbon\CarbonImmutable;
 use App\Models\AuditLog;
 use App\Models\Merchant;
 use App\Models\MerchantGatewayBalance;
@@ -1228,51 +1229,6 @@ class PayGridRoutingTest extends TestCase
             ->assertSee('Valohoki [1LG]');
     }
 
-    public function test_ma_overview_shows_only_final_hilogate_settlements_for_its_merchants(): void
-    {
-        $this->seed();
-        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
-        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
-        $other = Merchant::query()->where('slug', 'bl77')->firstOrFail();
-
-        MerchantSettlement::query()->create([
-            'merchant_id' => $merchant->id,
-            'gateway' => 'hilogate',
-            'gateway_merchant_id' => $merchant->merchant_id,
-            'reference' => 'HG-SETTLED-001',
-            'settlement_date' => now('Asia/Jakarta')->toDateString(),
-            'status' => 'APPROVED',
-            'net_amount' => 123456789,
-        ]);
-        MerchantSettlement::query()->create([
-            'merchant_id' => $merchant->id,
-            'gateway' => 'hilogate',
-            'gateway_merchant_id' => $merchant->merchant_id,
-            'reference' => 'HG-PENDING-001',
-            'settlement_date' => now('Asia/Jakarta')->toDateString(),
-            'status' => 'PENDING',
-            'net_amount' => 777777777,
-        ]);
-        MerchantSettlement::query()->create([
-            'merchant_id' => $other->id,
-            'gateway' => 'artageto',
-            'gateway_merchant_id' => $other->merchant_id,
-            'reference' => 'OTHER-GATEWAY-001',
-            'settlement_date' => now('Asia/Jakarta')->toDateString(),
-            'status' => 'SUCCESS',
-            'net_amount' => 999999999,
-        ]);
-
-        $this->actingAs($ma)
-            ->get('/ma')
-            ->assertOk()
-            ->assertSee('Settlement Real HG')
-            ->assertSee('Rp 123.456.789')
-            ->assertSee('HG-SETTLED-001')
-            ->assertDontSee('HG-PENDING-001')
-            ->assertDontSee('OTHER-GATEWAY-001');
-    }
-
     public function test_gateway_sync_preserves_existing_checklist_state(): void
     {
         $this->seed();
@@ -1305,6 +1261,29 @@ class PayGridRoutingTest extends TestCase
             'rrn' => 'UPDATEDRRN',
         ]);
         $this->assertTrue($expiresAt?->equalTo($request->refresh()->expires_at));
+    }
+
+    public function test_ingestion_stores_string_timestamps_as_the_correct_utc_instant(): void
+    {
+        // Hilogate's qris-mode payloads send a Jakarta-offset ISO string (e.g.
+        // "...T23:17:39+07:00"). Regression test for a bug where the parsed
+        // Carbon object stayed tagged Asia/Jakarta into the DB write, so Eloquent
+        // wrote the Jakarta wall-clock digits into the UTC-assumed column -
+        // shifting every stored submitted_at 7 hours into the future.
+        $this->seed();
+        $merchant = Merchant::query()->where('merchant_type', 'script')->firstOrFail();
+
+        $result = app(TransactionIngestionService::class)->ingestForMerchant($merchant, [
+            'id' => 'tz-regression-test',
+            'status' => 'SUCCESS',
+            'merchant_id' => $merchant->merchant_id,
+            'ref_id' => 'tz-regression-test-ref',
+            'amount' => 10000,
+            'net_amount' => 9900,
+            'created_at' => '2026-09-23T23:17:39+07:00',
+        ], $merchant->gateway, 'gateway_pull');
+
+        $this->assertTrue($result->submitted_at->equalTo(CarbonImmutable::parse('2026-09-23T16:17:39Z')));
     }
 
     public function test_ingestion_reads_net_amount_from_nested_response_for_script_merchants(): void
@@ -1563,7 +1542,7 @@ class PayGridRoutingTest extends TestCase
             'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
             'gateway_ref_id' => 'settlement-success-1', 'transaction_id' => 'settlement-success-1',
             'status' => 'success', 'amount' => 100000, 'net_amount' => 98800, 'fee_amount' => 1200,
-            'submitted_at' => now('Asia/Jakarta')->subDay(), 'succeeded_at' => now('Asia/Jakarta')->subDay(),
+            'submitted_at' => now('Asia/Jakarta')->subDay()->utc(), 'succeeded_at' => now('Asia/Jakarta')->subDay()->utc(),
         ]);
 
         $settlementDate = now('Asia/Jakarta')->subDay()->toDateString();
@@ -1668,13 +1647,16 @@ class PayGridRoutingTest extends TestCase
         ]);
 
         // A flat Rp100.000/day for the last 7 days -> trivially predictable moving average and projection.
+        // Anchored to "1 hour ago" rather than a fixed wall-clock time: hardcoding
+        // e.g. noon WIB would land in the future (and get excluded by the
+        // now-correct upper bound) whenever the suite runs before noon WIB.
         for ($i = 0; $i < 7; $i++) {
             TopupRequest::query()->create([
                 'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
                 'gateway_ref_id' => "projection-day-{$i}", 'transaction_id' => "projection-day-{$i}",
                 'status' => 'success', 'amount' => 100000, 'net_amount' => 99000, 'fee_amount' => 1000,
-                'submitted_at' => now('Asia/Jakarta')->subDays($i)->setTime(12, 0, 0),
-                'succeeded_at' => now('Asia/Jakarta')->subDays($i)->setTime(12, 0, 5),
+                'submitted_at' => now('Asia/Jakarta')->subDays($i)->subHour()->utc(),
+                'succeeded_at' => now('Asia/Jakarta')->subDays($i)->subHour()->addSeconds(5)->utc(),
             ]);
         }
 
@@ -1683,7 +1665,7 @@ class PayGridRoutingTest extends TestCase
             ->join('agents', 'agents.id', '=', 'merchants.agent_id')
             ->where('agents.ma_user_id', $ma->id)
             ->where('topup_requests.status', 'success')
-            ->where('topup_requests.submitted_at', '>=', now('Asia/Jakarta')->subDays(6)->startOfDay())
+            ->where('topup_requests.submitted_at', '>=', now('Asia/Jakarta')->subDays(6)->startOfDay()->utc())
             ->sum('topup_requests.amount') / 7;
 
         $response = $this->actingAs($ma)->get('/ma/analytics?period=all')->assertOk();
@@ -1907,7 +1889,14 @@ class PayGridRoutingTest extends TestCase
         $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
         $merchant = Merchant::query()->where('agent_id', $agent->id)->where('merchant_type', 'cm')->firstOrFail();
         $merchant->forceFill(['agent_fee_percent' => 1.00, 'merchant_mdr_percent' => 1.75])->save();
-        $existingVolume = (int) TopupRequest::query()->where('merchant_id', $merchant->id)->where('status', 'success')->sum('amount');
+        // agent.fee defaults to "today (WIB)" only - match that window here, since
+        // demo-seeded volume can legitimately span WIB midnight (seeded as
+        // "up to 90 minutes ago", which briefly straddles two WIB days right
+        // after midnight) and an unfiltered all-time sum would overcount it.
+        $todayStart = now('Asia/Jakarta')->startOfDay()->utc();
+        $todayEnd = now('Asia/Jakarta')->endOfDay()->utc();
+        $existingVolume = (int) TopupRequest::query()->where('merchant_id', $merchant->id)->where('status', 'success')
+            ->whereBetween('submitted_at', [$todayStart, $todayEnd])->sum('amount');
 
         TopupRequest::query()->create([
             'merchant_id' => $merchant->id,

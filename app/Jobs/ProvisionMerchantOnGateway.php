@@ -41,6 +41,8 @@ class ProvisionMerchantOnGateway implements ShouldQueue
         ])->save();
 
         try {
+            $ma = $merchant->agent?->ma;
+
             $response = $gateways->for($merchant)->createMerchant([
             'name' => $merchant->name,
             'merchant_group_id' => $merchant->merchant_group_id,
@@ -48,6 +50,8 @@ class ProvisionMerchantOnGateway implements ShouldQueue
             'withdrawal_callback_url' => $merchant->withdrawal_callback_url,
             'api_ip_whitelist' => [config('paygrid.security.server_ip')],
             'is_whitelist_enabled' => true,
+            'onboarding_email' => $ma?->hilogate_onboarding_email,
+            'onboarding_password' => $ma?->hilogate_onboarding_password,
             ]);
             $safeResponse = Arr::except($response, ['merchantKey', 'merchant_key', 'secret_key', 'api_key']);
             if (isset($safeResponse['data']) && is_array($safeResponse['data'])) {

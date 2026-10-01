@@ -40,7 +40,11 @@ Artisan::command('gateway:sync-transactions {--merchant=} {--from=} {--to=} {--m
 
     $query->chunkById(100, function ($merchants) use ($dispatcher, $filters, $queue, &$count) {
         foreach ($merchants as $merchant) {
-            if ($dispatcher->dispatch($merchant->id, $filters, $queue)) {
+            $merchantFilters = $filters;
+            if ($override = $merchant->onboarding_payload['pull_mode_override'] ?? null) {
+                $merchantFilters['pull_mode'] = $override;
+            }
+            if ($dispatcher->dispatch($merchant->id, $merchantFilters, $queue)) {
                 $count++;
             }
         }
@@ -48,6 +52,31 @@ Artisan::command('gateway:sync-transactions {--merchant=} {--from=} {--to=} {--m
 
     $this->info("Dispatched {$count} merchant sync job(s) to {$queue}; skipped merchants with active sync lock.");
 })->purpose('Dispatch background GET polling jobs for approved merchants.');
+
+Artisan::command('gateway:sync-withdrawals {--merchant=}', function () {
+    $query = Merchant::query()
+        ->where('approval_status', 'approved')
+        ->where('gateway', 'hilogate')
+        ->whereNotNull('merchant_id')
+        ->whereNotNull('merchant_key');
+
+    if ($this->option('merchant')) {
+        $query->where(fn ($scope) => $scope
+            ->where('slug', $this->option('merchant'))
+            ->orWhere('merchant_id', $this->option('merchant')));
+    }
+
+    $count = 0;
+
+    $query->chunkById(100, function ($merchants) use (&$count) {
+        foreach ($merchants as $merchant) {
+            \App\Jobs\SyncMerchantWithdrawals::dispatch($merchant->id);
+            $count++;
+        }
+    });
+
+    $this->info("Dispatched {$count} merchant withdrawal sync job(s).");
+})->purpose('Dispatch background sync jobs pulling Hilogate withdrawal history into merchant_withdrawals.');
 
 Artisan::command('gateway:sync-balances {--merchant=}', function (\App\Services\GatewayBalanceService $balances) {
     $query = Merchant::query()

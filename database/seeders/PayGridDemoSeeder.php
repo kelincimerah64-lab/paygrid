@@ -246,8 +246,8 @@ class PayGridDemoSeeder extends Seeder
             'checked_by_email' => $checkedBy,
             'checked_by_role' => $checkedBy ? 'cs' : null,
             'processed_at' => $processed ? now() : null,
-            'submitted_at' => now('Asia/Jakarta')->subMinutes(rand(5, 90)),
-            'expires_at' => now('Asia/Jakarta')->addMinutes(30),
+            'submitted_at' => now('Asia/Jakarta')->subMinutes(rand(5, 90))->utc(),
+            'expires_at' => now('Asia/Jakarta')->addMinutes(30)->utc(),
             'gateway_payload' => ['seed' => true],
         ]);
     }

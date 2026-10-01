@@ -105,8 +105,8 @@
             <tbody>
             @forelse($transactions as $transaction)
                 <tr>
-                    <td class="time-cell">{{ $transaction->submitted_at?->format('d M y') ?? '-' }}<span>{{ $transaction->submitted_at?->format('H:i:s') ?? '-' }}</span></td>
-                    <td class="time-cell">{{ $transaction->succeeded_at?->format('d M y') ?? '-' }}<span>{{ $transaction->succeeded_at?->format('H:i:s') ?? '-' }}</span></td>
+                    <td class="time-cell">{{ $transaction->submitted_at?->timezone('Asia/Jakarta')->format('d M y') ?? '-' }}<span>{{ $transaction->submitted_at?->timezone('Asia/Jakarta')->format('H:i:s') ?? '-' }}</span></td>
+                    <td class="time-cell">{{ $transaction->succeeded_at?->timezone('Asia/Jakarta')->format('d M y') ?? '-' }}<span>{{ $transaction->succeeded_at?->timezone('Asia/Jakarta')->format('H:i:s') ?? '-' }}</span></td>
                     <td>{{ $transaction->successDurationLabel() }}</td>
                     <td><strong class="truncate ref-line">{{ $transaction->payment_id ?: ($transaction->gateway_ref_id ?: '-') }}</strong><span class="muted truncate ref-line">TRX: {{ $transaction->transaction_id ?: '-' }}</span></td>
                     <td class="truncate">{{ $transaction->rrn ?: '-' }}</td>

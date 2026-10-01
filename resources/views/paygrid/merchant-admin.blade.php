@@ -146,12 +146,12 @@
             <div class="qris-toolbar"><h2>Daftar Transaksi</h2><div class="muted">History transaksi tanpa checklist.</div></div>
             <div class="table-wrap sticky-head">
                 <table class="table qris-table history-table">
-                    <thead><tr><th>Masuk</th><th>Sukses</th><th>Durasi</th><th>Reference</th><th>RRN</th><th>TRX ID</th><th>Amount</th><th>Status</th><th>Keterangan</th><th>Tindak Lanjut</th></tr></thead>
+                    <thead><tr><th>Masuk</th><th>Sukses</th><th>Durasi</th><th>Reference</th><th>RRN</th><th>TRX ID</th><th>Amount</th><th>Status</th><th>Keterangan</th></tr></thead>
                     <tbody>
                     @forelse($requests as $request)
                         <tr>
-                            <td class="time-mini">{{ $request->submitted_at?->format('H.i.s') ?? '-' }}</td>
-                            <td class="time-mini">{{ $request->succeeded_at?->format('H.i.s') ?? '-' }}</td>
+                            <td class="time-mini">{{ $request->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</td>
+                            <td class="time-mini">{{ $request->succeeded_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</td>
                             <td class="duration-cell">{{ $request->successDurationLabel() }}</td>
                             <td><span class="truncate ref-line">{{ $request->customer_reference ?: $request->payment_id ?: $request->gateway_ref_id ?: '-' }}</span></td>
                             <td><strong>{{ $request->rrn ?: '-' }}</strong></td>
@@ -159,10 +159,9 @@
                             <td><strong>{{ number_format((int) $request->amount, 0, ',', '.') }}</strong></td>
                             <td><span class="badge {{ $statusClass($request->status) }}">{{ $statusLabel($request->status) }}</span></td>
                             <td>{{ $request->cs_note ?: '-' }}</td>
-                            <td><span class="muted">-</span></td>
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="empty"><strong>Belum ada transaksi.</strong>Coba ubah periode/filter atau tunggu sync Hilogate berikutnya.</td></tr>
+                        <tr><td colspan="9" class="empty"><strong>Belum ada transaksi.</strong>Coba ubah periode/filter atau tunggu sync Hilogate berikutnya.</td></tr>
                     @endforelse
                     </tbody>
                 </table>
@@ -209,14 +208,14 @@
 
     <section class="card qris-panel section" data-live-region="admin-workspace-table">
         <div class="table-wrap sticky-head">
-            <table class="table workspace-table {{ $active === 'qris' ? 'topup-table' : 'checklist-table' }}">
+            <table class="table qris-table workspace-table {{ $active === 'qris' ? 'topup-table' : 'checklist-table' }}">
                 <thead><tr>@if($active === 'qris')<th>Nama Toko</th><th>Masuk</th><th>Sukses</th><th>Durasi</th><th>Nominal</th><th>Status</th><th>Checked by</th><th>Checkbox</th><th>ID / RRN</th><th>Action</th><th>Keterangan</th>@else<th>Merchant</th><th>Masuk</th><th>Sukses</th><th>Durasi</th><th>Nominal</th><th>Checked by</th><th>Checkbox</th><th>ID / RRN</th><th>Submit</th><th>Keterangan</th>@endif</tr></thead>
                 <tbody>
                 @forelse($requests as $request)
                     <tr class="{{ $request->status === 'success' && $request->is_processed ? ($active === 'checklist' ? 'checked-row' : 'topup-success-checked-row') : '' }}">
                         <td><span class="muted">{{ $merchant->name }}</span><br><strong>{{ $request->customer_reference ?: $request->transaction_id ?: $request->payment_id ?: '-' }}</strong></td>
-                        <td class="time-mini">{{ $request->submitted_at?->format('H.i.s') ?? '-' }}</td>
-                        <td class="time-mini">{{ $request->succeeded_at?->format('H.i.s') ?? '-' }}</td>
+                        <td class="time-mini">{{ $request->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</td>
+                        <td class="time-mini">{{ $request->succeeded_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</td>
                         <td class="duration-cell">{{ $request->successDurationLabel() }}</td>
                         <td><strong>{{ number_format($request->amount, 0, ',', '.') }}</strong></td>
                         @if($active === 'qris')<td><span class="badge {{ $statusClass($request->status) }}">{{ $statusLabel($request->status) }}</span></td>@endif

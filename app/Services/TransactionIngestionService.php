@@ -116,13 +116,13 @@ class TransactionIngestionService
         $submittedAt = $this->timestamp(Arr::get($payload, 'created_at') ?? Arr::get($payload, 'createdAt'))
             ?? $this->timestamp(Arr::get($payload, 'submitted_at') ?? Arr::get($payload, 'submittedAt'))
             ?? $this->timestamp(Arr::get($payload, 'paid_at') ?? Arr::get($payload, 'paidAt'))
-            ?? now('Asia/Jakarta');
+            ?? now();
         $succeededAt = $status === 'success'
             ? ($this->timestamp(Arr::get($payload, 'paid_at') ?? Arr::get($payload, 'paidAt'))
                 ?? $this->timestamp(Arr::get($payload, 'success_at') ?? Arr::get($payload, 'successAt'))
                 ?? $this->timestamp(Arr::get($payload, 'completed_at') ?? Arr::get($payload, 'completedAt'))
                 ?? $this->timestamp(Arr::get($payload, 'settled_at') ?? Arr::get($payload, 'settledAt'))
-                ?? ($dataSource === 'callback' ? now('Asia/Jakarta') : $submittedAt))
+                ?? ($dataSource === 'callback' ? now() : $submittedAt))
             : null;
 
         return [
@@ -139,7 +139,7 @@ class TransactionIngestionService
             'fee_amount' => $feeAmount,
             'submitted_at' => $submittedAt,
             'succeeded_at' => $succeededAt,
-            'callback_received_at' => $dataSource === 'callback' ? now('Asia/Jakarta') : null,
+            'callback_received_at' => $dataSource === 'callback' ? now() : null,
             'expires_at' => $this->timestamp(Arr::get($payload, 'expires_at') ?? Arr::get($payload, 'expired_at')),
             'gateway_payload' => $payload,
         ];
@@ -194,10 +194,10 @@ class TransactionIngestionService
         if (is_numeric($value)) {
             $number = (int) $value;
 
-            return CarbonImmutable::createFromTimestampMs($number > 9999999999 ? $number : $number * 1000, 'Asia/Jakarta');
+            return CarbonImmutable::createFromTimestampMs($number > 9999999999 ? $number : $number * 1000, 'Asia/Jakarta')->utc();
         }
 
-        return CarbonImmutable::parse((string) $value, 'Asia/Jakarta');
+        return CarbonImmutable::parse((string) $value, 'Asia/Jakarta')->utc();
     }
 
     private function defaultDataSource(string $gateway): string

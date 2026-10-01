@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentTicketController;
 use App\Http\Controllers\MaTicketController;
 use App\Http\Controllers\MerchantTicketController;
+use App\Http\Controllers\MobileAppController;
 use App\Http\Controllers\GatewayCallbackController;
 use App\Http\Controllers\MerchantRegistrationController;
 use App\Http\Controllers\MerchantRegistrationWorkflowController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\MerchantProvisioningController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\GatewaySyncRetryController;
 use App\Http\Controllers\MaController;
+use App\Http\Controllers\MaAssistantController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\SuperadminController;
 use Illuminate\Support\Facades\Route;
@@ -25,6 +27,13 @@ Route::redirect('/', '/login');
 Route::get('/login', [AuthController::class, 'create'])->name('login');
 Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:login')->name('login.store');
 Route::post('/logout', [AuthController::class, 'destroy'])->middleware('auth')->name('logout');
+
+Route::prefix('mobile')->name('mobile.')->group(function () {
+    Route::get('/login', [MobileAppController::class, 'loginForm'])->name('login');
+    Route::post('/login', [MobileAppController::class, 'login'])->middleware('throttle:6,1')->name('login.attempt');
+    Route::post('/logout', [MobileAppController::class, 'logout'])->middleware('auth')->name('logout');
+    Route::get('/dashboard', [MobileAppController::class, 'dashboard'])->middleware(['auth', 'role:admin'])->name('dashboard');
+});
 
 Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
 Route::get('/ma', [MaController::class, 'page'])->name('ma.overview');
@@ -44,6 +53,7 @@ Route::post('/ma/create-store', [MaController::class, 'storeMerchant'])->middlew
 Route::get('/ma/bot-monitoring', fn (MaController $controller) => $controller->page('bot-monitoring'))->name('ma.bot-monitoring');
 Route::get('/ma/analytics', fn (MaController $controller) => $controller->page('analytics'))->name('ma.analytics');
 Route::get('/ma/analytics/tab/{tab}', [MaController::class, 'analyticsTab'])->name('ma.analytics.tab');
+Route::post('/ma/assistant/ask', [MaAssistantController::class, 'ask'])->middleware('throttle:ma-assistant')->name('ma.assistant.ask');
 });
 
 Route::middleware(['auth', 'role:ma,agent,superadmin'])->group(function () {

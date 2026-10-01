@@ -11,6 +11,7 @@
     $categoryLabel = app(App\Services\MerchantTicketService::class)->categoryLabel($ticket->department, $ticket->category);
     $approvalLabel = match ($ticket->approval_status) { 'waiting' => 'Menunggu Approval', 'approved' => 'Disetujui', 'rejected' => 'Ditolak', default => null };
     $approvalClass = match ($ticket->approval_status) { 'approved' => 'ok', 'rejected' => 'danger', default => 'warn' };
+    $ticketsService = app(App\Services\MerchantTicketService::class);
 @endphp
 
 @section('content')
@@ -35,6 +36,14 @@
     </div>
     @if($ticket->approval_status === 'rejected' && $ticket->approval_note)
         <p class="muted" style="margin-top:8px"><strong>Alasan penolakan:</strong> {{ $ticket->approval_note }}</p>
+    @endif
+    @if(!empty($ticket->metadata))
+        <div class="approval-detail-grid" style="margin-top:8px">
+            @foreach($ticket->metadata as $key => $value)
+                @continue($value === null || $value === '')
+                <div class="fee-pill"><span>{{ $ticketsService->fieldLabel($ticket->category, $key) }}</span><strong>{{ $ticketsService->fieldType($ticket->category, $key) === 'number' ? 'Rp'.number_format((float) $value, 0, ',', '.') : $value }}</strong></div>
+            @endforeach
+        </div>
     @endif
     @if($ticket->title)
         <h3 style="margin:12px 0 4px">{{ $ticket->title }}</h3>

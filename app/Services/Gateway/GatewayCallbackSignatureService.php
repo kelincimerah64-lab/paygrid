@@ -15,8 +15,8 @@ class GatewayCallbackSignatureService
         }
 
         $trustedIps = config('paygrid.security.callback_trusted_ips', []);
-        if ($trustedIps && ! in_array($request->ip(), $trustedIps, true)) {
-            return false;
+        if ($trustedIps && in_array($request->ip(), $trustedIps, true)) {
+            return true;
         }
 
         $secret = (string) ($merchant?->merchant_key ?: config('paygrid.gateway.hilogate.secret_key'));

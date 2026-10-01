@@ -96,7 +96,7 @@
             @forelse($problemTopups as $row)
                 <tr>
                     <td><strong>{{ $row->merchant?->name ?: '-' }}</strong></td>
-                    <td class="time-cell">{{ $row->submitted_at?->format('d/m/Y') ?? '-' }}<span>{{ $row->submitted_at?->format('H.i.s') ?? '-' }}</span></td>
+                    <td class="time-cell">{{ $row->submitted_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}<span>{{ $row->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span></td>
                     <td><div class="id-stack"><code>{{ str($row->payment_id ?: $row->gateway_ref_id ?: '-')->limit(18) }}</code><span class="muted">RRN: {{ str($row->rrn ?: '-')->limit(14) }}</span></div></td>
                     <td><strong>{{ number_format((int) $row->amount, 0, ',', '.') }}</strong></td>
                     <td><span class="badge {{ $statusClass($row->status) }}">{{ $statusLabel($row->status) }}</span></td>

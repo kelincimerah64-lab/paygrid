@@ -8,6 +8,7 @@ use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
 use App\Models\MerchantSettlement;
 use App\Models\MerchantTicket;
+use App\Models\MerchantWithdrawal;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
@@ -31,6 +32,14 @@ use Illuminate\View\View;
 
 class MaController extends Controller
 {
+    /**
+     * Request-scoped memoization for merchantVolumeForWindow() - see that
+     * method's docblock.
+     */
+    private $merchantVolumeForWindowCacheKey = null;
+
+    private $merchantVolumeForWindowCache = null;
+
     /**
      * Every MA tab used to eagerly compute all of the below regardless of which
      * tab was actually being viewed (~50+ queries per request even for a page
@@ -61,30 +70,44 @@ class MaController extends Controller
                 $m->volume_trx = (int) ($amounts->volume ?? 0);
             });
         }
+        if ($page === 'stores') {
+            $activity = $this->storeActivityByMerchant($merchants->pluck('id'));
+            $merchants->each(function ($m) use ($activity) {
+                $row = $activity->get($m->id);
+                $m->activity_trx_total = (int) ($row?->trx_total ?? 0);
+                $m->activity_volume_success = (int) ($row?->volume_success ?? 0);
+                $m->activity_last_transaction_at = $row?->last_transaction_at ? CarbonImmutable::parse($row->last_transaction_at) : null;
+            });
+        }
+
+        $overviewMerchants = $page === 'overview' ? $this->merchants($dataFilters)->get() : null;
+        $overviewDailySeries = $page === 'overview'
+            ? $this->cachedAnalytics('overview-daily-series', $dataFilters, fn () => $this->dailyMetricSeries($overviewMerchants->pluck('id'), 30))
+            : null;
+        $overviewQuickStats = $overviewDailySeries ? $this->overviewQuickStats($overviewDailySeries) : null;
+        $overviewDisbursement = $overviewDailySeries ? $this->overviewDisbursement($overviewDailySeries) : null;
+
+        if ($page === 'overview') {
+            $overviewTopMerchants = $this->topMerchants($this->todayFilters(), $overviewMerchants, collect($this->cachedAnalytics('overview-top-merchants-today', $this->todayFilters(), fn () => $this->merchantSuccessTotals($this->todayFilters(), $overviewMerchants->pluck('id')))));
+            $withdrawals = collect($this->cachedAnalytics('overview-withdrawals-today', $this->todayFilters(), fn () => $this->withdrawalTotalsToday($overviewTopMerchants->pluck('merchant'))));
+            $overviewTopMerchants->each(function ($row) use ($withdrawals) {
+                $row->withdrawal = $withdrawals[$row->merchant_id] ?? 0;
+            });
+        } else {
+            $overviewTopMerchants = collect();
+        }
 
         return view('paygrid.ma', [
             'roleLabel' => 'MA',
             'menus' => app(\App\Services\Navigation\MenuBuilder::class)->ma(),
             'active' => $page,
-            'title' => match ($page) {
-                'report' => 'Report',
-                'fee' => 'Fee',
-                'approval' => 'Request Approval',
-                'mapping' => 'Mapping Agen',
-                'stores' => 'List Toko',
-                'agents' => 'Agen',
-                'create-store' => 'Create Toko',
-                'bot-monitoring' => 'Monitoring Bot Telegram',
-                'analytics' => 'Analytics',
-                default => 'Overview',
-            },
             'filters' => $filters,
             'dataFilters' => $dataFilters,
             'periodLabel' => $this->periodLabel($dataFilters),
             'agents' => $page === 'agents'
                 ? $this->agents($filters)->when($filters['status'] === 'all', fn ($query) => $query->where('is_active', true))->get()
                 : collect(),
-            'allAgents' => in_array($page, ['report', 'fee', 'stores', 'mapping', 'create-store'], true)
+            'allAgents' => in_array($page, ['report', 'fee', 'stores', 'mapping', 'create-store', 'analytics'], true)
                 ? $this->agents($this->blankFilters())->get()
                 : collect(),
             'selectedAgent' => $selectedAgent,
@@ -92,14 +115,30 @@ class MaController extends Controller
             'selectedAgentStores' => $selectedAgent ? $this->selectedAgentStores($dataFilters) : collect(),
             'merchants' => $merchants,
             'registrations' => $page === 'approval' ? $this->registrations($filters)->get() : collect(),
-            'transactions' => $selectedStore ? $this->transactions($dataFilters)->simplePaginate(25)->withQueryString() : null,
-            'selectedStoreStats' => $selectedStore ? $this->selectedStoreStats($dataFilters) : null,
-            'summary' => in_array($page, ['overview', 'fee'], true) ? $this->summary($dataFilters) : [],
-            'overviewDetails' => $page === 'overview' ? $this->overviewDetails($dataFilters) : [],
+            'transactions' => $page === 'report' ? $this->transactions($dataFilters)->simplePaginate(25)->withQueryString() : null,
+            'selectedStoreStats' => $page === 'report' ? $this->selectedStoreStats($dataFilters) : null,
+            'summary' => match ($page) {
+                'overview' => $this->cachedAnalytics('overview-summary', $dataFilters, fn () => $this->summary($dataFilters)),
+                'fee' => $this->summary($dataFilters),
+                default => [],
+            },
             'reportAgents' => $page === 'report' ? $this->reportAgents($dataFilters) : collect(),
-            'storeSummaries' => $page === 'overview' ? $this->storeSummaries($dataFilters) : collect(),
-            'storeRanking' => $page === 'overview' ? $this->storeRanking($dataFilters) : collect(),
-            'agentRanking' => $page === 'overview' ? $this->agentRanking($dataFilters) : collect(),
+            'topMerchants' => $overviewTopMerchants,
+            'topPaymentSources' => $page === 'overview'
+                ? collect($this->cachedAnalytics('overview-top-payment-sources', $this->todayFilters(), fn () => $this->topPaymentSources($overviewMerchants->pluck('id'))))
+                : collect(),
+            'withdrawalsCompletedByBank' => $page === 'overview'
+                ? collect($this->cachedAnalytics('overview-withdrawals-completed-by-bank', $this->todayFilters(), fn () => $this->withdrawalsByBank($overviewMerchants->pluck('id'), 'COMPLETED')))
+                : collect(),
+            'withdrawalsPendingByBank' => $page === 'overview'
+                ? collect($this->cachedAnalytics('overview-withdrawals-pending-by-bank', $this->todayFilters(), fn () => $this->withdrawalsByBank($overviewMerchants->pluck('id'), 'PENDING')))
+                : collect(),
+            'overviewDailySeries' => $overviewDailySeries ?? [],
+            'overviewHourlyFlow' => $page === 'overview'
+                ? $this->cachedAnalytics('overview-hourly-flow', $dataFilters, fn () => $this->overviewHourlyFlow($overviewMerchants->pluck('id')))
+                : [],
+            'overviewQuickStats' => $overviewQuickStats ?? [],
+            'overviewDisbursement' => $overviewDisbursement ?? [],
             'maNotifications' => request()->user()?->unreadNotifications()->latest()->limit(5)->get() ?? collect(),
             'botMonitoring' => $page === 'bot-monitoring'
                 ? app(TelegramBotMonitoringService::class)->data($this->botMonitoringFilters(), request()->boolean('refresh'))
@@ -113,6 +152,11 @@ class MaController extends Controller
             'analyticsAmountDistribution' => $page === 'analytics' ? $this->cachedAnalytics('amount-distribution', $dataFilters, fn () => $this->analyticsAmountDistribution($dataFilters)) : [],
             'analyticsVolumeProjection' => $page === 'analytics' ? $this->cachedAnalytics('volume-projection', [], fn () => $this->analyticsVolumeProjection()) : [],
             'analyticsSettlementReconciliation' => $page === 'analytics' ? $this->cachedAnalytics('settlement-reconciliation', $dataFilters, fn () => $this->analyticsSettlementReconciliation($dataFilters)) : [],
+            'hourlyTrafficFilters' => $page === 'analytics' ? $this->hourlyTrafficFilters() : [],
+            'analyticsHourlyTraffic' => $page === 'analytics'
+                ? $this->cachedAnalytics('hourly-traffic', $this->hourlyTrafficFilters(), fn () => $this->analyticsHourlyTraffic($this->hourlyTrafficFilters()))
+                : [],
+            'groupedMerchantsForAnalytics' => $page === 'analytics' ? $this->groupedMerchantsForAnalytics() : collect(),
             'feeMenus' => $feeMenus,
         ]);
     }
@@ -149,8 +193,8 @@ class MaController extends Controller
         $csv = "Masuk,Sukses,Durasi,Toko,Agen,Status,Amount,Reference,RRN,Payment ID,Net,Settlement\n";
         foreach ($rows as $row) {
             $csv .= implode(',', array_map(fn ($value) => '"'.str_replace('"', '""', (string) $value).'"', [
-                $row->submitted_at?->format('Y-m-d H:i:s'),
-                $row->succeeded_at?->format('Y-m-d H:i:s'),
+                $row->submitted_at?->timezone('Asia/Jakarta')->format('Y-m-d H:i:s'),
+                $row->succeeded_at?->timezone('Asia/Jakarta')->format('Y-m-d H:i:s'),
                 $row->successDurationLabel(),
                 $row->merchant?->name,
                 $row->merchant?->agent?->name,
@@ -394,6 +438,13 @@ class MaController extends Controller
         return ['q' => '', 'status' => 'all', 'agent_id' => 'all', 'store_id' => 'all', 'agents_view' => 'top', 'period' => 'this_month', 'type' => 'all', 'from' => null, 'to' => null];
     }
 
+    private function todayFilters(): array
+    {
+        $today = now('Asia/Jakarta')->toDateString();
+
+        return array_merge($this->blankFilters(), ['from' => $today, 'to' => $today]);
+    }
+
     private function periodFilters(array $filters): array
     {
         if ($filters['period'] === 'all') {
@@ -548,12 +599,23 @@ class MaController extends Controller
             ->groupBy('merchant_id')
             ->get()
             ->keyBy('merchant_id');
+        // All-time, not status/period filtered - a store's "last active" shouldn't
+        // disappear just because its only recent attempt failed or fell outside
+        // the report's selected date range.
+        $lastActivity = TopupRequest::query()
+            ->whereIn('merchant_id', $stores->pluck('id'))
+            ->selectRaw('merchant_id, MAX(submitted_at) as last_transaction_at')
+            ->groupBy('merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
 
         return $stores
-            ->each(function (Merchant $store) use ($totals): void {
+            ->each(function (Merchant $store) use ($totals, $lastActivity): void {
                 $row = $totals->get($store->id);
                 $store->metric_trx_total = (int) ($row?->trx_total ?? 0);
                 $store->metric_volume_success = (int) ($row?->volume_success ?? 0);
+                $lastAt = $lastActivity->get($store->id)?->last_transaction_at;
+                $store->metric_last_transaction_at = $lastAt ? CarbonImmutable::parse($lastAt) : null;
             })
             ->sortByDesc('metric_trx_total')
             ->values();
@@ -571,15 +633,24 @@ class MaController extends Controller
             ->first();
         $fee = $this->feeTotalsForFilters($filters);
         $hgSettlement = $this->hgSettlements($filters)->sum('net_amount');
+        $balances = MerchantGatewayBalance::query()
+            ->whereIn('merchant_id', $this->merchants($filters)->pluck('id'))
+            ->selectRaw('COALESCE(SUM(active_balance), 0) as active, COALESCE(SUM(pending_balance), 0) as pending')
+            ->first();
+        $trxTotal = (int) ($totals->trx_total ?? 0);
+        $trxPending = (int) ($totals->trx_pending ?? 0);
+        $trxExpired = (int) ($totals->trx_expired ?? 0);
+        $trxAttempted = $trxTotal + $trxPending + $trxExpired;
 
         return [
             'volume_success' => (int) ($totals->volume_success ?? 0),
             'pending_transaction_amount' => (int) ($totals->pending_transaction_amount ?? 0),
             'total_settlement' => (int) ($totals->total_settlement ?? 0),
             'hg_settlement' => (int) $hgSettlement,
-            'trx_total' => (int) ($totals->trx_total ?? 0),
-            'trx_pending' => (int) ($totals->trx_pending ?? 0),
-            'trx_expired' => (int) ($totals->trx_expired ?? 0),
+            'trx_total' => $trxTotal,
+            'trx_pending' => $trxPending,
+            'trx_expired' => $trxExpired,
+            'success_rate' => $trxAttempted > 0 ? round($trxTotal / $trxAttempted * 100, 2) : 0,
             'issue_total' => $this->ticketQuery($filters)->count(),
             'issue_solved' => $this->ticketQuery($filters)->where('status', 'done')->count(),
             'agent_total' => $this->agents($filters)->count(),
@@ -588,36 +659,8 @@ class MaController extends Controller
             'fee_ma' => $fee['ma'],
             'fee_agent' => $fee['agent'],
             'fee_merchant' => $fee['merchant'],
-        ];
-    }
-
-    private function overviewDetails(array $filters): array
-    {
-        $successTransactions = $this->transactions(array_merge($filters, ['status' => 'success']))->limit(200)->get();
-        $pendingTransactions = $this->transactions(array_merge($filters, ['status' => 'pending']))->limit(200)->get();
-        $expiredTransactions = $this->transactions(array_merge($filters, ['status' => 'all']))->whereIn('topup_requests.status', ['expired', 'failed', 'rejected'])->limit(200)->get();
-        $hgSettlements = $this->hgSettlements($filters)->with('merchant.agent')->latest('settlement_date')->limit(200)->get();
-        $merchants = $this->merchants($filters)->limit(200)->get();
-        $agents = $this->agents($filters)->withCount('merchants')->get();
-        $tickets = $this->ticketQuery($filters)->with(['merchant.agent', 'topupRequest'])
-            ->latest()
-            ->limit(200)
-            ->get();
-        return [
-            'volume_success' => ['title' => 'Volume Sukses', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions)],
-            'pending_transaction_amount' => ['title' => 'Pending Transaksi', 'type' => 'transaction', 'items' => $this->transactionItems($pendingTransactions)],
-            'total_settlement' => ['title' => 'Total Settlement', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions, 'net_amount')],
-            'hg_settlement' => ['title' => 'Settlement Real HG', 'type' => 'settlement', 'items' => $this->settlementItems($hgSettlements)],
-            'trx_total' => ['title' => 'Total Transaksi', 'type' => 'transaction', 'items' => $this->transactionItems($successTransactions)],
-            'trx_pending' => ['title' => 'Transaksi Pending', 'type' => 'transaction', 'items' => $this->transactionItems($pendingTransactions)],
-            'trx_expired' => ['title' => 'Transaksi Expired', 'type' => 'transaction', 'items' => $this->transactionItems($expiredTransactions)],
-            'issue_total' => ['title' => 'Total Issue', 'type' => 'ticket', 'items' => $this->ticketItems($tickets)],
-            'issue_solved' => ['title' => 'Issue Solved', 'type' => 'ticket', 'items' => $this->ticketItems($tickets->where('status', 'done'))],
-            'agent_total' => ['title' => 'List Agen', 'type' => 'agent', 'items' => $this->agentItems($agents)],
-            'merchant_total' => ['title' => 'List Toko', 'type' => 'merchant', 'items' => $this->merchantItems($merchants)],
-            'unassigned' => ['title' => 'Toko Belum Assign Agen', 'type' => 'merchant', 'items' => $this->merchantItems($merchants->whereNull('agent_id'))],
-            'fee_ma' => ['title' => 'Detail Fee MA', 'type' => 'fee', 'items' => $this->feeItems($successTransactions, 'ma')],
-            'fee_agent' => ['title' => 'Detail Fee Agen', 'type' => 'fee', 'items' => $this->feeItems($successTransactions, 'agent')],
+            'available_balance' => (int) ($balances->active ?? 0),
+            'pending_settlement' => (int) ($balances->pending ?? 0),
         ];
     }
 
@@ -678,56 +721,77 @@ class MaController extends Controller
 
     private function feeTotalsForFilters(array $filters): array
     {
-        $row = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.agent_fee_percent - merchants.ma_fee_percent) / 100), 0) as ma')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as agent')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant')
-            ->first();
+        $volumesByMerchant = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
+            ->selectRaw('topup_requests.merchant_id as merchant_id')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->groupBy('topup_requests.merchant_id')
+            ->get();
+
+        $percents = Merchant::query()
+            ->whereIn('id', $volumesByMerchant->pluck('merchant_id'))
+            ->get(['id', 'agent_fee_percent', 'ma_fee_percent', 'merchant_mdr_percent'])
+            ->keyBy('id');
+
+        $ma = $agent = $merchant = 0.0;
+        foreach ($volumesByMerchant as $row) {
+            $percent = $percents->get($row->merchant_id);
+            if (! $percent) {
+                continue;
+            }
+            $ma += $row->volume * ($percent->agent_fee_percent - $percent->ma_fee_percent) / 100;
+            $agent += $row->volume * ($percent->merchant_mdr_percent - $percent->agent_fee_percent) / 100;
+            $merchant += $row->volume * $percent->merchant_mdr_percent / 100;
+        }
 
         return [
-            'ma' => (int) round((float) ($row->ma ?? 0)),
-            'agent' => (int) round((float) ($row->agent ?? 0)),
-            'merchant' => (int) round((float) ($row->merchant ?? 0)),
+            'ma' => (int) round($ma),
+            'agent' => (int) round($agent),
+            'merchant' => (int) round($merchant),
         ];
     }
 
     private function feeAmountsByMerchant(array $filters)
     {
-        return (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
+        $volumesByMerchant = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
             ->selectRaw('topup_requests.merchant_id as merchant_id')
             ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * merchants.merchant_mdr_percent / 100), 0) as merchant_fee')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as agent_fee')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.agent_fee_percent - merchants.ma_fee_percent) / 100), 0) as ma_fee')
             ->groupBy('topup_requests.merchant_id')
             ->get()
             ->keyBy('merchant_id');
+
+        $percents = Merchant::query()
+            ->whereIn('id', $volumesByMerchant->keys())
+            ->get(['id', 'agent_fee_percent', 'ma_fee_percent', 'merchant_mdr_percent'])
+            ->keyBy('id');
+
+        return $volumesByMerchant->map(function ($row) use ($percents) {
+            $percent = $percents->get($row->merchant_id);
+            $row->merchant_fee = $percent ? $row->volume * $percent->merchant_mdr_percent / 100 : 0;
+            $row->agent_fee = $percent ? $row->volume * ($percent->merchant_mdr_percent - $percent->agent_fee_percent) / 100 : 0;
+            $row->ma_fee = $percent ? $row->volume * ($percent->agent_fee_percent - $percent->ma_fee_percent) / 100 : 0;
+
+            return $row;
+        });
     }
 
-    private function transactionItems($transactions, string $amountField = 'amount'): array
+    /**
+     * All-time activity for the List Toko page: trx count/volume only count
+     * status=success (matches the trx-count convention used elsewhere, e.g.
+     * selectedAgentStores()), but last_transaction_at is intentionally NOT
+     * status-filtered — a store that's only getting pending/failed attempts
+     * should still show as recently "active" rather than looking dormant.
+     */
+    private function storeActivityByMerchant($merchantIds)
     {
-        return $transactions->take(200)->map(fn (TopupRequest $trx) => [
-            'date' => $trx->submitted_at?->format('d/m/y H.i') ?: '-',
-            'title' => $trx->customer_reference ?: $trx->gateway_ref_id ?: $trx->payment_id ?: '-',
-            'subtitle' => ($trx->merchant?->name ?: '-').' / '.($trx->merchant?->agent?->name ?: '-'),
-            'status' => $trx->status,
-            'amount' => (int) $trx->{$amountField},
-            'meta' => $trx->rrn ?: $trx->payment_id ?: '-',
-        ])->values()->all();
-    }
-
-    private function settlementItems($settlements): array
-    {
-        return $settlements->take(200)->map(fn (MerchantSettlement $settlement) => [
-            'date' => $settlement->settlement_date?->format('d/m/y') ?: '-',
-            'title' => $settlement->reference,
-            'subtitle' => ($settlement->merchant?->name ?: '-').' / '.($settlement->merchant?->agent?->name ?: '-'),
-            'status' => $settlement->status,
-            'amount' => (int) $settlement->net_amount,
-            'meta' => $settlement->batch_name ?: '-',
-        ])->values()->all();
+        return TopupRequest::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->selectRaw('merchant_id')
+            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as trx_total")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as volume_success")
+            ->selectRaw('MAX(submitted_at) as last_transaction_at')
+            ->groupBy('merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
     }
 
     private function hgSettlements(array $filters)
@@ -735,8 +799,8 @@ class MaController extends Controller
         return MerchantSettlement::query()
             ->where('gateway', 'hilogate')
             ->whereIn('status', ['APPROVED', 'SUCCESS', 'DONE', 'SETTLED'])
-            ->when($filters['from'], fn ($query) => $query->whereDate('settlement_date', '>=', $this->rangeStart($filters['from'])->toDateString()))
-            ->when($filters['to'], fn ($query) => $query->whereDate('settlement_date', '<=', $this->rangeEnd($filters['to'])->toDateString()))
+            ->when($filters['from'], fn ($query) => $query->whereDate('settlement_date', '>=', $this->wibDate($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->whereDate('settlement_date', '<=', $this->wibDate($filters['to'])))
             ->whereHas('merchant', function ($query) use ($filters): void {
                 $query
                     ->when($this->currentMaId(), fn ($nested, $maId) => $nested->whereRelation('agent', 'ma_user_id', $maId))
@@ -745,59 +809,6 @@ class MaController extends Controller
                     ->when($filters['store_id'] !== 'all', fn ($nested) => $nested->whereKey($filters['store_id']))
                     ->when($filters['type'] !== 'all', fn ($nested) => $nested->where('merchant_type', $filters['type']));
             });
-    }
-
-    private function merchantItems($merchants): array
-    {
-        return $merchants->take(200)->map(fn (Merchant $merchant) => [
-            'title' => $merchant->name,
-            'subtitle' => $merchant->agent?->name ?: 'Belum assign agen',
-            'status' => $merchant->approval_status,
-            'amount' => null,
-            'meta' => $merchant->merchant_id ?: $merchant->slug,
-        ])->values()->all();
-    }
-
-    private function agentItems($agents): array
-    {
-        return $agents->take(200)->map(fn (Agent $agent) => [
-            'title' => $agent->name,
-            'subtitle' => $agent->email ?: '-',
-            'status' => $agent->is_active ? 'Active' : 'Suspended',
-            'amount' => null,
-            'meta' => ($agent->merchants_count ?? 0).' toko',
-        ])->values()->all();
-    }
-
-    private function ticketItems($tickets): array
-    {
-        return $tickets->take(200)->map(fn (SupportTicket $ticket) => [
-            'date' => $ticket->created_at?->timezone('Asia/Jakarta')->format('d/m/y H.i') ?: '-',
-            'title' => $ticket->ticket_no ?: $ticket->reference,
-            'subtitle' => ($ticket->merchant?->name ?: '-').' / '.$ticket->issue,
-            'status' => $ticket->status,
-            'amount' => (int) ($ticket->topupRequest?->amount ?? 0),
-            'meta' => $ticket->center_status ?: '-',
-        ])->values()->all();
-    }
-
-    private function feeItems($transactions, string $tier): array
-    {
-        return $transactions->take(200)->map(function (TopupRequest $trx) use ($tier) {
-            $mdrPercent = (float) ($trx->feeSnapshot?->merchant_mdr_percent ?? $trx->merchant?->merchant_mdr_percent);
-            $agentPercent = (float) ($trx->feeSnapshot?->agent_fee_percent ?? $trx->merchant?->agent_fee_percent);
-            $maPercent = (float) ($trx->feeSnapshot?->ma_fee_percent ?? $trx->merchant?->ma_fee_percent);
-            $margin = $tier === 'ma' ? $agentPercent - $maPercent : $mdrPercent - $agentPercent;
-
-            return [
-                'date' => $trx->submitted_at?->format('d/m/y H.i') ?: '-',
-                'title' => $trx->customer_reference ?: $trx->gateway_ref_id ?: $trx->payment_id ?: '-',
-                'subtitle' => ($trx->merchant?->name ?: '-').' / '.$margin.'%',
-                'status' => $trx->status,
-                'amount' => (int) round((int) $trx->amount * ($margin / 100)),
-                'meta' => 'Volume '.$trx->amount,
-            ];
-        })->values()->all();
     }
 
     private function cachedAnalytics(string $key, array $filters, \Closure $callback): array
@@ -822,17 +833,65 @@ class MaController extends Controller
         return Cache::remember($cacheKey, 180, fn () => json_decode(json_encode($callback()), true));
     }
 
+    /**
+     * Merchant IDs scoped to the current MA, resolved from the small merchants/
+     * agents tables. Used in place of whereRelation('merchant.agent', ...) directly
+     * on a hot table (topup_requests/support_tickets) - see transactionsQuery()'s
+     * docblock for why that join kills index usage at this table size. Returns
+     * null when there's no MA scoping to apply (e.g. superadmin).
+     */
+    private function maScopedMerchantIds()
+    {
+        $maId = $this->currentMaId();
+
+        return $maId ? Merchant::query()->whereRelation('agent', 'ma_user_id', $maId)->pluck('id') : null;
+    }
+
+    /**
+     * Per-merchant success volume for a date window, scoped to $merchantIds
+     * (null = no scoping). analyticsAgentLeaderboard()'s current-window figures
+     * and analyticsRevenueConcentration() group the exact same merchant set
+     * over the exact same window - memoized per request so that when both run
+     * in the same Analytics page load (both cache misses), the ~130k-row scan
+     * only happens once instead of twice.
+     */
+    private function merchantVolumeForWindow($merchantIds, ?CarbonImmutable $from, CarbonImmutable $to)
+    {
+        $key = json_encode([$merchantIds?->values()->all(), $from?->toIso8601String(), $to->toIso8601String()]);
+
+        if ($this->merchantVolumeForWindowCacheKey === $key) {
+            return $this->merchantVolumeForWindowCache;
+        }
+
+        $rows = TopupRequest::query()
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds))
+            ->where('status', 'success')
+            ->when($from, fn ($query) => $query->where('submitted_at', '>=', $from))
+            ->where('submitted_at', '<=', $to)
+            ->selectRaw('merchant_id, SUM(amount) as volume')
+            ->groupBy('merchant_id')
+            ->get();
+
+        $this->merchantVolumeForWindowCacheKey = $key;
+        $this->merchantVolumeForWindowCache = $rows;
+
+        return $rows;
+    }
+
     private function analyticsBisnis(array $filters): array
     {
+        $merchantIds = $this->maScopedMerchantIds();
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
+
         $rows = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->where('topup_requests.status', 'success')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw('DATE(topup_requests.submitted_at) as d')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as gmv')
-            ->selectRaw('COALESCE(SUM(topup_requests.fee_amount), 0) as fee')
+            ->where('status', 'success')
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds))
+            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw("{$dateExpr} as d")
+            ->selectRaw('COALESCE(SUM(amount), 0) as gmv')
+            ->selectRaw('COALESCE(SUM(fee_amount), 0) as fee')
             ->groupBy('d')
             ->orderBy('d')
             ->get();
@@ -843,6 +902,7 @@ class MaController extends Controller
         return [
             'labels' => $rows->pluck('d')->values(),
             'gmv' => $rows->pluck('gmv')->map(fn ($v) => (int) $v)->values(),
+            'feeDaily' => $rows->pluck('fee')->map(fn ($v) => (int) $v)->values(),
             'takeRate' => $rows->map(fn ($r) => $r->gmv > 0 ? round(($r->fee / $r->gmv) * 100, 3) : 0)->values(),
             'totalGmv' => $totalGmv,
             'totalFee' => $totalFee,
@@ -850,10 +910,120 @@ class MaController extends Controller
         ];
     }
 
+    private function hourlyTrafficFilters(): array
+    {
+        return [
+            'agent_id' => (string) request('hourly_agent_id', 'all'),
+            'merchant_id' => (string) request('hourly_merchant_id', 'all'),
+            'mode' => request('hourly_mode') === 'hours' ? 'hours' : 'days',
+            'date' => (string) request('hourly_date', now('Asia/Jakarta')->toDateString()),
+            'from' => (string) request('hourly_from', now('Asia/Jakarta')->subDays(6)->toDateString()),
+            'to' => (string) request('hourly_to', now('Asia/Jakarta')->toDateString()),
+        ];
+    }
+
+    /**
+     * Grouped by calendar day/hour in Asia/Jakarta, not UTC - submitted_at is stored
+     * in UTC, so bucketing would otherwise split a single WIB day's transactions
+     * across two UTC dates (or two WIB hours across one UTC hour). Aggregated in SQL
+     * (not by loading every row into PHP) so this stays cheap even for a wide date
+     * range across every merchant - see analyticsHeatmap() for the same pattern.
+     * MA-scoping resolves merchant ids from the small merchants/agents tables first
+     * (whereIn), rather than a whereRelation EXISTS join on the hot topup_requests
+     * table - see transactionsQuery()'s docblock for why that matters at this scale.
+     */
+    private function analyticsHourlyTraffic(array $filters): array
+    {
+        $merchantIds = null;
+        if ($filters['merchant_id'] !== 'all') {
+            $merchantIds = [(int) $filters['merchant_id']];
+        } elseif ($filters['agent_id'] !== 'all') {
+            $merchantIds = Merchant::query()->where('agent_id', $filters['agent_id'])->pluck('id');
+        } elseif ($maId = $this->currentMaId()) {
+            $merchantIds = Merchant::query()->whereRelation('agent', 'ma_user_id', $maId)->pluck('id');
+        }
+
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $hourExpr = $isSqlite ? "CAST(strftime('%H', submitted_at, '+7 hours') AS INTEGER)" : "HOUR(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
+        $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
+
+        $base = TopupRequest::query()
+            ->where('status', 'success')
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds));
+
+        if ($filters['mode'] === 'hours') {
+            $date = $filters['date'] ?: now('Asia/Jakarta')->toDateString();
+            $start = CarbonImmutable::parse($date, 'Asia/Jakarta')->startOfDay();
+            $end = $start->addDay();
+
+            $rows = (clone $base)
+                ->where('submitted_at', '>=', $start->utc())
+                ->where('submitted_at', '<', $end->utc())
+                ->selectRaw("{$hourExpr} as bucket")
+                ->selectRaw('COUNT(*) as trx')
+                ->selectRaw('COALESCE(SUM(amount), 0) as amount')
+                ->groupBy('bucket')
+                ->get()
+                ->keyBy('bucket');
+
+            $labels = [];
+            $trx = [];
+            $amount = [];
+            for ($hour = 0; $hour < 24; $hour++) {
+                $row = $rows->get($hour);
+                $labels[] = sprintf('%02d:00', $hour);
+                $trx[] = (int) ($row->trx ?? 0);
+                $amount[] = (int) ($row->amount ?? 0);
+            }
+
+            return ['mode' => 'hours', 'date' => $date, 'labels' => $labels, 'trx' => $trx, 'amount' => $amount];
+        }
+
+        $from = CarbonImmutable::parse($filters['from'] ?: now('Asia/Jakarta')->subDays(6)->toDateString(), 'Asia/Jakarta')->startOfDay();
+        $to = CarbonImmutable::parse($filters['to'] ?: now('Asia/Jakarta')->toDateString(), 'Asia/Jakarta')->endOfDay();
+
+        $rows = (clone $base)
+            ->where('submitted_at', '>=', $from->utc())
+            ->where('submitted_at', '<=', $to->utc())
+            ->selectRaw("{$dateExpr} as bucket")
+            ->selectRaw('COUNT(*) as trx')
+            ->selectRaw('COALESCE(SUM(amount), 0) as amount')
+            ->groupBy('bucket')
+            ->get()
+            ->keyBy('bucket');
+
+        $labels = [];
+        $trx = [];
+        $amount = [];
+        for ($day = $from; $day->lte($to); $day = $day->addDay()) {
+            $key = $day->toDateString();
+            $row = $rows->get($key);
+            $labels[] = $key;
+            $trx[] = (int) ($row->trx ?? 0);
+            $amount[] = (int) ($row->amount ?? 0);
+        }
+
+        return ['mode' => 'days', 'from' => $from->toDateString(), 'to' => $to->toDateString(), 'labels' => $labels, 'trx' => $trx, 'amount' => $amount];
+    }
+
+    private function groupedMerchantsForAnalytics()
+    {
+        $maId = $this->currentMaId();
+
+        return Merchant::query()
+            ->with('agent')
+            ->when($maId, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $maId))
+            ->orderBy('name')
+            ->get()
+            ->groupBy(fn (Merchant $merchant) => $merchant->agent?->name ?: 'Lainnya')
+            ->map(fn ($group) => $group->map(fn (Merchant $merchant) => ['id' => $merchant->id, 'name' => $merchant->name])->values())
+            ->sortKeys();
+    }
+
     private function analyticsAgentLeaderboard(array $filters): array
     {
         $from = $filters['from'] ? $this->rangeStart($filters['from']) : null;
-        $to = $filters['to'] ? $this->rangeEnd($filters['to']) : now('Asia/Jakarta');
+        $to = $filters['to'] ? $this->rangeEnd($filters['to']) : CarbonImmutable::now();
 
         $prevFrom = null;
         $prevTo = null;
@@ -863,36 +1033,33 @@ class MaController extends Controller
             $prevFrom = $prevTo->copy()->subSeconds($lengthSeconds);
         }
 
-        $base = fn () => TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->where('topup_requests.status', 'success')
-            ->whereNotNull('merchants.agent_id');
+        $merchantIds = $this->maScopedMerchantIds();
+        $agentIdByMerchant = Merchant::query()
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('id', $merchantIds))
+            ->pluck('agent_id', 'id');
 
-        $current = $base()
-            ->when($from, fn ($query) => $query->where('topup_requests.submitted_at', '>=', $from))
-            ->where('topup_requests.submitted_at', '<=', $to)
-            ->selectRaw('merchants.agent_id, SUM(topup_requests.amount) as volume')
-            ->groupBy('merchants.agent_id')
-            ->get()
-            ->keyBy('agent_id');
+        $rollUp = function ($byMerchant) use ($agentIdByMerchant) {
+            $byAgent = [];
+            foreach ($byMerchant as $row) {
+                $agentId = $agentIdByMerchant->get($row->merchant_id);
+                if (! $agentId) {
+                    continue;
+                }
+                $byAgent[$agentId] = ($byAgent[$agentId] ?? 0) + (int) $row->volume;
+            }
 
-        $previous = $prevFrom
-            ? $base()
-                ->where('topup_requests.submitted_at', '>=', $prevFrom)
-                ->where('topup_requests.submitted_at', '<=', $prevTo)
-                ->selectRaw('merchants.agent_id, SUM(topup_requests.amount) as volume')
-                ->groupBy('merchants.agent_id')
-                ->get()
-                ->keyBy('agent_id')
-            : collect();
+            return $byAgent;
+        };
+
+        $current = collect($rollUp($this->merchantVolumeForWindow($merchantIds, $from, $to)));
+        $previous = $prevFrom ? collect($rollUp($this->merchantVolumeForWindow($merchantIds, $prevFrom, $prevTo))) : collect();
 
         $agentIds = $current->keys()->merge($previous->keys())->unique();
         $agents = Agent::query()->whereIn('id', $agentIds)->get(['id', 'name'])->keyBy('id');
 
         $rows = $agentIds->map(function ($id) use ($current, $previous, $agents) {
-            $curVol = (int) ($current->get($id)->volume ?? 0);
-            $prevVol = (int) ($previous->get($id)->volume ?? 0);
+            $curVol = (int) ($current->get($id) ?? 0);
+            $prevVol = (int) ($previous->get($id) ?? 0);
             $growth = $prevVol > 0 ? round((($curVol - $prevVol) / $prevVol) * 100, 2) : ($curVol > 0 ? null : 0);
 
             return [
@@ -908,20 +1075,16 @@ class MaController extends Controller
 
     private function analyticsRevenueConcentration(array $filters): array
     {
-        $rows = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->where('topup_requests.status', 'success')
-            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw('merchants.id as merchant_id, merchants.name as merchant_name, SUM(topup_requests.amount) as volume')
-            ->groupBy('merchants.id', 'merchants.name')
-            ->orderByDesc('volume')
-            ->get();
+        $merchantIds = $this->maScopedMerchantIds();
+        $from = $filters['from'] ? $this->rangeStart($filters['from']) : null;
+        $to = $filters['to'] ? $this->rangeEnd($filters['to']) : CarbonImmutable::now();
+
+        $rows = $this->merchantVolumeForWindow($merchantIds, $from, $to)->sortByDesc('volume')->values();
 
         $totalVolume = (int) $rows->sum('volume');
+        $merchantNames = Merchant::query()->whereIn('id', $rows->take(50)->pluck('merchant_id'))->pluck('name', 'id');
         $top = $rows->take(50)->map(fn ($r) => [
-            'merchant_name' => $r->merchant_name,
+            'merchant_name' => $merchantNames->get($r->merchant_id) ?? '-',
             'volume' => (int) $r->volume,
             'percent' => $totalVolume > 0 ? round(($r->volume / $totalVolume) * 100, 2) : 0,
         ]);
@@ -944,12 +1107,13 @@ class MaController extends Controller
             WHEN topup_requests.amount < 1000000 THEN '300rb - 1jt'
             ELSE '> 1jt' END";
 
+        $merchantIds = $this->maScopedMerchantIds();
+
         $rows = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->where('topup_requests.status', 'success')
-            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
+            ->where('status', 'success')
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds))
+            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
             ->selectRaw("{$caseSql} as bucket, COUNT(*) as cnt")
             ->groupBy('bucket')
             ->get()
@@ -960,16 +1124,19 @@ class MaController extends Controller
 
     private function analyticsVolumeProjection(): array
     {
-        $from = now('Asia/Jakarta')->subDays(29)->startOfDay();
-        $to = now('Asia/Jakarta');
+        $from = now('Asia/Jakarta')->subDays(29)->startOfDay()->utc();
+        $to = now();
+        $merchantIds = $this->maScopedMerchantIds();
+
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
 
         $rows = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->where('topup_requests.status', 'success')
-            ->where('topup_requests.submitted_at', '>=', $from)
-            ->where('topup_requests.submitted_at', '<=', $to)
-            ->selectRaw('DATE(topup_requests.submitted_at) as d, COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->where('status', 'success')
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds))
+            ->where('submitted_at', '>=', $from)
+            ->where('submitted_at', '<=', $to)
+            ->selectRaw("{$dateExpr} as d, COALESCE(SUM(amount), 0) as volume")
             ->groupBy('d')
             ->orderBy('d')
             ->get()
@@ -1011,15 +1178,19 @@ class MaController extends Controller
 
         $settlements = MerchantSettlement::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->when($filters['from'], fn ($query) => $query->where('settlement_date', '>=', $this->rangeStart($filters['from'])->toDateString()))
-            ->when($filters['to'], fn ($query) => $query->where('settlement_date', '<=', $this->rangeEnd($filters['to'])->toDateString()))
+            ->when($filters['from'], fn ($query) => $query->where('settlement_date', '>=', $this->wibDate($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('settlement_date', '<=', $this->wibDate($filters['to'])))
             ->orderByDesc('settlement_date')
             ->limit(50)
             ->get();
 
         $rows = $settlements->map(function (MerchantSettlement $settlement) {
-            $windowFrom = CarbonImmutable::parse($settlement->settlement_date->toDateString().' '.($settlement->batch_from ?: '00:00:00'), 'Asia/Jakarta');
-            $windowTo = CarbonImmutable::parse($settlement->settlement_date->toDateString().' '.($settlement->batch_until ?: '23:59:59'), 'Asia/Jakarta');
+            // .utc() is required here: submitted_at is stored in UTC, and a WIB-tagged
+            // Carbon bound straight into whereBetween() gets its WIB wall-clock digits
+            // compared literally against the UTC column (see rangeStart()'s docblock) -
+            // without it, "expected" silently drifted from the batch window by 7 hours.
+            $windowFrom = CarbonImmutable::parse($settlement->settlement_date->toDateString().' '.($settlement->batch_from ?: '00:00:00'), 'Asia/Jakarta')->utc();
+            $windowTo = CarbonImmutable::parse($settlement->settlement_date->toDateString().' '.($settlement->batch_until ?: '23:59:59'), 'Asia/Jakarta')->utc();
 
             $expected = (int) TopupRequest::query()
                 ->where('merchant_id', $settlement->merchant_id)
@@ -1041,9 +1212,10 @@ class MaController extends Controller
 
     private function analyticsPerformance(array $filters): array
     {
+        $merchantIds = $this->maScopedMerchantIds();
+
         $base = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('topup_requests.merchant_id', $merchantIds))
             ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])));
 
@@ -1087,15 +1259,17 @@ class MaController extends Controller
         $diffExpr = $isSqlite
             ? '(julianday(topup_requests.succeeded_at) - julianday(topup_requests.submitted_at)) * 86400'
             : 'TIMESTAMPDIFF(SECOND, topup_requests.submitted_at, topup_requests.succeeded_at)';
+        $dateExpr = $isSqlite ? "date(topup_requests.submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(topup_requests.submitted_at, '+00:00', '+07:00'))";
+
+        $merchantIds = $this->maScopedMerchantIds();
 
         $rows = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('topup_requests.merchant_id', $merchantIds))
             ->where('topup_requests.status', 'success')
             ->whereNotNull('topup_requests.succeeded_at')
             ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw("DATE(topup_requests.submitted_at) as d, AVG({$diffExpr}) as avg_seconds")
+            ->selectRaw("{$dateExpr} as d, AVG({$diffExpr}) as avg_seconds")
             ->groupBy('d')
             ->orderBy('d')
             ->get();
@@ -1109,25 +1283,25 @@ class MaController extends Controller
 
     private function analyticsChannelReliability(array $filters): array
     {
-        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
-        // "channel" (bank/e-wallet the customer paid from) is never present under both
-        // keys on the same row: QRIS-style payloads use issuer_name, script-style
-        // payloads use bank_name. Coalesce them into one field for the breakdown.
-        $channelExpr = $isSqlite
-            ? "COALESCE(NULLIF(json_extract(topup_requests.gateway_payload, '\$.issuer_name'), ''), NULLIF(json_extract(topup_requests.gateway_payload, '\$.bank_name'), ''))"
-            : "COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(topup_requests.gateway_payload, '\$.issuer_name')), ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(topup_requests.gateway_payload, '\$.bank_name')), ''))";
+        $merchantIds = $this->maScopedMerchantIds();
 
+        // "channel" is a generated column (see the add_channel_column_to_topup_requests_table
+        // migration) backed by an index, instead of grouping by a raw JSON_EXTRACT
+        // expression computed per row - that alone took ~7s at this table's row count.
         $rows = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('topup_requests.merchant_id', $merchantIds))
             ->whereIn('topup_requests.status', ['success', 'failed', 'expired', 'rejected'])
+            ->whereNotNull('topup_requests.channel')
+            // JSON_UNQUOTE on a JSON null value (payload has issuer_name/bank_name
+            // explicitly set to null, not absent) yields the literal string "null",
+            // not a real NULL - whereNotNull() alone doesn't catch that.
+            ->where('topup_requests.channel', '!=', 'null')
             ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw("{$channelExpr} as channel")
+            ->selectRaw('topup_requests.channel as channel')
             ->selectRaw('COUNT(*) as total')
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as success_count")
-            ->groupBy('channel')
-            ->havingRaw('channel IS NOT NULL')
+            ->groupBy('topup_requests.channel')
             ->orderByDesc('total')
             ->limit(50)
             ->get();
@@ -1144,24 +1318,30 @@ class MaController extends Controller
 
     private function analyticsOperations(array $filters): array
     {
+        $merchantIds = $this->maScopedMerchantIds();
+
         $rows = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
             ->leftJoin('support_tickets', function ($join) {
                 $join->on('support_tickets.topup_request_id', '=', 'topup_requests.id')
                     ->whereIn('support_tickets.center_status', ['issue_bank', 'issue_switching']);
             })
             ->whereIn('topup_requests.status', ['failed', 'expired', 'rejected'])
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('topup_requests.merchant_id', $merchantIds))
             ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw('merchants.id as merchant_id, merchants.name as merchant_name')
+            ->selectRaw('topup_requests.merchant_id as merchant_id')
             ->selectRaw('COUNT(DISTINCT topup_requests.id) as failed_count')
             ->selectRaw('COUNT(DISTINCT support_tickets.id) as with_ticket_count')
-            ->groupBy('merchants.id', 'merchants.name')
+            ->groupBy('topup_requests.merchant_id')
             ->having('failed_count', '>', 0)
             ->orderByDesc('failed_count')
             ->limit(50)
             ->get();
+
+        $merchantNames = Merchant::query()->whereIn('id', $rows->pluck('merchant_id'))->pluck('name', 'id');
+        $rows->each(function ($row) use ($merchantNames): void {
+            $row->merchant_name = $merchantNames->get($row->merchant_id) ?? '-';
+        });
 
         return [
             'perMerchant' => $rows,
@@ -1173,14 +1353,15 @@ class MaController extends Controller
     private function analyticsOutlierDetection(): array
     {
         $merchantIds = $this->merchants($this->blankFilters())->pluck('id');
-        $today = now('Asia/Jakarta')->toDateString();
-        $sevenDaysAgo = now('Asia/Jakarta')->subDays(7)->startOfDay();
-        $yesterday = now('Asia/Jakarta')->subDay()->endOfDay();
+        $todayStart = now('Asia/Jakarta')->startOfDay()->utc();
+        $todayEnd = now('Asia/Jakarta')->endOfDay()->utc();
+        $sevenDaysAgo = now('Asia/Jakarta')->subDays(7)->startOfDay()->utc();
+        $yesterday = now('Asia/Jakarta')->subDay()->endOfDay()->utc();
 
         $todayVolumes = TopupRequest::query()
             ->whereIn('merchant_id', $merchantIds)
             ->where('status', 'success')
-            ->whereDate('submitted_at', $today)
+            ->whereBetween('submitted_at', [$todayStart, $todayEnd])
             ->selectRaw('merchant_id, COUNT(*) as trx')
             ->groupBy('merchant_id')
             ->get()
@@ -1221,9 +1402,10 @@ class MaController extends Controller
             ? '(julianday(support_tickets.closed_at) - julianday(support_tickets.created_at)) * 24'
             : 'TIMESTAMPDIFF(SECOND, support_tickets.created_at, support_tickets.closed_at) / 3600';
 
+        $merchantIds = $this->maScopedMerchantIds();
+
         $base = SupportTicket::query()
-            ->join('merchants', 'merchants.id', '=', 'support_tickets.merchant_id')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('support_tickets.merchant_id', $merchantIds))
             ->whereNotNull('support_tickets.closed_at')
             ->when($filters['from'], fn ($query) => $query->where('support_tickets.created_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('support_tickets.created_at', '<=', $this->rangeEnd($filters['to'])));
@@ -1310,7 +1492,7 @@ class MaController extends Controller
     private function analyticsHealthScore(): array
     {
         $merchantIds = $this->merchants($this->blankFilters())->pluck('id');
-        $from = now('Asia/Jakarta')->subDays(29)->startOfDay();
+        $from = now('Asia/Jakarta')->subDays(29)->startOfDay()->utc();
 
         $txStats = TopupRequest::query()
             ->whereIn('merchant_id', $merchantIds)
@@ -1361,51 +1543,17 @@ class MaController extends Controller
         return ['rows' => $rows];
     }
 
-    private function storeRanking(array $filters)
+    /**
+     * Shared per-merchant success-only aggregate for the Overview page's period
+     * filters. storeRanking()/storeSummaries()/agentRanking() all group the exact
+     * same whereIn(merchant_id)+status=success+from/to slice of topup_requests -
+     * computing it once here and passing it in avoids scanning the same ~100k+
+     * row window 3 separate times per page load.
+     */
+    private function merchantSuccessTotals(array $filters, $merchantIds)
     {
         return TopupRequest::query()
-            ->with('merchant')
-            ->where('status', 'success')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw('merchant_id, COUNT(*) as trx')
-            ->selectRaw('COALESCE(SUM(amount), 0) as volume')
-            ->groupBy('merchant_id')
-            ->orderBy('trx')
-            ->orderBy('volume')
-            ->limit(10)
-            ->get();
-    }
-
-    private function agentRanking(array $filters)
-    {
-        return TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->with('merchant.agent')
-            ->where('topup_requests.status', 'success')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
-            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->whereNotNull('merchants.agent_id')
-            ->selectRaw('merchants.agent_id, COUNT(*) as trx')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
-            ->groupBy('merchants.agent_id')
-            ->orderBy('trx')
-            ->orderBy('volume')
-            ->limit(10)
-            ->get()
-            ->each(function ($row): void {
-                $row->agent = Agent::query()->find($row->agent_id);
-            });
-    }
-
-    private function storeSummaries(array $filters)
-    {
-        $balances = MerchantGatewayBalance::query()->get()->keyBy('merchant_id');
-        $merchants = $this->merchants($filters)->get();
-        $totals = TopupRequest::query()
-            ->whereIn('merchant_id', $merchants->pluck('id'))
+            ->whereIn('merchant_id', $merchantIds)
             ->where('status', 'success')
             ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
@@ -1415,45 +1563,343 @@ class MaController extends Controller
             ->groupBy('merchant_id')
             ->get()
             ->keyBy('merchant_id');
+    }
 
-        return $merchants
-            ->map(function (Merchant $merchant) use ($balances, $totals) {
-                $row = $totals->get($merchant->id);
+    /**
+     * Per-WIB-day breakdown for the Overview hero/quick-stat tiles: success
+     * volume+fee, pending, and "at risk" (failed/expired/rejected - money that
+     * won't be collected) amounts. Powers both the today-vs-yesterday deltas
+     * and the trailing sparklines from a single query, zero-filled for gap
+     * days so the caller can always index the last N days safely.
+     */
+    private function dailyMetricSeries($merchantIds, int $days = 14): array
+    {
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
+        $since = now('Asia/Jakarta')->subDays($days - 1)->startOfDay()->utc();
 
-                return [
-                    'name' => $merchant->name,
-                    'agent' => $merchant->agent?->name ?: '-',
-                    'trx_total' => (int) ($row?->trx_total ?? 0),
-                    'volume_success' => (int) ($row?->volume_success ?? 0),
-                    'pending_balance' => (int) ($balances->get($merchant->id)?->pending_balance ?? 0),
-                    'settlement' => (int) ($row?->settlement ?? 0),
+        $rows = TopupRequest::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('submitted_at', '>=', $since)
+            ->selectRaw("{$dateExpr} as d")
+            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as trx_success")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as volume_success")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN fee_amount ELSE 0 END), 0) as fee")
+            ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as pending_amount")
+            ->selectRaw("SUM(CASE WHEN status IN ('expired', 'failed', 'rejected') THEN 1 ELSE 0 END) as trx_risk")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status IN ('expired', 'failed', 'rejected') THEN amount ELSE 0 END), 0) as risk_amount")
+            ->groupBy('d')
+            ->get()
+            ->keyBy('d');
+
+        $withdrawalDateExpr = $isSqlite ? "date(gateway_created_at, '+7 hours')" : "DATE(CONVERT_TZ(gateway_created_at, '+00:00', '+07:00'))";
+        $withdrawalRows = MerchantWithdrawal::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('status', 'COMPLETED')
+            ->where('gateway_created_at', '>=', $since)
+            ->selectRaw("{$withdrawalDateExpr} as d")
+            ->selectRaw('COALESCE(SUM(amount), 0) as withdrawal')
+            ->groupBy('d')
+            ->get()
+            ->keyBy('d');
+
+        $series = [];
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $date = now('Asia/Jakarta')->subDays($i)->toDateString();
+            $row = $rows->get($date);
+            $trxSuccess = (int) ($row->trx_success ?? 0);
+            $trxPending = (int) ($row->trx_pending ?? 0);
+            $trxRisk = (int) ($row->trx_risk ?? 0);
+            $attempted = $trxSuccess + $trxPending + $trxRisk;
+            $series[] = [
+                'date' => $date,
+                'trx_success' => $trxSuccess,
+                'volume_success' => (int) ($row->volume_success ?? 0),
+                'fee' => (int) ($row->fee ?? 0),
+                'trx_pending' => $trxPending,
+                'pending_amount' => (int) ($row->pending_amount ?? 0),
+                'risk_amount' => (int) ($row->risk_amount ?? 0),
+                'success_rate' => $attempted > 0 ? round($trxSuccess / $attempted * 100, 2) : 0,
+                'withdrawal' => (int) ($withdrawalRows->get($date)->withdrawal ?? 0),
+            ];
+        }
+
+        return $series;
+    }
+
+    /**
+     * Today vs yesterday, 24 hourly buckets each (WIB) - powers the Overview
+     * "Transaction Flow" chart's default hourly view (1H/6H/24H are all just
+     * PHP-side slices of this same 24-bucket array, no extra queries).
+     */
+    private function overviewHourlyFlow($merchantIds): array
+    {
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
+        $hourExpr = $isSqlite ? "CAST(strftime('%H', submitted_at, '+7 hours') AS INTEGER)" : "HOUR(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
+
+        $todayStart = now('Asia/Jakarta')->startOfDay();
+        $yesterdayStart = $todayStart->copy()->subDay();
+        $today = $todayStart->toDateString();
+        $yesterday = $yesterdayStart->toDateString();
+
+        $rows = TopupRequest::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('submitted_at', '>=', $yesterdayStart->utc())
+            ->where('submitted_at', '<', $todayStart->copy()->addDay()->utc())
+            ->selectRaw("{$dateExpr} as d, {$hourExpr} as h")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as volume")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN fee_amount ELSE 0 END), 0) as fee")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as pending_amount")
+            ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_trx")
+            ->groupBy('d', 'h')
+            ->get()
+            ->groupBy('d');
+
+        $withdrawalDateExpr = $isSqlite ? "date(gateway_created_at, '+7 hours')" : "DATE(CONVERT_TZ(gateway_created_at, '+00:00', '+07:00'))";
+        $withdrawalHourExpr = $isSqlite ? "CAST(strftime('%H', gateway_created_at, '+7 hours') AS INTEGER)" : "HOUR(CONVERT_TZ(gateway_created_at, '+00:00', '+07:00'))";
+        $withdrawalRows = MerchantWithdrawal::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('status', 'COMPLETED')
+            ->where('gateway_created_at', '>=', $yesterdayStart->utc())
+            ->where('gateway_created_at', '<', $todayStart->copy()->addDay()->utc())
+            ->selectRaw("{$withdrawalDateExpr} as d, {$withdrawalHourExpr} as h")
+            ->selectRaw('COALESCE(SUM(amount), 0) as withdrawal')
+            ->groupBy('d', 'h')
+            ->get()
+            ->groupBy('d');
+
+        $extract = function ($dateKey, string $field) use ($rows) {
+            $byHour = ($rows->get($dateKey) ?? collect())->keyBy('h');
+            $out = [];
+            for ($h = 0; $h < 24; $h++) {
+                $out[] = (int) ($byHour->get($h)->{$field} ?? 0);
+            }
+
+            return $out;
+        };
+
+        $extractWithdrawal = function ($dateKey) use ($withdrawalRows) {
+            $byHour = ($withdrawalRows->get($dateKey) ?? collect())->keyBy('h');
+            $out = [];
+            for ($h = 0; $h < 24; $h++) {
+                $out[] = (int) ($byHour->get($h)->withdrawal ?? 0);
+            }
+
+            return $out;
+        };
+
+        $labels = [];
+        for ($h = 0; $h < 24; $h++) {
+            $labels[] = sprintf('%02d:00', $h);
+        }
+
+        return [
+            'labels' => $labels,
+            'todayVolume' => $extract($today, 'volume'),
+            'yesterdayVolume' => $extract($yesterday, 'volume'),
+            'todayFee' => $extract($today, 'fee'),
+            'yesterdayFee' => $extract($yesterday, 'fee'),
+            'todayPendingAmount' => $extract($today, 'pending_amount'),
+            'yesterdayPendingAmount' => $extract($yesterday, 'pending_amount'),
+            'todayPendingTrx' => $extract($today, 'pending_trx'),
+            'yesterdayPendingTrx' => $extract($yesterday, 'pending_trx'),
+            'todayWithdrawal' => $extractWithdrawal($today),
+            'yesterdayWithdrawal' => $extractWithdrawal($yesterday),
+            'currentHour' => (int) now('Asia/Jakarta')->format('G'),
+        ];
+    }
+
+    /**
+     * Derives today-vs-yesterday deltas and 7-day sparklines for the Overview
+     * quick-stat tiles from the shared dailyMetricSeries() output - no extra
+     * queries, just reshaping the last 14 days already fetched.
+     */
+    private function overviewQuickStats(array $dailySeries): array
+    {
+        $today = end($dailySeries);
+        $yesterday = $dailySeries[count($dailySeries) - 2] ?? null;
+        $pctChange = fn ($cur, $prev) => $prev > 0 ? round((($cur - $prev) / $prev) * 100, 1) : ($cur > 0 ? null : 0);
+        $spark = fn (string $field) => collect($dailySeries)->pluck($field)->slice(-7)->values()->all();
+
+        $metrics = [
+            'revenue_today' => 'fee',
+            'successful_volume' => 'volume_success',
+            'success_rate' => 'success_rate',
+            'pending' => 'pending_amount',
+            'at_risk' => 'risk_amount',
+        ];
+
+        return collect($metrics)->map(fn ($field) => [
+            'value' => $today[$field],
+            'change' => $pctChange($today[$field], $yesterday[$field] ?? 0),
+            'spark' => $spark($field),
+        ])->all();
+    }
+
+    /**
+     * Today's (WIB, 00:00 - now) disbursement totals for the Overview page's
+     * "Row 2" panel - reshapes the same dailyMetricSeries() bucket already
+     * fetched for the quick-stat tiles, no extra queries.
+     */
+    private function overviewDisbursement(array $dailySeries): array
+    {
+        $today = end($dailySeries);
+
+        return [
+            'total' => $today['volume_success'],
+            'total_trx' => $today['trx_success'],
+            'pending' => $today['pending_amount'],
+            'pending_trx' => $today['trx_pending'],
+        ];
+    }
+
+    /**
+     * Top 10 merchants by today's volume, for the Overview "Top Ten Merchant
+     * Daily" panel - always today-scoped regardless of the page's own period
+     * filter, so it needs its own totals query rather than reusing $dataFilters.
+     */
+    private function topMerchants(array $filters, $merchants = null, $totals = null)
+    {
+        $merchants ??= $this->merchants($filters)->get();
+        $totals ??= $this->merchantSuccessTotals($filters, $merchants->pluck('id'));
+
+        return $totals
+            ->map(function ($row) use ($merchants) {
+                $row = (array) $row;
+
+                return (object) [
+                    'merchant_id' => $row['merchant_id'],
+                    'trx' => $row['trx_total'],
+                    'volume' => $row['volume_success'],
+                    'withdrawal' => 0,
+                    'merchant' => $merchants->firstWhere('id', $row['merchant_id']),
                 ];
             })
-            ->sortBy('trx_total')
+            ->sortByDesc('volume')
             ->take(10)
             ->values();
     }
 
+    /**
+     * Today's (WIB) completed withdrawal amount per merchant, from the local
+     * merchant_withdrawals table (kept fresh by the gateway:sync-withdrawals
+     * schedule) - not a live Hilogate call, so this stays fast and unaffected
+     * by a merchant's gateway credential being temporarily broken.
+     */
+    private function withdrawalTotalsToday($merchants): array
+    {
+        $todayStart = now('Asia/Jakarta')->startOfDay();
+        $merchantIds = $merchants->filter()->pluck('id');
+
+        return MerchantWithdrawal::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('status', 'COMPLETED')
+            ->where('gateway_created_at', '>=', $todayStart->utc())
+            ->where('gateway_created_at', '<', $todayStart->copy()->addDay()->utc())
+            ->selectRaw('merchant_id, COALESCE(SUM(amount), 0) as total')
+            ->groupBy('merchant_id')
+            ->pluck('total', 'merchant_id')
+            ->all();
+    }
+
+    /**
+     * Top 10 QRIS payment sources (bank/channel) by today's successful TRX
+     * count and amount, for the Overview "QRIS Source" panel - replaces the
+     * old per-transaction live ticker with an aggregated daily ranking.
+     */
+    private function topPaymentSources($merchantIds): \Illuminate\Support\Collection
+    {
+        $todayStart = now('Asia/Jakarta')->startOfDay();
+
+        return TopupRequest::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('status', 'success')
+            ->whereNotNull('channel')
+            ->where('channel', '!=', '')
+            ->where('submitted_at', '>=', $todayStart->utc())
+            ->where('submitted_at', '<', $todayStart->copy()->addDay()->utc())
+            ->selectRaw('channel, COUNT(*) as trx_total')
+            ->selectRaw('COALESCE(SUM(amount), 0) as volume')
+            ->groupBy('channel')
+            ->orderByDesc('volume')
+            ->limit(10)
+            ->get();
+    }
+
+    /**
+     * Top 10 banks by withdrawal amount, for the Overview "Withdrawal by Bank"
+     * panels - completed is today-scoped (matches the rest of this page's
+     * daily framing); pending has no date filter since a stuck withdrawal
+     * from days ago is exactly what this panel exists to surface.
+     */
+    private function withdrawalsByBank($merchantIds, string $status): \Illuminate\Support\Collection
+    {
+        $query = MerchantWithdrawal::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('status', $status)
+            ->whereNotNull('bank_name')
+            ->where('bank_name', '!=', '');
+
+        if ($status === 'COMPLETED') {
+            $todayStart = now('Asia/Jakarta')->startOfDay();
+            $query->where('gateway_created_at', '>=', $todayStart->utc())
+                ->where('gateway_created_at', '<', $todayStart->copy()->addDay()->utc());
+        }
+
+        return $query->selectRaw('bank_name, COUNT(*) as trx_total')
+            ->selectRaw('COALESCE(SUM(amount), 0) as volume')
+            ->groupBy('bank_name')
+            ->orderByDesc('volume')
+            ->limit(10)
+            ->get();
+    }
+
     private function ticketQuery(array $filters)
     {
+        $maId = $this->currentMaId();
+
         return SupportTicket::query()
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('merchant.agent', 'ma_user_id', $maId))
+            ->when($maId, fn ($query) => $query->whereIn('merchant_id', Merchant::query()->whereRelation('agent', 'ma_user_id', $maId)->pluck('id')))
             ->when($filters['from'], fn ($query) => $query->where('created_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('created_at', '<=', $this->rangeEnd($filters['to'])));
     }
 
+    /**
+     * Returned in UTC (not Asia/Jakarta) because every call site binds this
+     * straight into a `where('utc_datetime_column', ...)` clause. Laravel's
+     * query grammar formats a bound DateTimeInterface with ->format() as-is -
+     * it does NOT convert to UTC first - so a WIB-tagged Carbon here would get
+     * its WIB wall-clock digits bound literally against a UTC-stored column,
+     * silently shifting every date-range filter 7 hours later than intended.
+     * If you need the plain WIB calendar-date string instead (e.g. to compare
+     * against a DATE column like settlement_date), use wibDate()/wibDateEnd()
+     * instead of calling ->toDateString() on this.
+     */
     private function rangeStart(string $value): CarbonImmutable
     {
         $parsed = CarbonImmutable::parse($value, 'Asia/Jakarta');
 
-        return str_contains($value, ':') ? $parsed : $parsed->startOfDay();
+        return (str_contains($value, ':') ? $parsed : $parsed->startOfDay())->utc();
     }
 
     private function rangeEnd(string $value): CarbonImmutable
     {
         $parsed = CarbonImmutable::parse($value, 'Asia/Jakarta');
 
-        return str_contains($value, ':') ? $parsed : $parsed->endOfDay();
+        return (str_contains($value, ':') ? $parsed : $parsed->endOfDay())->utc();
+    }
+
+    /**
+     * Plain WIB calendar-date string, for comparing against a DATE column
+     * (e.g. settlement_date) that has no time-of-day or timezone of its own -
+     * unlike rangeStart()/rangeEnd(), this must NOT be UTC-converted first, or
+     * dates near midnight WIB would shift to the wrong calendar day.
+     */
+    private function wibDate(string $value): string
+    {
+        return CarbonImmutable::parse($value, 'Asia/Jakarta')->toDateString();
     }
 
     private function currentMaId(): ?int

@@ -29,9 +29,8 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $response = $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'cs',
+            'card' => 'transaksi',
             'category' => 'topup',
-            'title' => 'Test title',
             'description' => 'Topup belum masuk ke saldo toko.',
         ]);
 
@@ -50,9 +49,8 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'tech',
+            'card' => 'teknis',
             'category' => 'ip_whitelist',
-            'title' => 'Test title',
             'description' => 'Butuh whitelist IP VPS baru.',
         ])->assertRedirect();
 
@@ -60,7 +58,6 @@ class MerchantTicketTest extends TestCase
             'merchant_id' => $merchant->id,
             'department' => 'tech',
             'category' => 'ip_whitelist',
-            'title' => 'Test title',
         ]);
     }
 
@@ -71,9 +68,8 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'finance',
+            'card' => 'settlement',
             'category' => 'discrepancies_amount',
-            'title' => 'Test title',
             'description' => 'Ada selisih nominal settlement.',
         ])->assertRedirect();
 
@@ -81,7 +77,6 @@ class MerchantTicketTest extends TestCase
             'merchant_id' => $merchant->id,
             'department' => 'finance',
             'category' => 'discrepancies_amount',
-            'title' => 'Test title',
         ]);
     }
 
@@ -92,10 +87,9 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'cs',
+            'card' => 'transaksi',
             'category' => 'ip_whitelist',
-            'title' => 'Test title',
-            'description' => 'Kategori tech dikirim ke department cs.',
+            'description' => 'Kategori tech dikirim ke card transaksi (department cs).',
         ])->assertSessionHasErrors('category');
     }
 
@@ -200,9 +194,8 @@ class MerchantTicketTest extends TestCase
         $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'cs',
+            'card' => 'transaksi',
             'category' => 'settlement',
-            'title' => 'Test title',
             'description' => 'Settlement belum masuk.',
         ]);
         $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
@@ -262,9 +255,8 @@ class MerchantTicketTest extends TestCase
             ->assertSee(route('merchant.tickets.index', $merchant));
 
         $this->actingAs($ma)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'cs',
+            'card' => 'lainnya',
             'category' => 'others',
-            'title' => 'Test title',
             'description' => 'Dibuat oleh MA untuk toko.',
         ])->assertRedirect();
 
@@ -315,9 +307,8 @@ class MerchantTicketTest extends TestCase
             ->assertDontSee(route('merchant.tickets.index', $bj));
 
         $this->actingAs($agentUser)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'tech',
+            'card' => 'teknis',
             'category' => 'technical_issue',
-            'title' => 'Test title',
             'description' => 'Dibuat oleh agen untuk toko.',
         ])->assertRedirect();
 
@@ -408,9 +399,8 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'cs',
+            'card' => 'lainnya',
             'category' => 'others',
-            'title' => 'Test title',
             'description' => 'Ada 2 bukti transfer.',
             'attachments' => [
                 UploadedFile::fake()->image('bukti-1.jpg'),
@@ -428,6 +418,120 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->get(route('merchant.tickets.attachment', [$merchant, $ticket, 2]))->assertNotFound();
     }
 
+    public function test_transaksi_card_stores_structured_metadata(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'card' => 'transaksi',
+            'category' => 'transaction',
+            'description' => 'Dana belum masuk ke saldo toko.',
+            'rrn' => '123456789012',
+            'reference_id' => 'PG-20260927-000123',
+            'transaction_date' => '2026-09-26',
+            'amount' => '100000',
+            'payment_method' => 'QRIS',
+        ])->assertRedirect();
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+        $this->assertSame('123456789012', $ticket->metadata['rrn']);
+        $this->assertSame('PG-20260927-000123', $ticket->metadata['reference_id']);
+        $this->assertSame('QRIS', $ticket->metadata['payment_method']);
+    }
+
+    public function test_non_transaksi_card_ignores_unrelated_fields_and_gets_its_own(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'card' => 'lainnya',
+            'category' => 'others',
+            'description' => 'Pertanyaan lain-lain.',
+            'payment_method' => 'QRIS',
+        ])->assertRedirect();
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+        $this->assertNull($ticket->metadata);
+    }
+
+    public function test_lainnya_card_stores_title_on_the_ticket_and_priority_in_metadata(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'card' => 'lainnya',
+            'category' => 'others',
+            'title' => 'Pertanyaan soal biaya admin',
+            'priority' => 'Tinggi',
+            'description' => 'Kenapa ada biaya admin tambahan bulan ini?',
+        ])->assertRedirect();
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+        $this->assertSame('Pertanyaan soal biaya admin', $ticket->title);
+        $this->assertSame('Tinggi', $ticket->metadata['priority']);
+        $this->assertArrayNotHasKey('title', $ticket->metadata);
+    }
+
+    public function test_teknis_card_stores_its_own_structured_metadata(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'card' => 'teknis',
+            'category' => 'technical_issue',
+            'description' => 'Dashboard error terus.',
+            'platform' => 'Web Dashboard',
+            'error_message' => '500 Internal Server Error',
+        ])->assertRedirect();
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+        $this->assertSame('Web Dashboard', $ticket->metadata['platform']);
+        $this->assertSame('500 Internal Server Error', $ticket->metadata['error_message']);
+        $this->assertArrayNotHasKey('rrn', $ticket->metadata);
+    }
+
+    public function test_different_categories_under_the_same_card_get_different_metadata_fields(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        // Both "Missing Transaction" and "Discrepancies Amount" live under the
+        // "settlement" card (finance department), but should get their own
+        // field schema rather than sharing the card's default fields.
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'card' => 'settlement',
+            'category' => 'missing_transaction',
+            'description' => 'Ada transaksi yang hilang dari laporan.',
+            'rrn' => '112233445566',
+        ])->assertRedirect();
+
+        $missing = MerchantTicket::query()->where('merchant_id', $merchant->id)->where('category', 'missing_transaction')->firstOrFail();
+        $this->assertSame('112233445566', $missing->metadata['rrn']);
+        $this->assertArrayNotHasKey('batch_reference', $missing->metadata);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'card' => 'settlement',
+            'category' => 'discrepancies_amount',
+            'description' => 'Nominal settlement tidak sesuai.',
+            'expected_amount' => '5000000',
+            'received_amount' => '4900000',
+        ])->assertRedirect();
+
+        $discrepancy = MerchantTicket::query()->where('merchant_id', $merchant->id)->where('category', 'discrepancies_amount')->firstOrFail();
+        $this->assertSame('5000000', $discrepancy->metadata['expected_amount']);
+        $this->assertSame('4900000', $discrepancy->metadata['received_amount']);
+        $this->assertArrayNotHasKey('rrn', $discrepancy->metadata);
+    }
+
     public function test_ip_whitelist_ticket_starts_waiting_for_approval_and_other_categories_do_not(): void
     {
         $this->seed();
@@ -435,9 +539,8 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'tech',
+            'card' => 'teknis',
             'category' => 'ip_whitelist',
-            'title' => 'Test title',
             'description' => 'Butuh whitelist IP VPS baru.',
         ])->assertRedirect();
 
@@ -445,9 +548,8 @@ class MerchantTicketTest extends TestCase
         $this->assertSame('waiting', $ipTicket->approval_status);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'tech',
+            'card' => 'teknis',
             'category' => 'technical_issue',
-            'title' => 'Test title',
             'description' => 'Kendala teknis lain.',
         ])->assertRedirect();
 
@@ -582,9 +684,8 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'cs',
+            'card' => 'lainnya',
             'category' => 'others',
-            'title' => 'Test title',
             'description' => 'Kebanyakan lampiran.',
             'attachments' => [
                 UploadedFile::fake()->image('a.jpg'),
@@ -605,9 +706,8 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'department' => 'cs',
+            'card' => 'lainnya',
             'category' => 'others',
-            'title' => 'Test title',
             'description' => 'Lampiran PDF dan video.',
             'attachments' => [
                 UploadedFile::fake()->create('bukti.pdf', 500, 'application/pdf'),
@@ -627,15 +727,14 @@ class MerchantTicketTest extends TestCase
 
         $this->actingAs($ma)->post(route('ma.tickets.store'), [
             'merchant_id' => $merchant->id,
-            'department' => 'tech',
+            'card' => 'teknis',
             'category' => 'ip_whitelist',
-            'title' => 'Whitelist IP baru',
             'description' => 'Butuh whitelist IP dari form terpusat MA.',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('merchant_tickets', [
             'merchant_id' => $merchant->id,
-            'title' => 'Whitelist IP baru',
+            'description' => 'Butuh whitelist IP dari form terpusat MA.',
             'created_by_user_id' => $ma->id,
         ]);
     }
@@ -650,9 +749,8 @@ class MerchantTicketTest extends TestCase
 
         $this->actingAs($agentUser)->post(route('ma.tickets.store'), [
             'merchant_id' => $bj->id,
-            'department' => 'cs',
+            'card' => 'lainnya',
             'category' => 'others',
-            'title' => 'Coba tembus scope',
             'description' => 'Harusnya ditolak.',
         ])->assertSessionHasErrors('merchant_id');
     }

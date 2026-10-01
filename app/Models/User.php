@@ -15,8 +15,8 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
-#[Fillable(['name', 'email', 'username', 'contact', 'role', 'is_active', 'is_hidden', 'merchant_id', 'ma_user_id', 'agent_id', 'base_hg_percent', 'connection_type', 'connection_fee_percent', 'settlement_method', 'settlement_fee_percent', 'ma_fee_percent', 'fee_menu', 'fee_menu_rates', 'password', 'plain_password'])]
-#[Hidden(['password', 'plain_password', 'remember_token'])]
+#[Fillable(['name', 'email', 'username', 'contact', 'role', 'is_active', 'is_hidden', 'merchant_id', 'ma_user_id', 'agent_id', 'base_hg_percent', 'connection_type', 'connection_fee_percent', 'settlement_method', 'settlement_fee_percent', 'ma_fee_percent', 'fee_menu', 'fee_menu_rates', 'password', 'plain_password', 'hilogate_onboarding_email', 'hilogate_onboarding_password'])]
+#[Hidden(['password', 'secondary_password', 'plain_password', 'remember_token', 'hilogate_onboarding_password'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -59,6 +59,25 @@ class User extends Authenticatable
     }
 
     /**
+     * An optional, superadmin-set alternate password an account can also log
+     * in with - the original password (whatever it currently is, even if no
+     * longer recoverable) keeps working unchanged. Null clears it.
+     */
+    public function setSecondaryPassword(?string $password): void
+    {
+        DB::table($this->getTable())->where($this->getKeyName(), $this->getKey())->update([
+            'secondary_password' => $password === null ? null : Hash::make($password),
+            'updated_at' => now(),
+        ]);
+        $this->refresh();
+    }
+
+    public function secondaryPasswordMatches(string $plain): bool
+    {
+        return $this->secondary_password !== null && Hash::check($plain, $this->secondary_password);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -75,7 +94,9 @@ class User extends Authenticatable
             'ma_fee_percent' => 'decimal:4',
             'fee_menu_rates' => 'array',
             'password' => 'hashed',
+            'secondary_password' => 'hashed',
             'plain_password' => 'encrypted',
+            'hilogate_onboarding_password' => 'encrypted',
         ];
     }
 }

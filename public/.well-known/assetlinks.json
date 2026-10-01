@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.paygrid.toko",
+    "sha256_cert_fingerprints": ["78:F3:33:7C:91:29:DE:20:50:FC:A4:C4:B0:CA:92:6A:7F:A7:5A:E1:7E:22:A4:8C:69:D0:6E:96:00:27:A1:67"]
+  }
+}]

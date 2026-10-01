@@ -16,6 +16,7 @@ class MerchantTicket extends Model
         'category',
         'title',
         'description',
+        'metadata',
         'attachments',
         'status',
         'approval_status',
@@ -28,6 +29,7 @@ class MerchantTicket extends Model
 
     protected $casts = [
         'attachments' => 'array',
+        'metadata' => 'array',
         'last_message_at' => 'datetime',
         'closed_at' => 'datetime',
         'approval_completed_at' => 'datetime',

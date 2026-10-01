@@ -55,7 +55,7 @@ class MerchantAdminController extends Controller
                     ->orWhere('rrn', 'like', "{$search}%")
                     ->orWhere('customer_reference', 'like', "{$search}%");
             }))
-            ->orderByRaw("CASE WHEN status = 'success' AND is_processed = 0 THEN 0 WHEN status = 'success' AND is_processed = 1 THEN 1 WHEN status = 'pending' THEN 2 WHEN status IN ('expired', 'failed', 'rejected') THEN 3 ELSE 4 END")
+            ->when($page !== 'history', fn ($query) => $query->orderByRaw("CASE WHEN status = 'success' AND is_processed = 0 THEN 0 WHEN status = 'success' AND is_processed = 1 THEN 1 WHEN status = 'pending' THEN 2 WHEN status IN ('expired', 'failed', 'rejected') THEN 3 ELSE 4 END"))
             ->latest('submitted_at')
             ->simplePaginate(config('paygrid.reports.default_page_size', 50))
             ->withQueryString();

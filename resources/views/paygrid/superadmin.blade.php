@@ -86,9 +86,9 @@
                 <tbody>
                 @foreach($merchants as $merchant)
                     <tr>
-                        <td><strong>{{ $merchant->name }}</strong><br><span class="muted">{{ strtoupper($merchant->merchant_type) }}</span></td>
-                        <td>{{ $merchant->agent?->name ?: '-' }}</td>
-                        <td>
+                        <td data-label="Merchant"><strong>{{ $merchant->name }}</strong><br><span class="muted">{{ strtoupper($merchant->merchant_type) }}</span></td>
+                        <td data-label="Group">{{ $merchant->agent?->name ?: '-' }}</td>
+                        <td data-label="Fee per Menu">
                             <form id="fee-{{ $merchant->id }}" method="post" action="{{ route('superadmin.merchant-fee.update', $merchant) }}">
                                 @csrf
                             </form>
@@ -97,8 +97,8 @@
                                 @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $merchant->fee_menu_rates ?? [], 'formId' => 'fee-'.$merchant->id])
                             </details>
                         </td>
-                        <td><strong>{{ $pct($merchant->merchant_mdr_percent) }}</strong></td>
-                        <td><button form="fee-{{ $merchant->id }}" class="btn primary compact-btn">Simpan</button></td>
+                        <td data-label="MDR"><strong>{{ $pct($merchant->merchant_mdr_percent) }}</strong></td>
+                        <td data-label=""><button form="fee-{{ $merchant->id }}" class="btn primary compact-btn">Simpan</button></td>
                     </tr>
                 @endforeach
                 </tbody>
@@ -115,13 +115,13 @@
                 <thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Password</th><th class="fee-menu-col">Fee per Menu</th><th>Aksi</th></tr></thead>
                 <tbody>
                     <tr>
-                        <td><form id="ma-create" method="post" action="{{ route('superadmin.ma.store') }}">@csrf</form><input form="ma-create" name="name" required></td>
-                        <td><input form="ma-create" name="email" type="email" required></td>
-                        <td><input form="ma-create" name="contact"></td>
-                        <td><select form="ma-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
-                        <td><input form="ma-create" name="password" required></td>
-                        <td>@include('paygrid.partials.fee-menu-rates', ['role' => 'ma', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'ma-create'])</td>
-                        <td><button form="ma-create" class="btn primary compact-btn">Buat</button></td>
+                        <td data-label="Nama"><form id="ma-create" method="post" action="{{ route('superadmin.ma.store') }}">@csrf</form><input form="ma-create" name="name" required></td>
+                        <td data-label="Email"><input form="ma-create" name="email" type="email" required></td>
+                        <td data-label="Kontak"><input form="ma-create" name="contact"></td>
+                        <td data-label="Status"><select form="ma-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
+                        <td data-label="Password"><input form="ma-create" name="password" required></td>
+                        <td data-label="Fee per Menu">@include('paygrid.partials.fee-menu-rates', ['role' => 'ma', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'ma-create'])</td>
+                        <td data-label=""><button form="ma-create" class="btn primary compact-btn">Buat</button></td>
                     </tr>
                 </tbody>
             </table>
@@ -162,11 +162,11 @@
                 <thead><tr><th>MA</th><th>Nama</th><th>Email</th><th>Kontak</th><th>Tipe</th><th class="fee-menu-col">Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead>
                 <tbody>
                     <tr>
-                        <td><form id="group-create" method="post" action="{{ route('superadmin.agent.store') }}">@csrf</form><select form="group-create" name="ma_user_id"><option value="">-</option>@foreach($mas as $ma)<option value="{{ $ma->id }}">{{ $ma->name }}</option>@endforeach</select></td>
-                        <td><input form="group-create" name="name" required></td>
-                        <td><input form="group-create" name="email" type="email"></td>
-                        <td><input form="group-create" name="contact"></td>
-                        <td>
+                        <td data-label="MA"><form id="group-create" method="post" action="{{ route('superadmin.agent.store') }}">@csrf</form><select form="group-create" name="ma_user_id"><option value="">-</option>@foreach($mas as $ma)<option value="{{ $ma->id }}">{{ $ma->name }}</option>@endforeach</select></td>
+                        <td data-label="Nama"><input form="group-create" name="name" required></td>
+                        <td data-label="Email"><input form="group-create" name="email" type="email"></td>
+                        <td data-label="Kontak"><input form="group-create" name="contact"></td>
+                        <td data-label="Tipe">
                             <select form="group-create" name="connection_type" id="group-create-type" onchange="paygridToggleEngineType(this, 'group-create-engine-type')">
                                 <option value="cm">CM</option>
                                 <option value="script">Engine</option>
@@ -176,9 +176,9 @@
                                 <option value="api">API</option>
                             </select>
                         </td>
-                        <td>@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'group-create'])</td>
-                        <td><select form="group-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
-                        <td><button form="group-create" class="btn primary compact-btn">Buat</button></td>
+                        <td data-label="Fee per Menu">@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'group-create'])</td>
+                        <td data-label="Status"><select form="group-create" name="is_active"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></td>
+                        <td data-label=""><button form="group-create" class="btn primary compact-btn">Buat</button></td>
                     </tr>
                 </tbody>
             </table>
@@ -258,7 +258,7 @@
         <div class="qris-toolbar"><h2>Daftar Account User</h2></div>
         <div class="table-wrap"><table class="table qris-table compact-user-table"><thead><tr><th>User</th><th>Username</th><th>Role</th><th>Merchant</th><th>Password</th><th>Reset</th></tr></thead><tbody>
             @foreach($users as $user)
-                <tr><td><strong>{{ $user->name }}</strong><br><span class="muted">{{ $user->email }}</span></td><td>{{ $user->username ?: '-' }}</td><td>{{ strtoupper($user->role) }}</td><td>{{ $user->merchant?->name ?: '-' }}</td><td><strong>{{ $user->readablePlainPassword() ?: 'Reset diperlukan' }}</strong></td><td><form method="post" action="{{ route('superadmin.accounts.reset', $user) }}" class="actions reset-inline">@csrf<input name="password" placeholder="Kosongkan utk auto"><button class="btn compact-btn">Reset</button></form></td></tr>
+                <tr><td data-label="User"><strong>{{ $user->name }}</strong><br><span class="muted">{{ $user->email }}</span></td><td data-label="Username">{{ $user->username ?: '-' }}</td><td data-label="Role">{{ strtoupper($user->role) }}</td><td data-label="Merchant">{{ $user->merchant?->name ?: '-' }}</td><td data-label="Password"><strong>{{ $user->readablePlainPassword() ?: 'Reset diperlukan' }}</strong></td><td data-label="Reset"><form method="post" action="{{ route('superadmin.accounts.reset', $user) }}" class="actions reset-inline">@csrf<input name="password" placeholder="Kosongkan utk auto"><button class="btn compact-btn">Reset</button></form></td></tr>
             @endforeach
         </tbody></table></div>
     </section>

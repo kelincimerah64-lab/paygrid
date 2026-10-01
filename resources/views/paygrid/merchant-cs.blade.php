@@ -278,7 +278,7 @@
         </table>
         @else
         @if($isWorkspace)
-        <table class="table workspace-table {{ $active === 'topup' ? 'topup-table' : 'checklist-table' }}">
+        <table class="table qris-table workspace-table {{ $active === 'topup' ? 'topup-table' : 'checklist-table' }}">
             <thead>
                 <tr>
                     @if($active === 'topup')
@@ -292,8 +292,8 @@
             @forelse($requests as $row)
                 <tr class="{{ $row->status === 'success' && $row->is_processed ? ($active === 'checklist' ? 'checked-row' : 'topup-success-checked-row') : '' }}">
                     <td><span class="muted">{{ $merchant->name }}</span><br><strong>{{ $row->customer_reference ?: $row->transaction_id ?: $row->payment_id ?: '-' }}</strong></td>
-                    <td class="time-mini">{{ $row->submitted_at?->format('H.i.s') ?? '-' }}</td>
-                    <td class="time-mini">{{ $row->succeeded_at?->format('H.i.s') ?? '-' }}</td>
+                    <td class="time-mini">{{ $row->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</td>
+                    <td class="time-mini">{{ $row->succeeded_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</td>
                     <td class="duration-cell">{{ $row->successDurationLabel() }}</td>
                     <td><strong>{{ number_format((int) $row->amount, 0, ',', '.') }}</strong></td>
                     @if($active === 'topup')
@@ -421,12 +421,12 @@
                 <tr class="{{ $row->status === 'success' && $row->is_processed ? ($active === 'checklist' ? 'checked-row' : 'topup-success-checked-row') : '' }}">
                     @if($active === 'topup')
                         <td class="time-cell">
-                            {{ $row->submitted_at?->format('d/m/Y') ?? '-' }}
-                            <span>{{ $row->submitted_at?->format('H.i.s') ?? '-' }}</span>
+                            {{ $row->submitted_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span>
                         </td>
                         <td class="time-cell">
-                            {{ $row->succeeded_at?->format('d/m/Y') ?? '-' }}
-                            <span>{{ $row->succeeded_at?->format('H.i.s') ?? '-' }}</span>
+                            {{ $row->succeeded_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->succeeded_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span>
                         </td>
                         <td>{{ $row->successDurationLabel() }}</td>
                         <td><span class="truncate ref-line">{{ $row->payment_id ?: $row->gateway_ref_id ?: '-' }}</span></td>
@@ -475,12 +475,12 @@
                         </td>
                     @elseif($active === 'history')
                         <td class="time-cell">
-                            {{ $row->submitted_at?->format('d/m/Y') ?? '-' }}
-                            <span>{{ $row->submitted_at?->format('H.i.s') ?? '-' }}</span>
+                            {{ $row->submitted_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span>
                         </td>
                         <td class="time-cell">
-                            {{ $row->succeeded_at?->format('d/m/Y') ?? '-' }}
-                            <span>{{ $row->succeeded_at?->format('H.i.s') ?? '-' }}</span>
+                            {{ $row->succeeded_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->succeeded_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span>
                         </td>
                         <td>{{ $row->successDurationLabel() }}</td>
                         <td><span class="truncate ref-line">{{ $row->customer_reference ?: $row->payment_id ?: $row->gateway_ref_id ?: '-' }}</span></td>
@@ -507,12 +507,12 @@
                         </td>
                     @else
                         <td class="time-cell">
-                            {{ $row->submitted_at?->format('d/m/Y') ?? '-' }}
-                            <span>{{ $row->submitted_at?->format('H.i.s') ?? '-' }}</span>
+                            {{ $row->submitted_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->submitted_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span>
                         </td>
                         <td class="time-cell">
-                            {{ $row->succeeded_at?->format('d/m/Y') ?? '-' }}
-                            <span>{{ $row->succeeded_at?->format('H.i.s') ?? '-' }}</span>
+                            {{ $row->succeeded_at?->timezone('Asia/Jakarta')->format('d/m/Y') ?? '-' }}
+                            <span>{{ $row->succeeded_at?->timezone('Asia/Jakarta')->format('H.i.s') ?? '-' }}</span>
                         </td>
                         <td>{{ $row->successDurationLabel() }}</td>
                         <td><span class="truncate ref-line">{{ $row->customer_reference ?: $row->transaction_id ?: $row->gateway_ref_id ?: '-' }}</span></td>

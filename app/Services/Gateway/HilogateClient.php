@@ -75,6 +75,28 @@ class HilogateClient implements GatewayClientInterface
         return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
     }
 
+    /**
+     * /api/v1/withdrawals is not merchant-scoped in its path (unlike settlements/
+     * qris), but Hilogate still scopes the response to the signing merchant's own
+     * withdrawals. It also ignores from/until - always returns full history, so
+     * callers filter by created_at (epoch ms) client-side.
+     */
+    public function pullWithdrawals(Merchant $merchant, array $filters = []): array
+    {
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(1, (int) ($filters['page_size'] ?? 50)));
+        $query = array_filter([
+            'page' => $page,
+            'page_size' => $pageSize,
+            'status' => $filters['status'] ?? null,
+        ], static fn ($value) => $value !== null && $value !== '');
+
+        $response = $this->request($merchant, 'GET', '/api/v1/withdrawals', $query)->json();
+        $rows = $response['data'] ?? [];
+
+        return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+    }
+
     public function createMerchant(array $payload): array
     {
         $response = $this->onboardingRequest('/api/v1/onboarding/merchants', 'POST', [
@@ -96,7 +118,7 @@ class HilogateClient implements GatewayClientInterface
             'qris_limit' => 2000000,
             'va_payment_gateway_ids' => [],
             'va_fee_percentage' => 0,
-        ]);
+        ], $payload['onboarding_email'] ?? null, $payload['onboarding_password'] ?? null);
         $data = (array) ($response['data'] ?? []);
 
         return [
@@ -106,10 +128,10 @@ class HilogateClient implements GatewayClientInterface
         ];
     }
 
-    private function onboardingRequest(string $path, string $method, array $body = []): array
+    private function onboardingRequest(string $path, string $method, array $body = [], ?string $email = null, ?string $password = null): array
     {
-        $email = (string) config('paygrid.gateway.hilogate.onboarding_email');
-        $password = (string) config('paygrid.gateway.hilogate.onboarding_password');
+        $email = $email ?: (string) config('paygrid.gateway.hilogate.onboarding_email');
+        $password = $password ?: (string) config('paygrid.gateway.hilogate.onboarding_password');
         if ($email === '' || $password === '') {
             throw new \RuntimeException('Credential onboarding Hilogate belum dikonfigurasi.');
         }
@@ -122,7 +144,7 @@ class HilogateClient implements GatewayClientInterface
         $response = $this->http()->withHeaders(['Cookie' => $this->onboardingCookie])->post($this->host().$path, $body);
         if ($response->status() === 401) {
             $this->onboardingCookie = null;
-            return $this->onboardingRequest($path, $method, $body);
+            return $this->onboardingRequest($path, $method, $body, $email, $password);
         }
 
         return $response->throw()->json();

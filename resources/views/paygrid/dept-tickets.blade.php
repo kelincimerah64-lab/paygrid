@@ -46,7 +46,7 @@
 
 <section class="card qris-panel section">
     <div class="table-wrap">
-        <table class="table qris-table ticket-table">
+        <table class="table qris-table ticket-table dept-ticket-list-table">
             <thead>
                 <tr><th>Toko</th><th>Ticket</th><th>Tujuan</th><th>Menu</th><th>Update Terakhir</th><th>Status</th><th></th></tr>
             </thead>

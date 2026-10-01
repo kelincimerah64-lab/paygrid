@@ -25,9 +25,13 @@ class MerchantTicketController extends Controller
             'merchant' => $merchant,
             'menus' => $this->menusFor($request, $merchant, $menus),
             'active' => $this->activeFor($request),
-            'csCategories' => MerchantTicketService::CS_CATEGORIES,
-            'techCategories' => MerchantTicketService::TECH_CATEGORIES,
-            'financeCategories' => MerchantTicketService::FINANCE_CATEGORIES,
+            'cards' => MerchantTicketService::CARDS,
+            'categoriesByDepartment' => [
+                'cs' => MerchantTicketService::CS_CATEGORIES,
+                'tech' => MerchantTicketService::TECH_CATEGORIES,
+                'finance' => MerchantTicketService::FINANCE_CATEGORIES,
+            ],
+            'categoryMeta' => MerchantTicketService::CATEGORY_META,
             'tickets' => MerchantTicket::query()
                 ->where('merchant_id', $merchant->id)
                 ->latest('last_message_at')
@@ -40,17 +44,27 @@ class MerchantTicketController extends Controller
     {
         abort_unless($merchant->general_ticket_enabled, 404);
 
-        $department = $request->input('department');
-        $categoryKeys = array_keys($tickets->categoriesFor((string) $department));
+        $cardKey = $request->input('card');
+        $cardDef = MerchantTicketService::CARDS[$cardKey] ?? null;
+        $department = $cardDef['department'] ?? null;
+        $categoryKeys = $department ? array_keys($tickets->categoriesFor($department)) : [];
+        $categoryKey = (string) $request->input('category');
 
-        $data = $request->validate([
-            'department' => ['required', Rule::in(MerchantTicketService::DEPARTMENTS)],
+        $validated = $request->validate(array_merge([
+            'card' => ['required', Rule::in(array_keys(MerchantTicketService::CARDS))],
             'category' => ['required', Rule::in($categoryKeys)],
-            'title' => ['required', 'string', 'max:100'],
-            'description' => ['required', 'string', 'max:2000'],
+            'description' => ['required', 'string', 'max:500'],
             'attachments' => ['nullable', 'array', 'max:5'],
             'attachments.*' => ['mimes:jpg,jpeg,png,pdf,mp4', 'max:10240'],
-        ]);
+        ], $tickets->fieldRules($categoryKey)));
+
+        $data = [
+            'department' => $department,
+            'category' => $validated['category'],
+            'title' => $validated['title'] ?? null,
+            'description' => $validated['description'],
+            'metadata' => $tickets->metadataFrom($categoryKey, $validated),
+        ];
 
         $ticket = $tickets->create($merchant, $request->user(), $data, $request->file('attachments', []));
         $audit->record('merchant_ticket.created', $ticket, null, $ticket->only(['merchant_id', 'department', 'category', 'ticket_no']));

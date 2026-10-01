@@ -4,7 +4,9 @@ namespace Tests\Unit;
 
 use App\Jobs\BackfillMerchantTransactions;
 use App\Jobs\SyncMerchantTransactions;
+use App\Models\GatewaySyncLog;
 use App\Models\Merchant;
+use App\Models\SyncCursor;
 use App\Services\Gateway\GatewayManager;
 use App\Services\GatewayBalanceService;
 use App\Services\GatewaySyncDispatcher;
@@ -119,5 +121,44 @@ class GatewaySyncDateWindowTest extends TestCase
 
         $this->assertSame(4, $job->tries);
         $this->assertSame([15, 45, 90], $job->backoff());
+    }
+
+    public function test_backfill_logs_a_failure_when_a_running_day_is_abandoned_because_it_rolled_over(): void
+    {
+        $merchant = $this->approvedHilogateMerchant();
+        $yesterday = now('Asia/Jakarta')->subDay()->toDateString();
+
+        SyncCursor::query()->create([
+            'merchant_id' => $merchant->id,
+            'gateway' => 'hilogate',
+            'cursor_type' => 'transaction_backfill_today',
+            'meta' => ['date' => $yesterday, 'status' => 'running', 'mode_progress' => ['qris' => ['next_page' => 42, 'done' => false]]],
+        ]);
+
+        app()->call([app(BackfillMerchantTransactions::class, ['merchantId' => $merchant->id, 'date' => $yesterday]), 'handle']);
+
+        $this->assertDatabaseHas('gateway_sync_logs', [
+            'merchant_id' => $merchant->id,
+            'direction' => 'backfill',
+            'status' => 'failed',
+        ]);
+        $this->assertSame('abandoned', SyncCursor::query()->where('merchant_id', $merchant->id)->first()->meta['status']);
+    }
+
+    public function test_backfill_does_not_log_a_failure_when_the_day_already_completed(): void
+    {
+        $merchant = $this->approvedHilogateMerchant();
+        $yesterday = now('Asia/Jakarta')->subDay()->toDateString();
+
+        SyncCursor::query()->create([
+            'merchant_id' => $merchant->id,
+            'gateway' => 'hilogate',
+            'cursor_type' => 'transaction_backfill_today',
+            'meta' => ['date' => $yesterday, 'status' => 'completed'],
+        ]);
+
+        app()->call([app(BackfillMerchantTransactions::class, ['merchantId' => $merchant->id, 'date' => $yesterday]), 'handle']);
+
+        $this->assertDatabaseCount('gateway_sync_logs', 0);
     }
 }

@@ -89,8 +89,8 @@ class DashboardController extends Controller
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
             ->where('merchants.agent_id', $agent->id)
             ->where('topup_requests.status', 'success')
-            ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()))
-            ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()))
+            ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()->utc()))
+            ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()->utc()))
             ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as fee')
             ->value('fee'));
 
@@ -123,8 +123,8 @@ class DashboardController extends Controller
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
             ->where('merchants.agent_id', $agent->id)
             ->where('topup_requests.status', 'success')
-            ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()))
-            ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()))
+            ->when($filters['from'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '>=', CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay()->utc()))
+            ->when($filters['to'] !== '', fn ($query) => $query->where('topup_requests.submitted_at', '<=', CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay()->utc()))
             ->when($filters['q'] !== '', fn ($query) => $query->where('merchants.name', 'like', '%'.$filters['q'].'%'))
             ->selectRaw('merchants.id as merchant_id, merchants.name, merchants.slug, merchants.merchant_id as merchant_code, merchants.agent_fee_percent, merchants.merchant_mdr_percent, COUNT(*) as trx, COALESCE(SUM(topup_requests.amount), 0) as volume')
             ->selectRaw('COALESCE(SUM(topup_requests.amount * (merchants.merchant_mdr_percent - merchants.agent_fee_percent) / 100), 0) as fee_amount')
@@ -391,8 +391,8 @@ class DashboardController extends Controller
             $from = null;
             $to = null;
         }
-        $rangeStart = $from ? CarbonImmutable::parse($from, 'Asia/Jakarta')->startOfDay() : null;
-        $rangeEnd = $to ? CarbonImmutable::parse($to, 'Asia/Jakarta')->endOfDay() : null;
+        $rangeStart = $from ? CarbonImmutable::parse($from, 'Asia/Jakarta')->startOfDay()->utc() : null;
+        $rangeEnd = $to ? CarbonImmutable::parse($to, 'Asia/Jakarta')->endOfDay()->utc() : null;
         $search = trim((string) request('q', ''));
         $rangeQuery = $this->transactionBaseQuery($merchant, $from, $to, $search);
         $requests = TopupRequest::query()
@@ -404,7 +404,7 @@ class DashboardController extends Controller
             ->when(request('processed') === 'checked', fn ($query) => $query->where('is_processed', true))
             ->when(request('processed') === 'unchecked', fn ($query) => $query->where('is_processed', false))
             ->when($search !== '', fn ($query) => $this->applyTransactionSearch($query, $search))
-            ->orderByRaw("CASE WHEN status = 'success' AND is_processed = 0 THEN 0 WHEN status = 'success' AND is_processed = 1 THEN 1 WHEN status = 'pending' THEN 2 WHEN status = 'expired' THEN 3 ELSE 4 END")
+            ->when($page !== 'history', fn ($query) => $query->orderByRaw("CASE WHEN status = 'success' AND is_processed = 0 THEN 0 WHEN status = 'success' AND is_processed = 1 THEN 1 WHEN status = 'pending' THEN 2 WHEN status = 'expired' THEN 3 ELSE 4 END"))
             ->latest('submitted_at')
             ->simplePaginate(config('paygrid.reports.default_page_size', 50))
             ->withQueryString();
