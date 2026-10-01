@@ -43,6 +43,9 @@
         .nav-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .nav-badge { margin-left:auto; flex:0 0 auto; background:#e0393e; color:#fff; font-size:10px; font-weight:900; min-width:18px; height:18px; line-height:18px; text-align:center; border-radius:999px; padding:0 5px; }
         .nav a.active .nav-badge { background:#fff; color:#c62828; }
+        .sidebar-menu { display:contents; }
+        .sidebar-menu > .nav-scroll { display:flex; flex-direction:column; }
+        .sidebar-menu-toggle { display:none; }
         .nav-scroll { flex:1; min-height:0; overflow-y:auto; }
         .logout { border-top:1px solid var(--line); padding:18px 10px 0; color:#4b5870; }
         .logout > div:first-child { min-height:40px; display:flex; align-items:center; font-weight:650; }
@@ -74,7 +77,7 @@
         .metric.blue { background:linear-gradient(135deg, #1f6fe5, #1557c2); color:#fff; border-color:#1d67d7; }
         .metric.success { background:#ecfff5; border-color:#a4ebc4; }
         .metric.warn-soft { background:#fff9e9; border-color:#ffd46d; }
-        .table-wrap { max-width:100%; overflow-x:hidden; }
+        .table-wrap { max-width:100%; overflow-x:auto; }
         .table { width:100%; min-width:0; border-collapse:collapse; }
         .table th, .table td { border-top:1px solid #e7edf6; padding:7px 10px; text-align:left; vertical-align:middle; }
         .table th { background:#f7faff; white-space:nowrap; }
@@ -136,7 +139,7 @@
         .ma-detail-row { display:grid; grid-template-columns:minmax(0, 1.25fr) auto auto; gap:12px; align-items:center; min-height:48px; padding:9px 11px; border:1px solid #e7edf6; border-radius:8px; background:#fbfdff; }
         .ma-detail-row span { display:block; margin-top:3px; font-size:12px; font-weight:750; color:var(--muted); }
         .ma-detail-row strong { white-space:nowrap; }
-        .ma-tabs { display:flex; gap:6px; }
+        .ma-tabs { display:flex; gap:6px; flex-wrap:wrap; row-gap:6px; }
         .ma-tabs .active, .ma-click-row.active, .report-pill.active { background:#eef5ff; border-color:#78a7ff; color:#1557c2; }
         .ma-click-row { cursor:pointer; }
         .ma-click-row:hover { background:#f7faff; }
@@ -163,6 +166,57 @@
         .ma-heatmap-table th:first-child, .ma-heatmap-table td:first-child { text-align:left; white-space:nowrap; }
         .ma-table-toolbar { margin:0 0 8px; }
         .ma-table-toolbar .search { width:100%; max-width:320px; }
+        .ma-hero-grid { grid-template-columns:1fr; }
+        .ma-hero-card { position:relative; }
+        .ma-hero-row { display:flex; align-items:center; gap:20px; }
+        .ma-hero-main { flex:0 0 auto; }
+        .ma-hero-value { font-size:32px; font-weight:900; letter-spacing:-.03em; line-height:1.1; margin-top:4px; white-space:nowrap; }
+        .ma-hero-chips { flex:1 1 auto; min-width:0; display:flex; gap:16px; flex-wrap:wrap; row-gap:8px; }
+        .ma-hero-chip { flex:0 0 auto; }
+        .ma-hero-chip span { display:block; font-size:10px; letter-spacing:.06em; text-transform:uppercase; font-weight:900; color:#5a6b82; white-space:nowrap; }
+        .ma-hero-chip strong { display:block; margin-top:4px; font-size:15px; white-space:nowrap; }
+        .ma-hero-spark-box { position:relative; flex:0 0 110px; height:40px; }
+        .ma-stat-tiles { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+        .ma-stat-tile { display:flex; flex-direction:column; gap:6px; }
+        .ma-stat-tile.danger strong { color:var(--danger); }
+        .ma-stat-tile-title { font-size:15px; font-weight:900; letter-spacing:-.01em; }
+        .ma-stat-tile-head { display:flex; align-items:center; gap:8px; font-size:10px; letter-spacing:.06em; text-transform:uppercase; font-weight:900; color:#5a6b82; }
+        .ma-stat-tile-foot { font-size:11px; font-weight:800; color:#5a6b82; margin-top:2px; }
+        .ma-stat-tile-foot strong { color:#1557c2; margin-left:4px; }
+        .ma-disb-tiles { grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; margin-top:12px; }
+        .ma-disb-tile { padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:#f7faff; }
+        .ma-disb-tile span { display:block; font-size:10px; letter-spacing:.05em; text-transform:uppercase; font-weight:800; color:#5a6b82; }
+        .ma-disb-tile strong { display:block; margin-top:6px; font-size:18px; font-weight:900; letter-spacing:-.02em; }
+        .ma-stat-icon { width:24px; height:24px; border-radius:999px; display:grid; place-items:center; font-size:12px; font-weight:950; flex:0 0 auto; color:#fff; }
+        .ma-stat-icon.navy { background:#1e2a45; }
+        .ma-stat-icon.teal { background:#0d9488; }
+        .ma-stat-icon.green { background:var(--success); }
+        .ma-stat-icon.amber { background:#c0630a; }
+        .ma-stat-icon.danger { background:var(--danger); }
+        .ma-stat-tile strong { font-size:21px; font-weight:900; letter-spacing:-.02em; white-space:nowrap; }
+        .ma-stat-trend { font-size:11px; font-weight:800; color:var(--muted); }
+        .ma-stat-trend.up { color:var(--success); }
+        .ma-stat-trend.down { color:var(--danger); }
+        .ma-spark-box { position:relative; width:100%; height:28px; }
+        .ma-flow-card { display:flex; flex-direction:column; gap:4px; }
+        .ma-flow-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+        .ma-flow-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+        .ma-flow-chart-box { position:relative; height:260px; margin-top:10px; }
+        .ma-bottom-grid { grid-template-columns:1.3fr 1fr 0.7fr; align-items:start; }
+        .ma-withdrawal-grid { grid-template-columns:1fr 1fr; align-items:start; margin-top:14px; }
+        .ma-mini-panel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+        .ma-mini-panel h3 { margin:0; font-size:13px; font-weight:900; }
+        .ma-view-all { font-size:11px; font-weight:800; color:var(--blue); text-decoration:none; }
+        .ma-view-all:hover { text-decoration:underline; }
+        .ma-mini-list { display:grid; gap:8px; margin-top:10px; }
+        .ma-mini-row { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; gap:10px; align-items:center; padding:8px 10px; border:1px solid #e7edf6; border-radius:8px; background:#fbfdff; font-size:12px; }
+        .ma-mini-row .rank { width:20px; height:20px; border-radius:50%; background:#eef4fb; color:#1557c2; font-weight:900; font-size:11px; display:grid; place-items:center; }
+        .ma-mini-row-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .ma-mini-bar { display:block; margin-top:4px; height:4px; border-radius:999px; background:#eef2f8; overflow:hidden; }
+        .ma-mini-bar span { display:block; height:100%; background:#1557c2; border-radius:999px; }
+        @media (max-width: 1280px) { .ma-hero-row { flex-wrap:wrap; } .ma-bottom-grid { grid-template-columns:1fr 1fr; } .ma-disb-tiles { grid-template-columns:1fr 1fr; } }
+        @media (max-width: 1100px) { .ma-bottom-grid { grid-template-columns:1fr; } .ma-withdrawal-grid { grid-template-columns:1fr; } }
+        @media (max-width: 800px) { .ma-hero-row { flex-wrap:wrap; } .ma-hero-value { font-size:28px; } .ma-stat-tiles { grid-template-columns:1fr; } .ma-mini-row { grid-template-columns:1fr; } .ma-flow-head { flex-direction:column; } .ma-disb-tiles { grid-template-columns:1fr; } }
         html { scroll-behavior:smooth; }
         .qris-panel.ma-analytics-shell { overflow:visible; }
         .ma-grafana-embed { width:100%; height:1800px; }
@@ -228,10 +282,13 @@
         .qris-toolbar .muted { font-size:13px; }
         .qris-filters { display:flex; gap:10px; justify-content:flex-end; align-items:center; flex-wrap:wrap; }
         .qris-filters .search { width:220px; }
-        .qris-table { min-width:0; table-layout:fixed; font-size:12px; }
+        .qris-table { min-width:0; table-layout:auto; font-size:12px; }
         .qris-table th { height:42px; padding-top:0; padding-bottom:0; background:#f6f9fd; font-size:11px; letter-spacing:.09em; white-space:normal; }
-        .qris-table td { height:44px; padding:6px 8px; color:#001634; font-weight:750; }
-        .qris-table .btn { min-height:30px; padding:5px 12px; font-size:13px; border-radius:7px; }
+        .qris-table td { height:44px; padding:6px 8px; color:#001634; font-weight:750; white-space:nowrap; }
+        .qris-table td:has(.btn) { width:1%; }
+        .qris-table .btn { min-height:28px; height:28px; padding:4px 10px; font-size:12px; border-radius:6px; }
+        .qris-table .btn.approval-detail-open { width:auto; margin-top:0; }
+        .qris-table .btn + .btn { margin-left:6px; }
         .qris-table .btn:disabled { min-width:96px; color:#607087; border-color:#d8e2f2; background:#f7faff; cursor:not-allowed; }
         .qris-table button:not(:disabled) { cursor:pointer; }
         /* !important: these compact-table classes (.super-create-table etc) are reused across
@@ -298,7 +355,7 @@
         .pager { display:inline-flex; align-items:center; justify-content:center; min-width:30px; min-height:30px; padding:6px 9px; border:1px solid #c9d6ea; border-radius:7px; background:#fff; color:#1557c2; font-size:12px; font-weight:900; text-decoration:none; }
         .pager.active { background:#1557c2; border-color:#1557c2; color:#fff; }
         .pager.disabled { color:#8b98aa; background:#f3f6fa; pointer-events:none; }
-        input, select { border:1px solid #c9d6ea; border-radius:7px; min-height:36px; padding:8px 10px; font:inherit; font-size:13px; background:#fff; color:var(--ink); }
+        input, select, textarea { border:1px solid #c9d6ea; border-radius:7px; min-height:36px; padding:8px 10px; font:inherit; font-size:13px; background:#fff; color:var(--ink); resize:vertical; }
         .search { width:min(520px, 100%); border-radius:7px; padding-left:12px; color:#68768a; background:#fbfdff; }
         .filters { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:16px 18px; }
         .actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -392,8 +449,7 @@
         .history-table th:nth-child(6) { width:8%; }
         .history-table th:nth-child(7) { width:9%; }
         .history-table th:nth-child(8) { width:9%; }
-        .history-table th:nth-child(9) { width:17%; }
-        .history-table th:nth-child(10) { width:10%; }
+        .history-table th:nth-child(9) { width:27%; }
         .workspace-table.topup-table th:nth-child(1) { width:14%; }
         .workspace-table.topup-table th:nth-child(2) { width:7%; }
         .workspace-table.topup-table th:nth-child(3) { width:7%; }
@@ -511,7 +567,7 @@
         .form-grid label { font-weight:900; color:#10233f; }
         .form-grid input, .form-grid select { width:100%; margin-top:8px; }
         .ticket-create-form { display:flex; flex-direction:column; gap:14px; max-width:520px; padding:14px; }
-        .ticket-create-form label { display:grid; gap:8px; margin:0; }
+        .ticket-create-form label { display:grid; gap:8px; margin:0; text-transform:none; letter-spacing:normal; }
         .ticket-create-form textarea, .ticket-reply-form textarea { width:100%; border:1px solid #c9d6ea; border-radius:7px; padding:8px 10px; font:inherit; font-size:13px; resize:vertical; }
         .ticket-reply-form { display:flex; flex-direction:column; gap:10px; padding:0 14px 14px; }
         .ticket-thread { display:flex; flex-direction:column; gap:10px; padding:14px; max-height:420px; overflow-y:auto; }
@@ -526,6 +582,58 @@
         .ticket-chip-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; }
         .ticket-chip-remove { flex:0 0 auto; width:18px; height:18px; line-height:16px; text-align:center; border:none; border-radius:999px; background:#dbe6f9; color:#1557c2; font-size:13px; font-weight:900; cursor:pointer; padding:0; }
         .ticket-chip-remove:hover { background:#c62828; color:#fff; }
+        .ticket-form-head { display:flex; gap:12px; align-items:flex-start; padding:14px 14px 0; }
+        .ticket-form-icon { width:38px; height:38px; flex:0 0 38px; border-radius:9px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:17px; }
+        .ticket-form-head h2 { margin:0; font-size:16px; }
+        .ticket-form-head p { margin:2px 0 0; font-size:12px; color:var(--muted); }
+        .ticket-field-label { display:flex; align-items:flex-start; gap:6px; font-weight:900; color:#10233f; font-size:13px; min-height:32px; line-height:1.25; }
+        .ticket-field-label .req { color:var(--danger); }
+        .ticket-char-count { text-align:right; font-size:11px; color:var(--muted); }
+        .ticket-dropzone { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; text-align:center; border:1.5px dashed #b9cef6; border-radius:10px; padding:18px 12px; background:#f7faff; cursor:pointer; position:relative; }
+        .ticket-dropzone.dragover { background:#eef4ff; border-color:var(--blue); }
+        .ticket-dropzone input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+        .ticket-dropzone-icon { width:28px; height:28px; border-radius:999px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:13px; margin-bottom:4px; }
+        .ticket-dropzone strong { color:var(--blue); font-size:12.5px; font-weight:900; }
+        .ticket-dropzone small { color:var(--muted); font-size:11px; }
+        .ticket-form-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:2px; }
+        .ticket-info-steps { list-style:none; margin:0 0 12px; padding:0; display:flex; flex-direction:column; gap:9px; font-size:13px; }
+        .ticket-info-steps li { display:flex; align-items:center; gap:10px; }
+        .ticket-info-steps .step-num { width:20px; height:20px; flex:0 0 20px; border-radius:999px; background:#dbe6f9; color:var(--blue); font-size:11px; font-weight:900; display:grid; place-items:center; }
+        .ticket-info-title { display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:14px; }
+        .ticket-info-title .info-icon { width:22px; height:22px; flex:0 0 22px; border-radius:999px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:12px; }
+        .ticket-wizard-steps { display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+        .ticket-wizard-step { display:flex; align-items:center; gap:10px; }
+        .ticket-wizard-step .circle { width:32px; height:32px; flex:0 0 32px; border-radius:999px; border:2px solid var(--line); background:#fff; color:var(--muted); font-weight:900; display:grid; place-items:center; font-size:13px; }
+        .ticket-wizard-step strong { display:block; font-size:13px; }
+        .ticket-wizard-step small { display:block; font-size:11px; color:var(--muted); }
+        .ticket-wizard-step.active .circle { background:var(--blue); border-color:var(--blue); color:#fff; }
+        .ticket-wizard-step.done .circle { background:var(--success); border-color:var(--success); color:#fff; }
+        .ticket-wizard-line { flex:1 1 40px; min-width:24px; height:2px; background:var(--line); }
+        .ticket-wizard-grid { display:grid; grid-template-columns:2fr 1fr; gap:18px; align-items:start; }
+        .ticket-sidebar { display:flex; flex-direction:column; gap:14px; }
+        .ticket-category-cards { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:10px; }
+        .ticket-category-card { border:1.5px solid var(--line); border-radius:10px; padding:14px 10px; text-align:center; cursor:pointer; background:#fff; }
+        .ticket-category-card:hover { border-color:#9ec0f5; }
+        .ticket-category-card.selected { border-color:var(--blue); background:#f2f7ff; box-shadow:0 0 0 3px rgba(21,87,194,.08); }
+        .ticket-category-card .icon { width:38px; height:38px; border-radius:999px; background:#eef4fb; display:grid; place-items:center; font-size:17px; margin:0 auto 8px; }
+        .ticket-category-card strong { display:block; font-size:12.5px; margin-bottom:2px; }
+        .ticket-category-card small { display:block; font-size:10.5px; color:var(--muted); line-height:1.35; }
+        .ticket-info-banner { display:flex; gap:8px; align-items:flex-start; background:#eef6ff; border:1px solid #cfe3ff; border-radius:8px; padding:10px 12px; font-size:12.5px; color:#0f3d7a; }
+        .ticket-info-banner[hidden] { display:none; }
+        .ticket-tooltip { display:inline-grid; place-items:center; width:15px; height:15px; border-radius:999px; background:#e5ecf7; color:var(--muted); font-size:10px; cursor:help; }
+        .ticket-field-grid-3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; margin-top:14px; }
+        .ticket-help-card { text-align:center; background:#f7faff; }
+        .ticket-help-avatar { width:56px; height:56px; border-radius:999px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:24px; margin:0 auto 10px; }
+        .ticket-help-card h3 { margin:0 0 4px; font-size:14px; }
+        .ticket-response-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; font-size:12.5px; }
+        .ticket-response-list li { display:flex; justify-content:space-between; gap:10px; }
+        .ticket-response-list li.active span, .ticket-response-list li.active strong { color:var(--blue); }
+        .ticket-tips { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; font-size:12.5px; }
+        .ticket-tips li { display:flex; gap:8px; align-items:flex-start; }
+        .ticket-tips li::before { content:'✓'; color:var(--success); font-weight:900; flex:0 0 auto; }
+        @media (max-width: 1100px) { .ticket-category-cards { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 900px) { .ticket-wizard-grid { grid-template-columns:1fr; } .ticket-field-grid-3 { grid-template-columns:1fr; } }
+        @media (max-width: 560px) { .ticket-category-cards { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
         .empty { padding:24px 18px; color:var(--muted); text-align:center; line-height:1.45; }
         .empty strong { display:block; color:var(--ink); margin-bottom:4px; }
         .ops-panel { display:grid; gap:9px; margin:0 0 18px; }
@@ -562,8 +670,6 @@
             .cards, .qris-metrics, .qris-metrics.history-metrics { grid-template-columns:repeat(2, minmax(0, 1fr)); }
             .metric { min-height:112px; }
             .agent-filter-grid { padding:14px; }
-            .qris-table { table-layout:fixed; }
-            .table-wrap { overflow-x:hidden; }
         }
         @media (max-width: 1100px) {
             .cards, .qris-metrics, .qris-metrics.history-metrics { grid-template-columns:repeat(2, minmax(0, 1fr)); }
@@ -585,7 +691,7 @@
         }
         @media (max-width: 900px) {
             .shell { grid-template-columns:1fr; }
-            .sidebar { position:relative; height:auto; padding:14px; }
+            .sidebar { position:sticky; top:0; height:auto; padding:14px; }
             .brand img { width:170px; }
             .nav { grid-template-columns:repeat(3, minmax(0, 1fr)); }
             .logout { padding-top:12px; }
@@ -596,9 +702,25 @@
             .agent-filter-actions { justify-content:flex-start; }
             .ops-panel { margin-bottom:14px; }
         }
+        @media (max-width: 900px) and (pointer: coarse) {
+            .sidebar { position:sticky; top:0; z-index:40; height:auto; min-height:70px; padding:14px; box-shadow:0 4px 14px rgba(14,35,70,.08); }
+            .sidebar-top { display:flex; align-items:center; padding-left:50px; }
+            .brand { justify-content:flex-start; }
+            .role { text-align:left; }
+            .sidebar-menu-toggle { display:flex; align-items:center; justify-content:center; gap:0; cursor:pointer; list-style:none; position:absolute; top:14px; left:14px; width:38px; height:38px; padding:0; border:1px solid var(--line); border-radius:10px; background:#fff; font-size:16px; font-weight:850; color:#43536d; }
+            .sidebar-menu-toggle span { display:none; }
+            .sidebar-menu:not(.open) > .nav-scroll, .sidebar-menu:not(.open) > .logout { display:none; }
+            .sidebar-menu.open { position:fixed; top:70px; left:0; bottom:0; width:78vw; max-width:300px; overflow-y:auto; background:#fff; z-index:45; box-shadow:4px 6px 24px rgba(14,35,70,.18); display:flex; flex-direction:column; }
+            .sidebar-menu.open > .sidebar-menu-toggle { position:fixed; top:14px; left:14px; }
+            .sidebar-menu.open > .nav-scroll { padding:10px; flex:none; }
+            .sidebar-menu.open > .logout { padding:14px; border-top:1px solid var(--line); }
+            .brand img { width:140px; }
+            .nav { grid-template-columns:1fr; }
+            .logout { padding-top:12px; }
+        }
         @media (max-width: 800px) {
             .shell { grid-template-columns:1fr; }
-            .sidebar { position:relative; height:auto; padding:18px 14px; }
+            .sidebar { padding:18px 14px; }
             .nav { grid-template-columns:repeat(2, minmax(0, 1fr)); }
             main { padding:20px 14px 40px; }
             h1 { font-size:28px; }
@@ -622,36 +744,44 @@
             .metric { min-height:auto; }
             .table-wrap { overflow-x:hidden; }
             .qris-table, .qris-table thead, .qris-table tbody, .qris-table tr, .qris-table td { display:block; width:100%; }
+            .qris-table tr[hidden] { display:none; }
             .qris-table { table-layout:auto; }
             .qris-table thead { display:none; }
             .qris-table tr { padding:10px 12px; border-top:1px solid #e7edf6; }
-            .qris-table td { display:grid; grid-template-columns:118px minmax(0, 1fr); gap:10px; align-items:center; height:auto; min-height:30px; border-top:0; padding:4px 0; text-align:left !important; }
+            .qris-table td { display:grid; grid-template-columns:118px minmax(0, 1fr); gap:10px; align-items:center; height:auto; min-height:30px; border-top:0; padding:4px 0; text-align:left !important; white-space:normal; }
+            .qris-table td:has(.btn) { width:100%; display:grid; }
             .ma-detail-row { grid-template-columns:1fr; gap:5px; }
             .qris-table td::before { content:attr(data-label); color:#52637a; font-size:10px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; }
-            .topup-table td:nth-child(1)::before { content:'Timestamp'; }
-            .topup-table td:nth-child(2)::before { content:'Payment ID'; }
-            .topup-table td:nth-child(3)::before { content:'RRN'; }
-            .topup-table td:nth-child(4)::before { content:'TRX ID'; }
-            .topup-table td:nth-child(5)::before { content:'Amount'; }
+            .topup-table td:nth-child(1)::before { content:'Toko'; }
+            .topup-table td:nth-child(2)::before { content:'Masuk'; }
+            .topup-table td:nth-child(3)::before { content:'Sukses'; }
+            .topup-table td:nth-child(4)::before { content:'Durasi'; }
+            .topup-table td:nth-child(5)::before { content:'Nominal'; }
             .topup-table td:nth-child(6)::before { content:'Status'; }
-            .topup-table td:nth-child(7)::before { content:'Checklist'; }
-            .topup-table td:nth-child(8)::before { content:'Tindak Lanjut'; }
-            .history-table td:nth-child(1)::before { content:'Timestamp'; }
-            .history-table td:nth-child(2)::before { content:'Reference'; }
-            .history-table td:nth-child(3)::before { content:'RRN'; }
-            .history-table td:nth-child(4)::before { content:'TRX ID'; }
-            .history-table td:nth-child(5)::before { content:'Amount'; }
-            .history-table td:nth-child(6)::before { content:'Status'; }
-            .history-table td:nth-child(7)::before { content:'Keterangan'; }
-            .history-table td:nth-child(8)::before { content:'Tindak Lanjut'; }
-            .checklist-table td:nth-child(1)::before { content:'Timestamp'; }
-            .checklist-table td:nth-child(2)::before { content:'Reference'; }
-            .checklist-table td:nth-child(3)::before { content:'RRN'; }
-            .checklist-table td:nth-child(4)::before { content:'Amount'; }
-            .checklist-table td:nth-child(5)::before { content:'Status'; }
+            .topup-table td:nth-child(7)::before { content:'Checked By'; }
+            .topup-table td:nth-child(8)::before { content:'Checklist'; }
+            .topup-table td:nth-child(9)::before { content:'ID / RRN'; }
+            .topup-table td:nth-child(10)::before { content:'Aksi'; }
+            .topup-table td:nth-child(11)::before { content:'Keterangan'; }
+            .history-table td:nth-child(1)::before { content:'Masuk'; }
+            .history-table td:nth-child(2)::before { content:'Sukses'; }
+            .history-table td:nth-child(3)::before { content:'Durasi'; }
+            .history-table td:nth-child(4)::before { content:'Reference'; }
+            .history-table td:nth-child(5)::before { content:'RRN'; }
+            .history-table td:nth-child(6)::before { content:'TRX ID'; }
+            .history-table td:nth-child(7)::before { content:'Amount'; }
+            .history-table td:nth-child(8)::before { content:'Status'; }
+            .history-table td:nth-child(9)::before { content:'Keterangan'; }
+            .checklist-table td:nth-child(1)::before { content:'Merchant'; }
+            .checklist-table td:nth-child(2)::before { content:'Masuk'; }
+            .checklist-table td:nth-child(3)::before { content:'Sukses'; }
+            .checklist-table td:nth-child(4)::before { content:'Durasi'; }
+            .checklist-table td:nth-child(5)::before { content:'Nominal'; }
             .checklist-table td:nth-child(6)::before { content:'Checked By'; }
-            .checklist-table td:nth-child(7)::before { content:'Keterangan'; }
-            .checklist-table td:nth-child(8)::before { content:'Checklist'; }
+            .checklist-table td:nth-child(7)::before { content:'Checklist'; }
+            .checklist-table td:nth-child(8)::before { content:'ID / RRN'; }
+            .checklist-table td:nth-child(9)::before { content:'Submit'; }
+            .checklist-table td:nth-child(10)::before { content:'Keterangan'; }
             .ticket-table td:nth-child(1)::before { content:'Dibuat'; }
             .ticket-table td:nth-child(2)::before { content:'Ticket'; }
             .ticket-table td:nth-child(3)::before { content:'Customer'; }
@@ -659,13 +789,28 @@
             .ticket-table td:nth-child(5)::before { content:'Status'; }
             .ticket-table td:nth-child(6)::before { content:'Catatan'; }
             .ticket-table td:nth-child(7)::before { content:'Submit'; }
-            .finance-table td:nth-child(1)::before { content:'Tanggal'; }
-            .finance-table td:nth-child(2)::before { content:'Reference'; }
-            .finance-table td:nth-child(3)::before { content:'RRN'; }
-            .finance-table td:nth-child(4)::before { content:'Gross'; }
-            .finance-table td:nth-child(5)::before { content:'Fee'; }
-            .finance-table td:nth-child(6)::before { content:'Net'; }
-            .finance-table td:nth-child(7)::before { content:'Status'; }
+            .merchant-ticket-list-table td:nth-child(1)::before { content:'Ticket'; }
+            .merchant-ticket-list-table td:nth-child(2)::before { content:'Tujuan'; }
+            .merchant-ticket-list-table td:nth-child(3)::before { content:'Menu'; }
+            .merchant-ticket-list-table td:nth-child(4)::before { content:'Update Terakhir'; }
+            .merchant-ticket-list-table td:nth-child(5)::before { content:'Status'; }
+            .merchant-ticket-list-table td:nth-child(6)::before { content:none; }
+            .dept-ticket-list-table td:nth-child(1)::before { content:'Toko'; }
+            .dept-ticket-list-table td:nth-child(2)::before { content:'Ticket'; }
+            .dept-ticket-list-table td:nth-child(3)::before { content:'Tujuan'; }
+            .dept-ticket-list-table td:nth-child(4)::before { content:'Menu'; }
+            .dept-ticket-list-table td:nth-child(5)::before { content:'Update Terakhir'; }
+            .dept-ticket-list-table td:nth-child(6)::before { content:'Status'; }
+            .dept-ticket-list-table td:nth-child(7)::before { content:none; }
+            .finance-table td:nth-child(1)::before { content:'Masuk'; }
+            .finance-table td:nth-child(2)::before { content:'Sukses'; }
+            .finance-table td:nth-child(3)::before { content:'Durasi'; }
+            .finance-table td:nth-child(4)::before { content:'Reference'; }
+            .finance-table td:nth-child(5)::before { content:'RRN'; }
+            .finance-table td:nth-child(6)::before { content:'Gross'; }
+            .finance-table td:nth-child(7)::before { content:'Fee'; }
+            .finance-table td:nth-child(8)::before { content:'Net'; }
+            .finance-table td:nth-child(9)::before { content:'Status'; }
             .settlement-table td:nth-child(1)::before { content:'Settlement'; }
             .settlement-table td:nth-child(2)::before { content:'Reference'; }
             .settlement-table td:nth-child(3)::before { content:'Batch'; }
@@ -818,11 +963,13 @@
             .agent-fee-table td:nth-child(8)::before { content:'Estimasi Fee Agen'; }
             .agent-fee-table td:nth-child(9)::before { content:'Detail'; }
             .cs-scope-ticket-table td:nth-child(1)::before { content:'Toko'; }
-            .cs-scope-ticket-table td:nth-child(2)::before { content:'Ticket'; }
-            .cs-scope-ticket-table td:nth-child(3)::before { content:'Issue'; }
-            .cs-scope-ticket-table td:nth-child(4)::before { content:'Status'; }
-            .cs-scope-ticket-table td:nth-child(5)::before { content:'Dibuat'; }
-            .cs-scope-ticket-table td:nth-child(6)::before { content:'Aksi'; }
+            .cs-scope-ticket-table td:nth-child(2)::before { content:'Dibuat'; }
+            .cs-scope-ticket-table td:nth-child(3)::before { content:'Ticket'; }
+            .cs-scope-ticket-table td:nth-child(4)::before { content:'Customer'; }
+            .cs-scope-ticket-table td:nth-child(5)::before { content:'Issue'; }
+            .cs-scope-ticket-table td:nth-child(6)::before { content:'Status Pusat'; }
+            .cs-scope-ticket-table td:nth-child(7)::before { content:'Catatan'; }
+            .cs-scope-ticket-table td:nth-child(8)::before { content:'Push Tiket'; }
             .cs-scope-topup-table td:nth-child(1)::before { content:'Toko'; }
             .cs-scope-topup-table td:nth-child(2)::before { content:'Masuk'; }
             .cs-scope-topup-table td:nth-child(3)::before { content:'Payment ID / RRN'; }
@@ -837,13 +984,14 @@
             .ma-ranking-agent-table td:nth-child(3)::before { content:'Volume Sukses'; }
             .ma-fee-split-table td:nth-child(1)::before { content:'Toko'; }
             .ma-fee-split-table td:nth-child(2)::before { content:'Menu Fee'; }
-            .ma-fee-split-table td:nth-child(3)::before { content:'Merchant MDR'; }
-            .ma-fee-split-table td:nth-child(4)::before { content:'Estimasi MDR Toko'; }
-            .ma-fee-split-table td:nth-child(5)::before { content:'Agent'; }
+            .ma-fee-split-table td:nth-child(3)::before { content:'MDR Toko'; }
+            .ma-fee-split-table td:nth-child(4)::before { content:'Volume Trx'; }
+            .ma-fee-split-table td:nth-child(5)::before { content:'Margin Agent'; }
             .ma-fee-split-table td:nth-child(6)::before { content:'Estimasi Fee Agen'; }
-            .ma-fee-split-table td:nth-child(7)::before { content:'MA Fee'; }
+            .ma-fee-split-table td:nth-child(7)::before { content:'Margin MA'; }
             .ma-fee-split-table td:nth-child(8)::before { content:'Estimasi Fee MA'; }
-            .ma-fee-split-table td:nth-child(9)::before { content:'Detail'; }
+            .ma-fee-split-table td:nth-child(9)::before { content:'Status'; }
+            .ma-fee-split-table td:nth-child(10)::before { content:'Detail'; }
             .ma-agent-list-table td:nth-child(1)::before { content:'Agen'; }
             .ma-agent-list-table td:nth-child(2)::before { content:'Email'; }
             .ma-agent-list-table td:nth-child(3)::before { content:'Kontak'; }
@@ -862,8 +1010,9 @@
             .ma-store-list-table td:nth-child(3)::before { content:'Agen'; }
             .ma-store-list-table td:nth-child(4)::before { content:'Tipe'; }
             .ma-store-list-table td:nth-child(5)::before { content:'Fee'; }
-            .ma-store-list-table td:nth-child(6)::before { content:'Status'; }
-            .ma-store-list-table td:nth-child(7)::before { content:'Aksi'; }
+            .ma-store-list-table td:nth-child(6)::before { content:'Aktivitas'; }
+            .ma-store-list-table td:nth-child(7)::before { content:'Status'; }
+            .ma-store-list-table td:nth-child(8)::before { content:'Aksi'; }
         }
         @media (max-width: 560px) {
             main { padding:14px 10px 30px; }
@@ -879,56 +1028,99 @@
             h1 { font-size:24px; }
             h2 { font-size:16px; }
         }
+        #ma-assistant-toggle { position:fixed; right:22px; bottom:22px; width:52px; height:52px; border-radius:50%; border:none; background:linear-gradient(135deg, #1f6fe5, #1557c2); color:#fff; font-size:22px; box-shadow:0 12px 28px rgba(21,87,194,.35); cursor:pointer; z-index:60; }
+        #ma-assistant-panel { position:fixed; right:22px; bottom:86px; width:360px; max-width:calc(100vw - 32px); height:520px; max-height:calc(100vh - 130px); background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 24px 60px rgba(14,35,70,.18); display:flex; flex-direction:column; overflow:hidden; z-index:60; }
+        #ma-assistant-panel[hidden] { display:none; }
+        #ma-assistant-header { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--line); background:#f7faff; }
+        #ma-assistant-header strong { font-size:13px; }
+        #ma-assistant-close { border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--muted); padding:2px 6px; }
+        #ma-assistant-disclaimer { margin:0; padding:8px 14px; font-size:11px; color:var(--muted); border-bottom:1px solid var(--line); background:#fbfdff; }
+        #ma-assistant-messages { flex:1 1 auto; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+        .ma-msg { max-width:88%; padding:8px 11px; border-radius:10px; font-size:12.5px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+        .ma-msg.user { align-self:flex-end; background:var(--blue); color:#fff; border-bottom-right-radius:2px; }
+        .ma-msg.assistant { align-self:flex-start; background:#f1f5fb; color:var(--ink); border-bottom-left-radius:2px; }
+        .ma-msg.assistant.loading { color:var(--muted); font-style:italic; }
+        .ma-msg img { display:block; max-width:100%; border-radius:8px; margin-top:6px; }
+        #ma-assistant-image-preview { position:relative; margin:0 14px 8px; display:inline-flex; }
+        #ma-assistant-image-preview[hidden] { display:none; }
+        #ma-assistant-image-preview img { width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
+        #ma-assistant-image-remove { position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; border:none; background:var(--danger); color:#fff; font-size:12px; line-height:1; cursor:pointer; }
+        #ma-assistant-form { display:flex; align-items:center; gap:6px; padding:10px 12px; border-top:1px solid var(--line); }
+        #ma-assistant-attach, #ma-assistant-send { border:none; background:none; font-size:17px; cursor:pointer; padding:4px 6px; color:var(--muted); flex:0 0 auto; }
+        #ma-assistant-send { color:var(--blue); }
+        #ma-assistant-input { flex:1 1 auto; min-width:0; border:1px solid var(--line); border-radius:20px; padding:8px 12px; font:inherit; font-size:12.5px; }
+        @media (max-width:560px) {
+            #ma-assistant-panel { right:16px; left:16px; width:auto; bottom:80px; }
+            #ma-assistant-toggle { right:16px; bottom:16px; }
+        }
     </style>
 </head>
 <body>
 <div class="shell">
     <aside class="sidebar">
-        <div>
-            <div class="brand"><img src="{{ asset('images/paygrid-logo.png') }}" alt="PayGrid Transaction Monitoring Dashboard"></div>
-            <div class="role">{{ $roleLabel ?? 'PayGrid' }}</div>
+        <div class="sidebar-top">
+            <div>
+                <div class="brand"><img src="{{ asset('images/paygrid-logo.png') }}" alt="PayGrid Transaction Monitoring Dashboard"></div>
+                <div class="role">{{ $roleLabel ?? 'PayGrid' }}</div>
+            </div>
         </div>
-        <div class="nav-scroll">
-            <div class="menu-title">Menu</div>
-            <nav class="nav">
-                @foreach($menus as $item)
-                    @php($navIcon = [
-                        'overview' => '⌂',
-                        'report' => '▥',
-                        'fee' => '%',
-                        'approval' => '✓',
-                        'mapping' => '⇄',
-                        'stores' => '▦',
-                        'agents' => '◎',
-                        'create-store' => '+',
-                        'bot-monitoring' => '◈',
-                        'status-request' => '↗',
-                        'users' => 'U',
-                        'logs' => '≡',
-                        'monitoring' => '◌',
-                        'topup' => '↑',
-                        'qris' => '↑',
-                        'checklist' => '✓',
-                        'finance' => '$',
-                        'cs' => 'CS',
-                        'settings' => '*',
-                        'history' => '↺',
-                        'tickets' => '!',
-                        'settlement' => '⇣',
-                        'support-ticket' => '✎',
-                        'create-ticket' => '✎',
-                        'manual-tickets' => '✉',
-                        'analytics' => '◫',
-                    ][$item['key']] ?? '•')
-                    <a href="{{ $item['url'] }}" class="{{ ($active ?? '') === $item['key'] ? 'active' : '' }}" data-key="{{ $item['key'] }}"><span class="nav-icon" aria-hidden="true">{{ $navIcon }}</span><span class="nav-label">{{ $item['label'] }}</span>@if(! empty($item['badge']))<span class="nav-badge">{{ $item['badge'] > 99 ? '99+' : $item['badge'] }}</span>@endif</a>
-                @endforeach
-            </nav>
+        <div class="sidebar-menu">
+            <button type="button" class="sidebar-menu-toggle" aria-label="Menu">☰ <span>Menu</span></button>
+            <div class="nav-scroll">
+                <div class="menu-title">Menu</div>
+                <nav class="nav">
+                    @foreach($menus as $item)
+                        @php($navIcon = [
+                            'overview' => '⌂',
+                            'report' => '▥',
+                            'fee' => '%',
+                            'approval' => '✓',
+                            'mapping' => '⇄',
+                            'stores' => '▦',
+                            'agents' => '◎',
+                            'create-store' => '+',
+                            'bot-monitoring' => '◈',
+                            'status-request' => '↗',
+                            'users' => 'U',
+                            'logs' => '≡',
+                            'monitoring' => '◌',
+                            'topup' => '↑',
+                            'qris' => '↑',
+                            'checklist' => '✓',
+                            'finance' => '$',
+                            'cs' => 'CS',
+                            'settings' => '*',
+                            'history' => '↺',
+                            'tickets' => '!',
+                            'settlement' => '⇣',
+                            'support-ticket' => '✎',
+                            'create-ticket' => '✎',
+                            'manual-tickets' => '✉',
+                            'analytics' => '◫',
+                        ][$item['key']] ?? '•')
+                        <a href="{{ $item['url'] }}" class="{{ ($active ?? '') === $item['key'] ? 'active' : '' }}" data-key="{{ $item['key'] }}"><span class="nav-icon" aria-hidden="true">{{ $navIcon }}</span><span class="nav-label">{{ $item['label'] }}</span>@if(! empty($item['badge']))<span class="nav-badge">{{ $item['badge'] > 99 ? '99+' : $item['badge'] }}</span>@endif</a>
+                    @endforeach
+                </nav>
+            </div>
+            <div class="logout">
+                <form method="post" action="{{ route('logout') }}">@csrf<button class="btn" style="width:100%; justify-content:flex-start">Logout</button></form>
+                <div class="user" style="margin-top:18px"><div class="avatar">{{ substr(auth()->user()?->name ?? 'PG', 0, 2) }}</div><div>{{ auth()->user()?->name ?? ($roleLabel ?? 'PayGrid') }}</div></div>
+                <div class="session-note">Sesi otomatis berakhir setelah {{ config('session.lifetime') }} menit tidak aktif.</div>
+            </div>
         </div>
-        <div class="logout">
-            <form method="post" action="{{ route('logout') }}">@csrf<button class="btn" style="width:100%; justify-content:flex-start">Logout</button></form>
-            <div class="user" style="margin-top:18px"><div class="avatar">{{ substr(auth()->user()?->name ?? 'PG', 0, 2) }}</div><div>{{ auth()->user()?->name ?? ($roleLabel ?? 'PayGrid') }}</div></div>
-            <div class="session-note">Sesi otomatis berakhir setelah {{ config('session.lifetime') }} menit tidak aktif.</div>
-        </div>
+        <script>
+            var sidebarMenu = document.querySelector('.sidebar-menu');
+            document.querySelector('.sidebar-menu-toggle')?.addEventListener('click', function () {
+                sidebarMenu?.classList.toggle('open');
+            });
+            if (window.matchMedia && matchMedia('(pointer: coarse)').matches) {
+                document.addEventListener('click', function (e) {
+                    if (sidebarMenu && sidebarMenu.classList.contains('open') && !sidebarMenu.contains(e.target)) {
+                        sidebarMenu.classList.remove('open');
+                    }
+                });
+            }
+        </script>
     </aside>
     <main>
         @if(in_array(auth()->user()?->role, ['ma', 'superadmin', 'cs_pusat'], true))
@@ -975,6 +1167,27 @@
         @yield('content')
     </main>
 </div>
+@if(auth()->user()?->role === 'ma')
+    <div id="ma-assistant-root">
+        <button type="button" id="ma-assistant-toggle" aria-label="Tanya PayGrid AI">💬</button>
+        <div id="ma-assistant-panel" hidden>
+            <div id="ma-assistant-header">
+                <strong>Tanya PayGrid AI</strong>
+                <button type="button" id="ma-assistant-close" aria-label="Tutup">&times;</button>
+            </div>
+            <p id="ma-assistant-disclaimer">Cuma bisa jawab pertanyaan soal dashboard &amp; data toko kamu &mdash; nggak bisa ubah data atau kode.</p>
+            <div id="ma-assistant-messages"></div>
+            <div id="ma-assistant-image-preview" hidden><img alt="preview"><button type="button" id="ma-assistant-image-remove">&times;</button></div>
+            <form id="ma-assistant-form">
+                <input type="file" id="ma-assistant-image-input" accept="image/*" hidden>
+                <button type="button" id="ma-assistant-attach" aria-label="Lampirkan gambar">📎</button>
+                <input type="text" id="ma-assistant-input" placeholder="Tanya soal dashboard kamu..." maxlength="2000" autocomplete="off">
+                <button type="submit" id="ma-assistant-send" aria-label="Kirim">&#10148;</button>
+            </form>
+        </div>
+    </div>
+    <script src="{{ asset('js/ma-assistant.js') }}?v={{ filemtime(public_path('js/ma-assistant.js')) }}" defer data-ask-url="{{ route('ma.assistant.ask') }}"></script>
+@endif
 @stack('scripts')
 <script src="{{ asset('js/paygrid-live.js') }}?v={{ filemtime(public_path('js/paygrid-live.js')) }}" defer></script>
 </body>
