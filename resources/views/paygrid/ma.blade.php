@@ -2,6 +2,8 @@
 
 @php
     $money = fn ($value) => 'Rp '.number_format((int) ($value ?? 0), 0, ',', '.');
+    $moneyC = fn ($value) => 'C '.number_format((int) ($value ?? 0), 0, ',', '.');
+    $moneyD = fn ($value) => 'D '.number_format((int) ($value ?? 0), 0, ',', '.');
     $pct = fn ($value) => number_format((float) $value, 3, ',', '.').'%';
     $pctInput = fn ($value) => number_format((float) $value, 2, '.', '');
     $badge = fn ($status) => App\Support\PayGridLabels::badge($status);
@@ -104,7 +106,7 @@
             <div class="ma-mini-list">
                 @php $sourceMax = $topPaymentSources->max('volume') ?: 1; @endphp
                 @forelse($topPaymentSources as $i => $row)
-                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['channel'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $sourceMax * 100) }}%"></span></span></span><strong>{{ $money($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
+                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['channel'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $sourceMax * 100) }}%"></span></span></span><strong>{{ $moneyC($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
                 @empty
                     <p class="muted" style="margin:0">Belum ada transaksi sukses hari ini.</p>
                 @endforelse
@@ -115,7 +117,7 @@
             <div class="ma-mini-list">
                 @php $topMax = $topMerchants->max('volume') ?: 1; @endphp
                 @forelse($topMerchants as $i => $row)
-                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row->merchant?->name ?: '-' }}<span class="ma-mini-bar"><span style="width:{{ round($row->volume / $topMax * 100) }}%"></span></span></span><strong>{{ $money($row->volume) }}<small class="muted" style="display:block;font-weight:700">Withdrawal: {{ $money($row->withdrawal) }}</small></strong></div>
+                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row->merchant?->name ?: '-' }}<span class="ma-mini-bar"><span style="width:{{ round($row->volume / $topMax * 100) }}%"></span></span></span><strong>{{ $moneyC($row->volume) }}<small class="muted" style="display:block;font-weight:700">Withdrawal: {{ $moneyD($row->withdrawal) }}</small></strong></div>
                 @empty
                     <p class="muted" style="margin:0">Belum ada data toko.</p>
                 @endforelse
@@ -171,7 +173,7 @@
     <section class="card pad section ma-period-card"><form method="get" class="ma-period-form"><label>Periode<select name="period" data-ma-period-select><option value="this_month" @selected($filters['period'] === 'this_month')>Bulan Ini</option><option value="last_month" @selected($filters['period'] === 'last_month')>Bulan Lalu</option><option value="last_30_days" @selected($filters['period'] === 'last_30_days')>30 Hari</option><option value="custom" @selected($filters['period'] === 'custom')>Custom</option><option value="all" @selected($filters['period'] === 'all')>Semua Periode</option></select></label><label>Dari<input type="date" name="from" value="{{ $dateInput($dataFilters['from'] ?? $filters['from']) }}" data-ma-period-custom></label><label>Sampai<input type="date" name="to" value="{{ $dateInput($dataFilters['to'] ?? $filters['to']) }}" data-ma-period-custom></label><button class="btn primary compact-btn">Terapkan</button><span class="badge ok">{{ $periodLabel }}</span></form></section>
     <section class="grid qris-metrics section"><div class="card pad qris-metric primary"><span>Total Fee MA</span><strong>{{ $money($summary['fee_ma']) }}</strong></div><div class="card pad qris-metric pending"><span>Total Fee Agen</span><strong>{{ $money($summary['fee_agent']) }}</strong></div><div class="card pad qris-metric"><span>Total Fee Merchant</span><strong>{{ $money($summary['fee_merchant']) }}</strong></div></section>
     <section class="card qris-panel section"><div class="qris-toolbar"><h2>Fee Saya (MA)</h2></div>@include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'ma', 'feeMenus' => $feeMenus, 'rates' => auth()->user()->fee_menu_rates ?? []])</section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Pembagian Fee Per Toko</h2><p class="muted" style="margin:4px 0 0">Margin Agent = MDR Toko &minus; Based Fee Agent. Margin MA = Based Fee Agent &minus; Based Fee MA. Status <strong>Gak Sinkron</strong> artinya salah satu margin itu minus &mdash; rate-nya perlu dinaikin biar MDR Toko &ge; Based Fee Agent &ge; Based Fee MA.</p></div></div><table class="table qris-table ma-fee-split-table"><thead><tr><th>Toko</th><th>Menu Fee</th><th>MDR Toko</th><th>Volume Trx</th><th>Margin Agent</th><th>Estimasi Fee Agen</th><th>Margin MA</th><th>Estimasi Fee MA</th><th>Status</th><th>Detail</th></tr></thead><tbody>
+    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Pembagian Fee Per Toko</h2><p class="muted" style="margin:4px 0 0">Margin Agent = MDR Toko &minus; Based Fee Agent. Margin MA = Based Fee Agent &minus; Based Fee MA. Status <strong>Gak Sinkron</strong> artinya salah satu margin itu minus &mdash; rate-nya perlu dinaikin biar MDR Toko &ge; Based Fee Agent &ge; Based Fee MA.</p></div></div><div class="table-wrap"><table class="table qris-table ma-fee-split-table"><thead><tr><th>Toko</th><th>Menu Fee</th><th>MDR Toko</th><th>Volume Trx</th><th>Margin Agent</th><th>Estimasi Fee Agen</th><th>Margin MA</th><th>Estimasi Fee MA</th><th>Status</th><th>Detail</th></tr></thead><tbody>
     @foreach($merchants as $m)
     @php
         $basedFeeAgent = (float) $m->agent_fee_percent;
@@ -202,7 +204,7 @@
         <p class="muted" style="margin:10px 2px 0"><strong>Note:</strong><br>Fee : MDR &minus; Based Fee MA<br>Margin Agent : MDR Toko &minus; Based Fee Agent<br>Margin MA : Fee &minus; Margin Agent<br>Revenue MA : Margin MA &times; Volume Trx<br>Revenue Agent : Margin Agent &times; Volume Trx</p>
         </div></div></td></tr>
     @endforeach
-    </tbody></table></section>
+    </tbody></table></div></section>
 @endif
 
 @if($active === 'approval')
@@ -341,7 +343,7 @@
 @endif
 
 @if($active === 'agents')
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Agen</h2></div><table class="table qris-table super-create-table"><thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Tipe</th><th class="fee-menu-col">Fee per Menu</th><th>Password</th><th>Aksi</th></tr></thead><tbody><tr>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Agen</h2></div><div class="table-wrap"><table class="table qris-table super-create-table"><thead><tr><th>Nama</th><th>Email</th><th>Kontak</th><th>Status</th><th>Tipe</th><th class="fee-menu-col">Fee per Menu</th><th>Password</th><th>Aksi</th></tr></thead><tbody><tr>
         <td data-label="Nama"><form id="agent-create" method="post" action="{{ route('ma.agents.store') }}">@csrf</form><input form="agent-create" name="name" required></td>
         <td data-label="Email"><input form="agent-create" name="email" type="email" required></td>
         <td data-label="Kontak"><input form="agent-create" name="contact"></td>
@@ -359,13 +361,13 @@
         <td data-label="Fee per Menu">@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'agent-create'])</td>
         <td data-label="Password"><input form="agent-create" name="password" value="{{ config('paygrid.demo_password') }}"></td>
         <td data-label=""><button form="agent-create" class="btn primary compact-btn">Buat</button></td>
-    </tr></tbody></table></section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Agen</h2></div><table class="table qris-table ma-agent-list-table"><thead><tr><th>Agen</th><th>Email</th><th>Kontak</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead><tbody>@foreach($agents as $a)
+    </tr></tbody></table></div></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Daftar Agen</h2></div><div class="table-wrap"><table class="table qris-table ma-agent-list-table"><thead><tr><th>Agen</th><th>Email</th><th>Kontak</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead><tbody>@foreach($agents as $a)
         <tr><td><strong>{{ $a->name }}</strong><br><span class="muted">{{ $a->code }}</span></td><td>{{ $a->email ?: '-' }}</td><td>{{ $a->contact ?: '-' }}</td><td>{{ $feeMenus->ratesSummary($a->fee_menu_rates ?? [], 'agent') }}</td><td><span class="badge {{ $a->is_active ? 'ok' : 'danger' }}">{{ $a->is_active ? 'Active' : 'Suspended' }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-fee-{{ $a->id }}">Edit Fee</button>
         <div class="approval-modal" id="agent-fee-{{ $a->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Edit Fee Agen</h2><p class="muted" style="margin:4px 0 0">{{ $a->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><form method="post" action="{{ route('ma.agents.fee.update', $a) }}" class="form-grid pad">@csrf
             @include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $a->fee_menu_rates ?? []])
             <div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
-    @endforeach</tbody></table></section>
+    @endforeach</tbody></table></div></section>
 @endif
 
 @if($active === 'create-store')

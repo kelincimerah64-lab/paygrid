@@ -32,7 +32,7 @@
         .notif-panel .ma-detail-row { min-height:auto; padding:8px; margin-bottom:6px; }
         .notif-panel .ma-detail-row:last-child { margin-bottom:0; }
         .menu-title { margin:12px 6px 8px; font-size:10px; letter-spacing:.18em; color:#7a879b; font-weight:900; text-transform:uppercase; }
-        .nav { display:grid; gap:6px; }
+        .nav { display:grid; grid-template-columns:minmax(0, 1fr); gap:6px; }
         .nav a { position:relative; display:flex; align-items:center; gap:11px; min-height:42px; padding:9px 12px; border:1px solid transparent; border-radius:10px; text-decoration:none; color:#43536d; font-size:13px; font-weight:850; transition:background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease; }
         .nav a:hover { background:#f4f8ff; border-color:#d8e5f7; color:#1557c2; transform:translateX(2px); box-shadow:0 8px 20px rgba(21, 87, 194, .08); }
         .nav a.active { background:linear-gradient(135deg, #1f6fe5, #1557c2); border-color:#1d67d7; color:#fff; font-weight:950; box-shadow:0 14px 30px rgba(21, 87, 194, .24); }
@@ -77,12 +77,11 @@
         .metric.blue { background:linear-gradient(135deg, #1f6fe5, #1557c2); color:#fff; border-color:#1d67d7; }
         .metric.success { background:#ecfff5; border-color:#a4ebc4; }
         .metric.warn-soft { background:#fff9e9; border-color:#ffd46d; }
-        .table-wrap { max-width:100%; overflow-x:auto; }
+        .table-wrap { max-width:100%; max-height:70vh; overflow:auto; }
         .table { width:100%; min-width:0; border-collapse:collapse; }
         .table th, .table td { border-top:1px solid #e7edf6; padding:7px 10px; text-align:left; vertical-align:middle; }
         .table th { background:#f7faff; white-space:nowrap; }
-        .table-wrap.sticky-head { max-height:70vh; }
-        .sticky-head thead th { position:sticky; top:0; z-index:2; box-shadow:0 1px 0 #e7edf6; }
+        .table-wrap thead th { position:sticky; top:0; z-index:2; box-shadow:0 1px 0 #e7edf6; }
         .table td { line-height:1.18; }
         .table strong { font-weight:900; }
         .badge { display:inline-flex; align-items:center; justify-content:center; min-height:24px; padding:4px 9px; border-radius:999px; font-weight:900; font-size:11px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
@@ -742,7 +741,7 @@
             .qris-filters, .hero-actions { justify-content:flex-start; }
             .qris-filters .search { width:100%; }
             .metric { min-height:auto; }
-            .table-wrap { overflow-x:hidden; }
+            .table-wrap { max-height:none; overflow:hidden; }
             .qris-table, .qris-table thead, .qris-table tbody, .qris-table tr, .qris-table td { display:block; width:100%; }
             .qris-table tr[hidden] { display:none; }
             .qris-table { table-layout:auto; }

@@ -240,7 +240,7 @@
 @else
     <section class="card">
         <div class="filters"><input class="search" placeholder="Cari data..."><div class="actions"><input type="date"><input type="date"><button class="btn primary">Submit Filter</button></div></div>
-        <table class="table"><thead><tr><th>Tanggal</th><th>Toko</th><th>Reference</th><th>Nominal</th><th>Status</th></tr></thead><tbody><tr><td colspan="5">Backend detail {{ $active }} siap disambungkan ke service Laravel.</td></tr></tbody></table>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Tanggal</th><th>Toko</th><th>Reference</th><th>Nominal</th><th>Status</th></tr></thead><tbody><tr><td colspan="5">Backend detail {{ $active }} siap disambungkan ke service Laravel.</td></tr></tbody></table></div>
     </section>
 @endif
 @endsection

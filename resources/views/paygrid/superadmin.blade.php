@@ -129,7 +129,7 @@
     </section>
     <section class="card qris-panel section">
         <div class="qris-toolbar"><h2>Daftar MA</h2></div>
-        <table class="table qris-table super-ma-list-table"><thead><tr><th>MA</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
+        <div class="table-wrap"><table class="table qris-table super-ma-list-table"><thead><tr><th>MA</th><th>Fee per Menu</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
             @foreach($mas as $ma)
                 <tr>
                     <td><strong>{{ $ma->name }}</strong><br><span class="muted">{{ $ma->email }}</span></td>
@@ -150,7 +150,7 @@
                     </td>
                 </tr>
             @endforeach
-        </tbody></table>
+        </tbody></table></div>
     </section>
 @endif
 
