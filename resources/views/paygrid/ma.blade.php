@@ -117,7 +117,7 @@
             <div class="ma-mini-list">
                 @php $topMax = $topMerchants->max('volume') ?: 1; @endphp
                 @forelse($topMerchants as $i => $row)
-                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row->merchant?->name ?: '-' }}<span class="ma-mini-bar"><span style="width:{{ round($row->volume / $topMax * 100) }}%"></span></span></span><strong>{{ $moneyC($row->volume) }}<small class="muted" style="display:block;font-weight:700">Withdrawal: {{ $moneyD($row->withdrawal) }}</small></strong></div>
+                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row->merchant?->name ?: '-' }}<span class="ma-mini-bar"><span style="width:{{ round($row->volume / $topMax * 100) }}%"></span></span></span><strong>{{ $moneyC($row->volume) }}<small class="muted" style="display:block;font-weight:700">{{ $moneyD($row->withdrawal) }}</small></strong></div>
                 @empty
                     <p class="muted" style="margin:0">Belum ada data toko.</p>
                 @endforelse
@@ -135,7 +135,7 @@
             <div class="ma-mini-list">
                 @php $wdCompletedMax = $withdrawalsCompletedByBank->max('volume') ?: 1; @endphp
                 @forelse($withdrawalsCompletedByBank as $i => $row)
-                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['bank_name'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $wdCompletedMax * 100) }}%"></span></span></span><strong>{{ $money($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
+                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['bank_name'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $wdCompletedMax * 100) }}%"></span></span></span><strong>{{ $moneyD($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
                 @empty
                     <p class="muted" style="margin:0">Belum ada withdrawal selesai hari ini.</p>
                 @endforelse
@@ -146,7 +146,7 @@
             <div class="ma-mini-list">
                 @php $wdPendingMax = $withdrawalsPendingByBank->max('volume') ?: 1; @endphp
                 @forelse($withdrawalsPendingByBank as $i => $row)
-                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['bank_name'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $wdPendingMax * 100) }}%"></span></span></span><strong>{{ $money($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
+                    <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['bank_name'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $wdPendingMax * 100) }}%"></span></span></span><strong>{{ $moneyD($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
                 @empty
                     <p class="muted" style="margin:0">Gak ada withdrawal yang nyangkut.</p>
                 @endforelse

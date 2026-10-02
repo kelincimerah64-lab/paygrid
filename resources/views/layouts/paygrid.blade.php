@@ -32,8 +32,8 @@
         .notif-panel .ma-detail-row { min-height:auto; padding:8px; margin-bottom:6px; }
         .notif-panel .ma-detail-row:last-child { margin-bottom:0; }
         .menu-title { margin:12px 6px 8px; font-size:10px; letter-spacing:.18em; color:#7a879b; font-weight:900; text-transform:uppercase; }
-        .nav { display:grid; grid-template-columns:minmax(0, 1fr); gap:6px; }
-        .nav a { position:relative; display:flex; align-items:center; gap:11px; min-height:42px; padding:9px 12px; border:1px solid transparent; border-radius:10px; text-decoration:none; color:#43536d; font-size:13px; font-weight:850; transition:background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease; }
+        .nav { display:grid; grid-template-columns:minmax(0, 1fr); gap:6px; min-width:0; }
+        .nav a { position:relative; display:flex; align-items:center; gap:11px; min-width:0; min-height:42px; padding:9px 12px; border:1px solid transparent; border-radius:10px; text-decoration:none; color:#43536d; font-size:13px; font-weight:850; transition:background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease; }
         .nav a:hover { background:#f4f8ff; border-color:#d8e5f7; color:#1557c2; transform:translateX(2px); box-shadow:0 8px 20px rgba(21, 87, 194, .08); }
         .nav a.active { background:linear-gradient(135deg, #1f6fe5, #1557c2); border-color:#1d67d7; color:#fff; font-weight:950; box-shadow:0 14px 30px rgba(21, 87, 194, .24); }
         .nav a.active:hover { transform:translateX(0); }
@@ -46,7 +46,7 @@
         .sidebar-menu { display:contents; }
         .sidebar-menu > .nav-scroll { display:flex; flex-direction:column; }
         .sidebar-menu-toggle { display:none; }
-        .nav-scroll { flex:1; min-height:0; overflow-y:auto; }
+        .nav-scroll { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; }
         .logout { border-top:1px solid var(--line); padding:18px 10px 0; color:#4b5870; }
         .logout > div:first-child { min-height:40px; display:flex; align-items:center; font-weight:650; }
         .user { display:flex; align-items:center; gap:10px; font-weight:900; }
@@ -1092,8 +1092,8 @@
                             'history' => '↺',
                             'tickets' => '!',
                             'settlement' => '⇣',
-                            'support-ticket' => '✎',
-                            'create-ticket' => '✎',
+                            'support-ticket' => '',
+                            'create-ticket' => '',
                             'manual-tickets' => '✉',
                             'analytics' => '◫',
                         ][$item['key']] ?? '•')
