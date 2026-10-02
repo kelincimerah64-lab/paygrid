@@ -38,7 +38,7 @@
         <form method="post" action="{{ route('merchant.admin.users.store', $merchant) }}" class="admin-create-form section">
             @csrf
             <label>Email<input name="email" type="email" required placeholder="email@domain.com"></label>
-            <label>Role<select name="role" required><option value="cs">CS</option><option value="finance">Finance</option><option value="admin">Admin</option></select></label>
+            <label>Role<select name="role" required><option value="cs">CS</option><option value="finance">Finance</option><option value="admin">Admin</option><option value="boss">Boss</option></select></label>
             <label>Password<input name="password" required minlength="6" placeholder="Password awal"></label>
             <button class="btn primary">Create User</button>
         </form>

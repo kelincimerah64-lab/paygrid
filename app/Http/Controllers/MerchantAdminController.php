@@ -25,7 +25,7 @@ class MerchantAdminController extends Controller
 
         $users = User::query()
             ->where('merchant_id', $merchant->id)
-            ->whereIn('role', ['admin', 'finance', 'cs', 'readonly_admin', 'readonly_cs'])
+            ->whereIn('role', ['admin', 'finance', 'cs', 'boss', 'readonly_admin', 'readonly_cs'])
             ->where('is_hidden', false)
             ->orderBy('role')
             ->orderBy('name')
@@ -101,7 +101,7 @@ class MerchantAdminController extends Controller
         $this->authorizeUserManagement($request);
         $data = $request->validate([
             'email' => ['required', 'email', 'max:160', 'unique:users,email'],
-            'role' => ['required', 'in:admin,finance,cs'],
+            'role' => ['required', 'in:admin,finance,cs,boss'],
             'password' => ['required', 'string', 'min:6', 'max:120'],
         ]);
         $name = str($data['email'])->before('@')->replace(['.', '_', '-'], ' ')->title()->toString();

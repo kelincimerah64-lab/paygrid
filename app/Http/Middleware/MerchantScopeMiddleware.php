@@ -18,7 +18,7 @@ class MerchantScopeMiddleware
         $user = $request->user();
         $merchant = $request->route('merchant');
 
-        if ($user && $merchant && in_array($user->role, ['cs', 'finance', 'admin', 'readonly_admin', 'readonly_cs'], true) && $user->merchant_id) {
+        if ($user && $merchant && in_array($user->role, ['cs', 'finance', 'admin', 'boss', 'readonly_admin', 'readonly_cs'], true) && $user->merchant_id) {
             abort_unless($user->merchant_id && (int) $user->merchant_id === (int) $merchant->id, 403);
         }
 

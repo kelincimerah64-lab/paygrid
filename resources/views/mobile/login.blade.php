@@ -20,8 +20,8 @@
     h1 { font-size:17px; text-align:center; margin:0 0 2px; }
     .sub { text-align:center; color:var(--muted); font-size:12.5px; margin:0 0 22px; }
     label { display:block; font-size:12px; font-weight:800; color:var(--muted); margin:14px 0 6px; }
-    select, input { width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px; font-size:15px; font-family:inherit; background:#fbfdff; }
-    select:focus, input:focus { outline:2px solid var(--blue); outline-offset:1px; }
+    input { width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px; font-size:15px; font-family:inherit; background:#fbfdff; }
+    input:focus { outline:2px solid var(--blue); outline-offset:1px; }
     button { width:100%; margin-top:22px; padding:13px; border:none; border-radius:10px; background:var(--blue); color:#fff; font-size:15px; font-weight:800; cursor:pointer; }
     button:active { opacity:.85; }
     .error { margin-top:14px; padding:10px 12px; border-radius:8px; background:#fdecec; color:var(--danger); font-size:12.5px; font-weight:700; }
@@ -31,17 +31,12 @@
     <div class="card">
         <img src="{{ asset('images/mobile-icon-192.png') }}" alt="PayGrid">
         <h1>PayGrid Toko</h1>
-        <p class="sub">Login khusus admin toko</p>
+        <p class="sub">Login pakai akun PayGrid Anda</p>
 
         <form method="post" action="{{ route('mobile.login.attempt') }}">
             @csrf
-            <label for="merchant_id">Pilih Toko</label>
-            <select name="merchant_id" id="merchant_id" required>
-                <option value="" disabled {{ old('merchant_id') ? '' : 'selected' }}>-- Pilih toko --</option>
-                @foreach($merchants as $merchant)
-                    <option value="{{ $merchant->id }}" @selected((string) old('merchant_id') === (string) $merchant->id)>{{ $merchant->name }}</option>
-                @endforeach
-            </select>
+            <label for="email">Email / Username</label>
+            <input type="text" name="email" id="email" value="{{ old('email') }}" required autocomplete="username" placeholder="email@domain.com atau username">
 
             <label for="password">Password</label>
             <input type="password" name="password" id="password" required autocomplete="current-password">

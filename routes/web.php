@@ -32,7 +32,7 @@ Route::prefix('mobile')->name('mobile.')->group(function () {
     Route::get('/login', [MobileAppController::class, 'loginForm'])->name('login');
     Route::post('/login', [MobileAppController::class, 'login'])->middleware('throttle:6,1')->name('login.attempt');
     Route::post('/logout', [MobileAppController::class, 'logout'])->middleware('auth')->name('logout');
-    Route::get('/dashboard', [MobileAppController::class, 'dashboard'])->middleware(['auth', 'role:admin'])->name('dashboard');
+    Route::get('/dashboard', [MobileAppController::class, 'dashboard'])->middleware(['auth', 'role:admin,boss,finance,cs,ma,agent'])->name('dashboard');
 });
 
 Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
@@ -90,7 +90,7 @@ Route::get('/admin/monitoring', [MonitoringController::class, 'index'])->name('a
 });
 
 Route::get('/portal/{merchant}/admin', fn ($merchant) => redirect()->route('merchant.admin.users', $merchant));
-Route::middleware(['auth', 'role:admin,readonly_admin,ma,superadmin', 'merchant.scope'])->group(function () {
+Route::middleware(['auth', 'role:admin,readonly_admin,boss,ma,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/admin/users', fn (\App\Models\Merchant $merchant, MerchantAdminController $controller) => $controller->page($merchant, 'users', app(\App\Services\Navigation\MenuBuilder::class)))->name('merchant.admin.users');
 Route::post('/portal/{merchant}/admin/users', [MerchantAdminController::class, 'storeUser'])->middleware('throttle:dashboard-writes')->name('merchant.admin.users.store');
 Route::post('/portal/{merchant}/admin/users/{user}/reset-password', [MerchantAdminController::class, 'resetPassword'])->middleware('throttle:dashboard-writes')->name('merchant.admin.users.reset-password');
@@ -135,7 +135,7 @@ Route::get('/portal/cs-scope', [CsScopeController::class, 'index'])->name('cs-sc
 });
 
 Route::get('/portal/{merchant}/cs', fn ($merchant) => redirect()->route('merchant.cs.tickets', $merchant));
-Route::middleware(['auth', 'role:cs,readonly_cs,cs_ma,cs_agent,ma,agent,admin,readonly_admin,superadmin', 'merchant.scope'])->group(function () {
+Route::middleware(['auth', 'role:cs,readonly_cs,cs_ma,cs_agent,ma,agent,admin,readonly_admin,boss,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/cs/tickets', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'tickets', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.tickets');
 Route::get('/portal/{merchant}/cs/topup', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'topup', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.topup');
 Route::get('/portal/{merchant}/cs/checklist', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'checklist', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.checklist');
@@ -144,7 +144,7 @@ Route::post('/portal/{merchant}/cs/topup/{topupRequest}/ticket', [SupportTicketC
 Route::get('/portal/{merchant}/cs/history', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantCs($merchant, 'history', app(\App\Services\Navigation\MenuBuilder::class), app(\App\Services\MetricsService::class)))->name('merchant.cs.history');
 });
 
-Route::middleware(['auth', 'role:admin,readonly_admin,cs,readonly_cs,ma,agent,superadmin', 'merchant.scope'])->group(function () {
+Route::middleware(['auth', 'role:admin,readonly_admin,boss,cs,readonly_cs,ma,agent,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/tickets', [MerchantTicketController::class, 'index'])->name('merchant.tickets.index');
 Route::post('/portal/{merchant}/tickets', [MerchantTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.store');
 Route::get('/portal/{merchant}/tickets/{ticket}', [MerchantTicketController::class, 'show'])->name('merchant.tickets.show');
@@ -166,7 +166,7 @@ Route::get('/embedded/merchant_script/toko/cs/index.html', fn (DashboardControll
 Route::get('/embedded/merchant_script/toko/finance/index.html', fn (DashboardController $controller) => $controller->merchantFinance(\App\Models\Merchant::query()->where('merchant_type', 'script')->firstOrFail(), 'overview', app(\App\Services\Navigation\MenuBuilder::class)))->middleware('auth')->name('legacy.script.finance');
 });
 
-Route::middleware(['auth', 'role:finance,ma,admin,readonly_admin,superadmin', 'merchant.scope'])->group(function () {
+Route::middleware(['auth', 'role:finance,ma,admin,readonly_admin,boss,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/finance', fn ($merchant) => redirect()->route('merchant.finance.overview', $merchant));
 Route::get('/portal/{merchant}/finance/overview', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantFinance($merchant, 'overview', app(\App\Services\Navigation\MenuBuilder::class)))->name('merchant.finance.overview');
 Route::get('/portal/{merchant}/finance/settlement', fn (\App\Models\Merchant $merchant, DashboardController $controller) => $controller->merchantFinance($merchant, 'settlement', app(\App\Services\Navigation\MenuBuilder::class)))->name('merchant.finance.settlement');

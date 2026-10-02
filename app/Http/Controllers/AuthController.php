@@ -58,7 +58,7 @@ class AuthController extends Controller
             return back()->withErrors(['email' => 'Akun nonaktif. Hubungi admin.'])->onlyInput('email');
         }
 
-        if (in_array($request->user()->role, ['cs', 'finance', 'admin', 'readonly_admin', 'readonly_cs'], true) && ! $request->user()->merchant_id) {
+        if (in_array($request->user()->role, ['cs', 'finance', 'admin', 'boss', 'readonly_admin', 'readonly_cs'], true) && ! $request->user()->merchant_id) {
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -84,7 +84,7 @@ class AuthController extends Controller
 
         $this->auditAuth('auth.login_success', $request->user(), $request);
 
-        if (in_array($request->user()->role, ['cs', 'finance', 'admin', 'readonly_admin', 'readonly_cs'], true)) {
+        if (in_array($request->user()->role, ['cs', 'finance', 'admin', 'boss', 'readonly_admin', 'readonly_cs'], true)) {
             return redirect($this->homeFor($request->user()->role));
         }
 
@@ -114,6 +114,7 @@ class AuthController extends Controller
             'agent' => route('agent.overview'),
             'admin' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),
             'readonly_admin' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),
+            'boss' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),
             'ma' => route('ma.overview'),
             'cs' => $user?->merchant ? route('merchant.cs.tickets', $user->merchant) : route('login'),
             'readonly_cs' => $user?->merchant ? route('merchant.cs.tickets', $user->merchant) : route('login'),

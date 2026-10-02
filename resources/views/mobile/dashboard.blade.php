@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>PayGrid Toko - {{ $merchant->name }}</title>
+<title>PayGrid Toko - {{ $identity }}</title>
 <link rel="manifest" href="{{ asset('mobile-manifest.json') }}">
 <link rel="apple-touch-icon" href="{{ asset('images/mobile-icon-apple.png') }}">
 <meta name="theme-color" content="#1557c2">
@@ -26,6 +26,7 @@
         'PENDING' => 'Pending',
         default => $status,
     };
+    $tabLabels = ['trx' => 'Transaksi', 'disbursement' => 'Disbursement', 'tiket' => 'Tiket', 'keuangan' => 'Keuangan'];
 @endphp
 <style>
     :root { --blue:#1557c2; --ink:#06162f; --muted:#55657a; --line:#dbe5f2; --bg:#f5f8fc; --success:#008450; --warn:#b15a00; --danger:#c62828; --soft:#eef4fb; }
@@ -36,7 +37,7 @@
     header .sub { font-size:11px; color:var(--muted); font-weight:700; }
     header form { margin:0; }
     header button { border:1px solid var(--line); background:#fff; color:var(--muted); font-size:11px; font-weight:800; padding:7px 12px; border-radius:8px; }
-    .tabs { position:sticky; top:53px; z-index:4; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; background:#fff; border-bottom:1px solid var(--line); padding:10px 14px; }
+    .tabs { position:sticky; top:53px; z-index:4; display:grid; gap:6px; background:#fff; border-bottom:1px solid var(--line); padding:10px 14px; }
     .tab { text-align:center; padding:9px 6px; border-radius:8px; font-size:12px; font-weight:800; color:var(--muted); text-decoration:none; background:var(--soft); }
     .tab.active { background:var(--blue); color:#fff; }
     main { padding:14px; max-width:520px; margin:0 auto; }
@@ -79,7 +80,7 @@
 <body>
     <header>
         <div>
-            <div class="name">{{ $merchant->name }}</div>
+            <div class="name">{{ $identity }}</div>
             <div class="sub">PayGrid Toko</div>
         </div>
         <form method="post" action="{{ route('mobile.logout') }}">
@@ -88,10 +89,10 @@
         </form>
     </header>
 
-    <div class="tabs">
-        <a class="tab {{ $tab === 'trx' ? 'active' : '' }}" href="?{{ http_build_query(['tab' => 'trx', 'from' => $from, 'to' => $to]) }}#top">Transaksi</a>
-        <a class="tab {{ $tab === 'disbursement' ? 'active' : '' }}" href="?{{ http_build_query(['tab' => 'disbursement', 'from' => $from, 'to' => $to]) }}#top">Disbursement</a>
-        <a class="tab {{ $tab === 'tiket' ? 'active' : '' }}" href="?{{ http_build_query(['tab' => 'tiket', 'from' => $from, 'to' => $to]) }}#top">Tiket</a>
+    <div class="tabs" style="grid-template-columns:repeat({{ count($allowedTabs) }}, 1fr)">
+        @foreach($allowedTabs as $tabKey)
+            <a class="tab {{ $tab === $tabKey ? 'active' : '' }}" href="?{{ http_build_query(['tab' => $tabKey, 'from' => $from, 'to' => $to]) }}#top">{{ $tabLabels[$tabKey] }}</a>
+        @endforeach
     </div>
 
     <main id="top">
@@ -103,7 +104,23 @@
             <button type="submit">Terapkan</button>
         </form>
 
-        @if($tab === 'trx')
+        @if($tab === 'keuangan')
+            <div class="cards">
+                <div class="card success">
+                    <div class="label">Volume Sukses</div>
+                    <div class="value">{{ number_format($stats['success'], 0, ',', '.') }}</div>
+                    <div class="amount">{{ $money($stats['success_amount']) }}</div>
+                </div>
+                <div class="card">
+                    <div class="label">Saldo Tersedia</div>
+                    <div class="value">{{ $money($saldo['active'] ?? 0) }}</div>
+                </div>
+                <div class="card pending">
+                    <div class="label">Saldo Pending</div>
+                    <div class="value">{{ $money($saldo['pending'] ?? 0) }}</div>
+                </div>
+            </div>
+        @elseif($tab === 'trx')
             <div class="cards">
                 <a class="card success {{ $status === 'success' ? 'active' : '' }}" href="?{{ $qs(['status' => 'success']) }}#trx-list">
                     <div class="label">Sukses</div>
@@ -137,6 +154,7 @@
                             <span class="trx-amount">{{ $money($trx->amount) }}</span>
                             <span class="badge {{ $badge($trx->status) }}">{{ App\Support\PayGridLabels::status($trx->status) }}</span>
                         </div>
+                        <div class="trx-sub">{{ $trx->merchant?->name }}</div>
                         <div class="trx-time">{{ $trx->submitted_at?->timezone('Asia/Jakarta')->format('d M Y, H:i') }} WIB</div>
                         <div class="trx-ref">{{ $trx->customer_reference ?: $trx->gateway_ref_id ?: '-' }}</div>
                     </div>
