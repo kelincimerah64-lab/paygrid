@@ -40,7 +40,12 @@ class MerchantAdminController extends Controller
         $search = trim((string) request('q', ''));
         $status = (string) request('status', 'all');
         $processed = (string) request('processed', 'all');
-        $requests = TopupRequest::query()
+
+        // 'users'/'settings'/'logs' never render transaction data - skip the
+        // full-history query + aggregate stats entirely rather than paying for
+        // an unbounded scan/sort on every load of pages that don't need it.
+        $needsTransactionData = in_array($page, ['qris', 'checklist', 'history'], true);
+        $requests = $needsTransactionData ? TopupRequest::query()
             ->with('ticket')
             ->where('merchant_id', $merchant->id)
             ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
@@ -58,14 +63,22 @@ class MerchantAdminController extends Controller
             ->when($page !== 'history', fn ($query) => $query->orderByRaw("CASE WHEN status = 'success' AND is_processed = 0 THEN 0 WHEN status = 'success' AND is_processed = 1 THEN 1 WHEN status = 'pending' THEN 2 WHEN status IN ('expired', 'failed', 'rejected') THEN 3 ELSE 4 END"))
             ->latest('submitted_at')
             ->simplePaginate(config('paygrid.reports.default_page_size', 50))
-            ->withQueryString();
-        $stats = $this->transactionStats($merchant, $from, $to, $search);
+            ->withQueryString() : null;
+        $stats = $needsTransactionData ? $this->transactionStats($merchant, $from, $to, $search) : [
+            'total' => 0, 'success' => 0, 'pending' => 0, 'expired' => 0,
+            'volume_success' => 0, 'pending_amount' => 0, 'expired_amount' => 0,
+            'success_checked_count' => 0, 'success_checked_amount' => 0,
+            'success_unchecked_count' => 0, 'success_unchecked_amount' => 0,
+        ];
 
-        $logs = $this->logs($merchant);
-        $topupLogTargets = TopupRequest::query()
+        // 'logs' is the only page that renders this - it joins against the
+        // merchant's full topup_requests id list, expensive to run on every
+        // other page load for a merchant with a large transaction history.
+        $logs = $page === 'logs' ? $this->logs($merchant) : collect();
+        $topupLogTargets = $page === 'logs' ? TopupRequest::query()
             ->whereIn('id', $logs->where('target_type', TopupRequest::class)->pluck('target_id')->filter()->map(fn ($id) => (int) $id))
             ->get()
-            ->keyBy('id');
+            ->keyBy('id') : collect();
 
         return view('paygrid.merchant-admin', [
             'roleLabel' => $merchant->name.' Admin',
