@@ -658,7 +658,6 @@ class MaController extends Controller
             'unassigned' => $this->merchants($filters)->whereNull('agent_id')->count(),
             'fee_ma' => $fee['ma'],
             'fee_agent' => $fee['agent'],
-            'fee_merchant' => $fee['merchant'],
             'available_balance' => (int) ($balances->active ?? 0),
             'pending_settlement' => (int) ($balances->pending ?? 0),
         ];
