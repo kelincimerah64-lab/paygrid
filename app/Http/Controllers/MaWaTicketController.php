@@ -61,32 +61,43 @@ class MaWaTicketController extends Controller
                 'finance' => MerchantTicketService::FINANCE_CATEGORIES,
             ],
             'departmentLabels' => MerchantTicketService::DEPARTMENT_LABELS,
+            'categoryMeta' => MerchantTicketService::CATEGORY_META,
         ]);
     }
 
     public function store(Request $request, MerchantTicketService $tickets, AuditLogService $audit): RedirectResponse
     {
         $merchantIds = $this->scopedMerchantIds($request->user());
+        $department = (string) $request->input('department');
+        $category = (string) $request->input('category');
 
-        $data = $request->validate([
+        $data = $request->validate(array_merge([
             'merchant_id' => ['required', Rule::in($merchantIds)],
             'department' => ['required', Rule::in(MerchantTicketService::DEPARTMENTS)],
             'category' => ['required', 'string'],
             'description' => ['required', 'string', 'max:500'],
-        ]);
-        abort_unless(array_key_exists($data['category'], $tickets->categoriesFor($data['department'])), 422, 'Kategori tidak valid untuk department ini.');
+        ], $tickets->fieldRules($category)));
+        abort_unless(array_key_exists($category, $tickets->categoriesFor($department)), 422, 'Kategori tidak valid untuk department ini.');
 
+        $needsApproval = $tickets->needsPilotApproval($department, $category);
         $merchant = Merchant::query()->findOrFail($data['merchant_id']);
         $ticket = $tickets->create($merchant, $request->user(), [
-            'department' => $data['department'],
-            'category' => $data['category'],
+            'department' => $department,
+            'category' => $category,
             'description' => $data['description'],
+            'metadata' => $tickets->metadataFrom($category, $data),
         ]);
-        $audit->record('wa_ticket.created', $ticket, null, $ticket->only(['merchant_id', 'department', 'category', 'ticket_no']));
+        if ($needsApproval) {
+            $ticket->forceFill(['approval_status' => 'waiting'])->save();
+        }
+        $audit->record('wa_ticket.created', $ticket, null, $ticket->only(['merchant_id', 'department', 'category', 'ticket_no', 'approval_status']));
 
-        NotifyWaTicketLink::dispatch($ticket->id, 'created');
+        $groupId = $needsApproval ? config('paygrid.whatsapp.approval_group_id') : config('paygrid.whatsapp.handling_group_id');
+        NotifyWaTicketLink::dispatch($ticket->id, 'created', (string) $groupId);
 
-        return redirect()->route('ma.wa-tickets.show', $ticket)->with('status', 'Tiket dibuat: '.$ticket->ticket_no.'. Notifikasi WA dikirim.');
+        $status = $needsApproval ? 'Tiket dibuat: '.$ticket->ticket_no.'. Menunggu approval, notifikasi dikirim ke grup approval.' : 'Tiket dibuat: '.$ticket->ticket_no.'. Notifikasi WA dikirim.';
+
+        return redirect()->route('ma.wa-tickets.show', $ticket)->with('status', $status);
     }
 
     public function show(Request $request, MerchantTicket $ticket, MenuBuilder $menus): View
@@ -102,10 +113,49 @@ class MaWaTicketController extends Controller
         ]);
     }
 
+    public function approve(Request $request, MerchantTicket $ticket, AuditLogService $audit): RedirectResponse
+    {
+        $this->authorizeTicket($request->user(), $ticket);
+        abort_unless($ticket->approval_status === 'waiting', 422, 'Tiket ini tidak sedang menunggu approval.');
+
+        $before = $ticket->only(['approval_status', 'approval_by']);
+        $ticket->forceFill([
+            'approval_status' => 'approved',
+            'approval_by' => $request->user()->name,
+            'approval_completed_at' => now(),
+        ])->save();
+        $audit->record('wa_ticket.approved', $ticket, $before, $ticket->only(['approval_status', 'approval_by']));
+
+        NotifyWaTicketLink::dispatch($ticket->id, 'approved', (string) config('paygrid.whatsapp.handling_group_id'));
+
+        return back()->with('status', 'Tiket disetujui, notifikasi dikirim ke grup handling.');
+    }
+
+    public function reject(Request $request, MerchantTicket $ticket, AuditLogService $audit): RedirectResponse
+    {
+        $this->authorizeTicket($request->user(), $ticket);
+        abort_unless($ticket->approval_status === 'waiting', 422, 'Tiket ini tidak sedang menunggu approval.');
+
+        $data = $request->validate(['note' => ['nullable', 'string', 'max:2000']]);
+        $before = $ticket->only(['approval_status', 'approval_by', 'status']);
+        $ticket->forceFill([
+            'approval_status' => 'rejected',
+            'approval_by' => $request->user()->name,
+            'approval_note' => $data['note'] ?? null,
+            'approval_completed_at' => now(),
+            'status' => 'closed',
+            'closed_at' => now(),
+        ])->save();
+        $audit->record('wa_ticket.rejected', $ticket, $before, $ticket->only(['approval_status', 'approval_by', 'status']));
+
+        return redirect()->route('ma.wa-tickets.show', $ticket)->with('status', 'Tiket ditolak dan ditutup.');
+    }
+
     public function claim(Request $request, MerchantTicket $ticket, MerchantTicketService $tickets): RedirectResponse
     {
         $this->authorizeTicket($request->user(), $ticket);
         abort_if($ticket->status === 'closed', 422, 'Tiket sudah ditutup.');
+        abort_if($ticket->approval_status === 'waiting', 422, 'Tiket ini masih menunggu approval.');
 
         $won = $tickets->claim($ticket, $request->user());
 
@@ -116,6 +166,7 @@ class MaWaTicketController extends Controller
     {
         $this->authorizeTicket($request->user(), $ticket);
         abort_if($ticket->status === 'closed', 422, 'Tiket sudah ditutup.');
+        abort_if($ticket->approval_status === 'waiting', 422, 'Tiket ini masih menunggu approval.');
 
         $data = $request->validate([
             'body' => ['required', 'string', 'max:2000'],
@@ -130,12 +181,13 @@ class MaWaTicketController extends Controller
     {
         $this->authorizeTicket($request->user(), $ticket);
         abort_if($ticket->status === 'closed', 422, 'Tiket sudah ditutup.');
+        abort_if($ticket->approval_status === 'waiting', 422, 'Tiket ini masih menunggu approval.');
 
         $data = $request->validate(['to_user_id' => ['nullable', 'integer', 'exists:users,id']]);
         $to = $data['to_user_id'] ? User::query()->find($data['to_user_id']) : null;
 
         $tickets->transfer($ticket, $request->user(), $to);
-        NotifyWaTicketLink::dispatch($ticket->id, 'transferred');
+        NotifyWaTicketLink::dispatch($ticket->id, 'transferred', (string) config('paygrid.whatsapp.handling_group_id'));
 
         return back()->with('status', $to ? 'Tiket dialihkan ke '.$to->name.'.' : 'Tiket dilepas ke antrean.');
     }

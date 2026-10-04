@@ -31,7 +31,20 @@ class MerchantTicketService
         'settlement' => 'Settlement',
         'missing_transaction' => 'Missing Transaction',
         'discrepancies_amount' => 'Discrepancies Amount',
+        'topup_saldo' => 'Request Topup Saldo',
+        'topdown_saldo' => 'Request Topdown Saldo',
         'others' => 'Others',
+    ];
+
+    /**
+     * Categories that need approval before they're worked on, keyed by
+     * department. Used by the WA Tiket pilot (MaWaTicketController) only -
+     * the original ticket wizard's approval gate in create() below still
+     * covers tech/ip_whitelist specifically, unchanged.
+     */
+    public const PILOT_APPROVAL_CATEGORIES = [
+        'tech' => ['ip_whitelist'],
+        'finance' => ['topup_saldo', 'topdown_saldo'],
     ];
 
     public const DEPARTMENT_LABELS = [
@@ -141,6 +154,18 @@ class MerchantTicketService
                 ['key' => 'priority', 'label' => 'Tingkat Urgensi', 'type' => 'select', 'options' => ['Rendah', 'Sedang', 'Tinggi']],
             ],
         ],
+        'topup_saldo' => [
+            'banner' => 'Butuh approval sebelum diproses. Sertakan nominal yang diminta.',
+            'fields' => [
+                ['key' => 'nominal', 'label' => 'Nominal', 'type' => 'number', 'placeholder' => 'Contoh: 5000000'],
+            ],
+        ],
+        'topdown_saldo' => [
+            'banner' => 'Butuh approval sebelum diproses. Sertakan nominal yang diminta.',
+            'fields' => [
+                ['key' => 'nominal', 'label' => 'Nominal', 'type' => 'number', 'placeholder' => 'Contoh: 5000000'],
+            ],
+        ],
     ];
 
     public function fieldsFor(string $category): array
@@ -236,6 +261,11 @@ class MerchantTicketService
     public function categoryLabel(string $department, string $category): string
     {
         return $this->categoriesFor($department)[$category] ?? $category;
+    }
+
+    public function needsPilotApproval(string $department, string $category): bool
+    {
+        return in_array($category, self::PILOT_APPROVAL_CATEGORIES[$department] ?? [], true);
     }
 
     public function create(Merchant $merchant, User $user, array $data, array $attachments = []): MerchantTicket

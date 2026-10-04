@@ -28,7 +28,7 @@
     <div class="table-wrap">
         <table class="table qris-table">
             <thead>
-                <tr><th>No. Tiket</th><th>Toko</th><th>Kategori</th><th>Status</th><th>Dipegang Oleh</th><th>Dibuat</th><th></th></tr>
+                <tr><th>No. Tiket</th><th>Toko</th><th>Kategori</th><th>Status</th><th>Approval</th><th>Dipegang Oleh</th><th>Dibuat</th><th></th></tr>
             </thead>
             <tbody>
             @forelse($tickets as $ticket)
@@ -37,12 +37,19 @@
                     <td data-label="Toko">{{ $ticket->merchant?->name ?: '-' }}</td>
                     <td data-label="Kategori">{{ ucfirst($ticket->department) }} &middot; {{ $ticket->category }}</td>
                     <td data-label="Status"><span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span></td>
+                    <td data-label="Approval">
+                        @if($ticket->approval_status === 'waiting')<span class="badge warn">Menunggu</span>
+                        @elseif($ticket->approval_status === 'approved')<span class="badge ok">Disetujui</span>
+                        @elseif($ticket->approval_status === 'rejected')<span class="badge danger">Ditolak</span>
+                        @else <span class="muted">-</span>
+                        @endif
+                    </td>
                     <td data-label="Dipegang Oleh">{{ $ticket->claimedBy?->name ?: '- belum diambil -' }}</td>
                     <td data-label="Dibuat">{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</td>
                     <td data-label=""><a class="btn compact-btn" href="{{ route('ma.wa-tickets.show', $ticket) }}">Buka</a></td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="empty">Belum ada tiket. Klik "Buat Tiket Percobaan" untuk mulai.</td></tr>
+                <tr><td colspan="8" class="empty">Belum ada tiket. Klik "Buat Tiket Percobaan" untuk mulai.</td></tr>
             @endforelse
             </tbody>
         </table>

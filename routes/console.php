@@ -365,10 +365,11 @@ Artisan::command('wa-tickets:remind-unclaimed', function () {
         ->whereNull('claimed_by_user_id')
         ->whereNull('wa_reminder_sent_at')
         ->where('status', 'open')
+        ->where(fn ($q) => $q->whereNull('approval_status')->orWhere('approval_status', 'approved'))
         ->where('created_at', '<=', now()->subMinutes($minutes))
         ->chunkById(100, function ($tickets) use (&$reminded) {
             foreach ($tickets as $ticket) {
-                \App\Jobs\NotifyWaTicketLink::dispatch($ticket->id, 'reminder');
+                \App\Jobs\NotifyWaTicketLink::dispatch($ticket->id, 'reminder', (string) config('paygrid.whatsapp.handling_group_id'));
                 $ticket->forceFill(['wa_reminder_sent_at' => now()])->save();
                 $reminded++;
             }

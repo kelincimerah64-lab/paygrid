@@ -30,10 +30,33 @@
         <div class="fee-pill"><span>Department</span><strong>{{ ucfirst($ticket->department) }}</strong></div>
         <div class="fee-pill"><span>Kategori</span><strong>{{ $ticket->category }}</strong></div>
         <div class="fee-pill"><span>Dibuat</span><strong>{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</strong></div>
+        @foreach($ticket->metadata ?? [] as $key => $value)
+            <div class="fee-pill"><span>{{ ucfirst(str_replace('_', ' ', $key)) }}</span><strong>{{ is_numeric($value) ? 'Rp'.number_format((float) $value, 0, ',', '.') : $value }}</strong></div>
+        @endforeach
     </div>
     <p style="margin-top:12px; white-space:pre-wrap">{{ $ticket->description }}</p>
 
+    @if($ticket->approval_status === 'waiting')
+        <div class="pad" style="padding-left:0; padding-right:0">
+            <span class="badge warn" style="margin-bottom:10px; display:inline-block">Menunggu Approval</span>
+            <form method="post" action="{{ route('ma.wa-tickets.approve', $ticket) }}" style="display:inline-block; margin-right:8px">
+                @csrf
+                <button class="btn primary compact-btn" type="submit">Approve</button>
+            </form>
+            <form method="post" action="{{ route('ma.wa-tickets.reject', $ticket) }}" style="display:inline-block">
+                @csrf
+                <button class="btn compact-btn" type="submit" style="color:#c62828">Reject</button>
+            </form>
+        </div>
+    @elseif($ticket->approval_status === 'rejected')
+        <div class="pad" style="padding-left:0; padding-right:0">
+            <span class="badge danger">Ditolak oleh {{ $ticket->approval_by }}{{ $ticket->approval_note ? ' — '.$ticket->approval_note : '' }}</span>
+        </div>
+    @else
     <div class="pad" style="padding-left:0; padding-right:0">
+        @if($ticket->approval_status === 'approved')
+            <span class="badge ok" style="margin-bottom:10px; display:inline-block">Disetujui oleh {{ $ticket->approval_by }}</span>
+        @endif
         @if(!$ticket->claimed_by_user_id)
             <form method="post" action="{{ route('ma.wa-tickets.claim', $ticket) }}">
                 @csrf
@@ -55,9 +78,10 @@
             @endif
         @endif
     </div>
+    @endif
 </section>
 
-@if($ticket->status !== 'closed')
+@if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting')
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Tandai Selesai</h2></div>
     <form method="post" action="{{ route('ma.wa-tickets.close', $ticket) }}" class="pad" style="display:flex; flex-direction:column; gap:10px">
@@ -88,7 +112,7 @@
                 <p class="muted">Belum ada pesan ke toko.</p>
             @endforelse
         </div>
-        @if($ticket->status !== 'closed')
+        @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting')
             <form method="post" action="{{ route('ma.wa-tickets.reply', $ticket) }}" class="ticket-reply-form">
                 @csrf
                 <input type="hidden" name="is_internal" value="0">
@@ -109,7 +133,7 @@
                 <p class="muted">Belum ada diskusi internal.</p>
             @endforelse
         </div>
-        @if($ticket->status !== 'closed')
+        @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting')
             <form method="post" action="{{ route('ma.wa-tickets.reply', $ticket) }}" class="ticket-reply-form">
                 @csrf
                 <input type="hidden" name="is_internal" value="1">

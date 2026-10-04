@@ -37,6 +37,8 @@
                 </select>
             </label>
         </div>
+        <div id="wa-ticket-banner" class="ticket-info-banner" hidden><span aria-hidden="true">&#8505;</span> <span id="wa-ticket-banner-text"></span></div>
+        <div id="wa-ticket-dynamic-fields"></div>
         <label>Deskripsi
             <textarea name="description" rows="4" maxlength="500" required placeholder="Jelaskan masalah percobaan ini...">{{ old('description') }}</textarea>
         </label>
@@ -53,9 +55,40 @@
 <script>
 (function () {
     var categoriesByDepartment = @json($categoriesByDepartment);
+    var categoryMeta = @json($categoryMeta);
     var oldCategory = @json(old('category'));
+    var oldValues = @json(old()) || {};
     var deptSelect = document.getElementById('wa-ticket-department');
     var catSelect = document.getElementById('wa-ticket-category');
+    var dynamicFieldsEl = document.getElementById('wa-ticket-dynamic-fields');
+    var banner = document.getElementById('wa-ticket-banner');
+    var bannerText = document.getElementById('wa-ticket-banner-text');
+
+    function renderDynamicFields(fieldDefs) {
+        dynamicFieldsEl.innerHTML = '';
+        if (!fieldDefs || !fieldDefs.length) return;
+        var grid = document.createElement('div');
+        grid.className = 'form-grid';
+        fieldDefs.forEach(function (f) {
+            var label = document.createElement('label');
+            label.textContent = f.label + ' ';
+            var input = document.createElement('input');
+            input.type = f.type === 'number' ? 'number' : 'text';
+            input.name = f.key;
+            if (f.placeholder) input.placeholder = f.placeholder;
+            if (oldValues[f.key]) input.value = oldValues[f.key];
+            label.appendChild(input);
+            grid.appendChild(label);
+        });
+        dynamicFieldsEl.appendChild(grid);
+    }
+
+    function updateForCategory(categoryKey) {
+        var meta = categoryMeta[categoryKey] || {banner: null, fields: []};
+        banner.hidden = !meta.banner;
+        bannerText.textContent = meta.banner || '';
+        renderDynamicFields(meta.fields || []);
+    }
 
     function fillCategories(dept) {
         var options = categoriesByDepartment[dept] || null;
@@ -63,6 +96,8 @@
         if (!options) {
             catSelect.appendChild(new Option('Pilih Department dulu', ''));
             catSelect.disabled = true;
+            renderDynamicFields([]);
+            banner.hidden = true;
             return;
         }
         catSelect.disabled = false;
@@ -70,10 +105,13 @@
         Object.keys(options).forEach(function (key) {
             catSelect.appendChild(new Option(options[key], key));
         });
-        if (oldCategory && options[oldCategory]) catSelect.value = oldCategory;
+        var chosen = (oldCategory && options[oldCategory]) ? oldCategory : Object.keys(options)[0];
+        catSelect.value = chosen;
+        updateForCategory(chosen);
     }
 
     deptSelect.addEventListener('change', function () { fillCategories(deptSelect.value); });
+    catSelect.addEventListener('change', function () { updateForCategory(catSelect.value); });
     if (deptSelect.value) fillCategories(deptSelect.value);
 })();
 </script>

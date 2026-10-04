@@ -67,6 +67,8 @@ Route::get('/ma/wa-tickets', [MaWaTicketController::class, 'index'])->name('ma.w
 Route::get('/ma/wa-tickets/create', [MaWaTicketController::class, 'create'])->name('ma.wa-tickets.create');
 Route::post('/ma/wa-tickets', [MaWaTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.store');
 Route::get('/ma/wa-tickets/{ticket}', [MaWaTicketController::class, 'show'])->name('ma.wa-tickets.show');
+Route::post('/ma/wa-tickets/{ticket}/approve', [MaWaTicketController::class, 'approve'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.approve');
+Route::post('/ma/wa-tickets/{ticket}/reject', [MaWaTicketController::class, 'reject'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.reject');
 Route::post('/ma/wa-tickets/{ticket}/claim', [MaWaTicketController::class, 'claim'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.claim');
 Route::post('/ma/wa-tickets/{ticket}/reply', [MaWaTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.reply');
 Route::post('/ma/wa-tickets/{ticket}/transfer', [MaWaTicketController::class, 'transfer'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.transfer');

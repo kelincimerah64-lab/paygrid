@@ -152,6 +152,87 @@ class MaWaTicketTest extends TestCase
         $this->actingAs($ma)->post(route('ma.wa-tickets.claim', $ticket))->assertForbidden();
     }
 
+    public function test_topup_saldo_ticket_requires_approval_and_notifies_the_approval_group(): void
+    {
+        Bus::fake();
+        config(['paygrid.whatsapp.approval_group_id' => 'approval-group@g.us', 'paygrid.whatsapp.handling_group_id' => 'handling-group@g.us']);
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+
+        $response = $this->actingAs($ma)->post(route('ma.wa-tickets.store'), [
+            'merchant_id' => $merchant->id,
+            'department' => 'finance',
+            'category' => 'topup_saldo',
+            'description' => 'Minta topup saldo.',
+            'nominal' => '5000000',
+        ]);
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+        $response->assertRedirect(route('ma.wa-tickets.show', $ticket));
+        $this->assertSame('waiting', $ticket->approval_status);
+        $this->assertSame(['nominal' => '5000000'], $ticket->metadata);
+
+        Bus::assertDispatched(NotifyWaTicketLink::class, fn ($job) => $job->ticketId === $ticket->id && $job->event === 'created' && $job->groupId === 'approval-group@g.us');
+    }
+
+    public function test_claim_is_blocked_while_waiting_for_approval(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'finance', 'category' => 'topup_saldo', 'description' => 'Test.',
+        ]);
+        $ticket->forceFill(['approval_status' => 'waiting'])->save();
+
+        $this->actingAs($ma)->post(route('ma.wa-tickets.claim', $ticket))->assertStatus(422);
+        $this->assertNull($ticket->fresh()->claimed_by_user_id);
+    }
+
+    public function test_approve_notifies_handling_group_and_unblocks_claim(): void
+    {
+        Bus::fake();
+        config(['paygrid.whatsapp.handling_group_id' => 'handling-group@g.us']);
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'finance', 'category' => 'topdown_saldo', 'description' => 'Test.',
+        ]);
+        $ticket->forceFill(['approval_status' => 'waiting'])->save();
+
+        $this->actingAs($ma)->post(route('ma.wa-tickets.approve', $ticket))->assertRedirect();
+
+        $ticket->refresh();
+        $this->assertSame('approved', $ticket->approval_status);
+        $this->assertSame($ma->name, $ticket->approval_by);
+        Bus::assertDispatched(NotifyWaTicketLink::class, fn ($job) => $job->ticketId === $ticket->id && $job->event === 'approved' && $job->groupId === 'handling-group@g.us');
+
+        $this->actingAs($ma)->post(route('ma.wa-tickets.claim', $ticket))->assertRedirect();
+        $this->assertSame($ma->id, $ticket->fresh()->claimed_by_user_id);
+    }
+
+    public function test_reject_closes_the_ticket_with_a_note(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'tech', 'category' => 'ip_whitelist', 'description' => 'Test.',
+        ]);
+        $ticket->forceFill(['approval_status' => 'waiting'])->save();
+
+        $this->actingAs($ma)->post(route('ma.wa-tickets.reject', $ticket), [
+            'note' => 'Server belum terverifikasi.',
+        ])->assertRedirect(route('ma.wa-tickets.show', $ticket));
+
+        $ticket->refresh();
+        $this->assertSame('rejected', $ticket->approval_status);
+        $this->assertSame('closed', $ticket->status);
+        $this->assertSame('Server belum terverifikasi.', $ticket->approval_note);
+    }
+
     public function test_reminder_command_notifies_once_for_unclaimed_tickets_past_threshold(): void
     {
         Bus::fake();
