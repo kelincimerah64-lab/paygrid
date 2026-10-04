@@ -580,6 +580,74 @@
         .ticket-message-meta { display:flex; justify-content:space-between; gap:14px; font-size:11px; color:var(--muted); margin-bottom:4px; }
         .ticket-message-meta strong { color:var(--ink); font-size:12px; }
         .ticket-message-body { font-size:13px; white-space:pre-wrap; color:var(--ink); }
+
+        /* ---------- WA Tiket pilot ---------- */
+        .wat-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+        .wat-hero .eyebrow { font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--blue); margin:0 0 4px; }
+        .wat-hero h1 { margin:0; font-size:22px; }
+        .wat-pill { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:800; padding:5px 11px; border-radius:999px; letter-spacing:.01em; }
+        .wat-pill.open { background:#fdf1e1; color:var(--warn); }
+        .wat-pill.progress { background:#eaf2ff; color:var(--blue); }
+        .wat-pill.closed { background:#e5f6ee; color:var(--success); }
+        .wat-pill.waiting { background:#fdf1e1; color:var(--warn); }
+        .wat-pill.approved { background:#e5f6ee; color:var(--success); }
+        .wat-pill.rejected { background:#fdecec; color:var(--danger); }
+
+        .wat-meta-row { display:flex; gap:10px; flex-wrap:wrap; margin:14px 0; }
+        .wat-meta-chip { background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:8px 14px; }
+        .wat-meta-chip span { display:block; font-size:10px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+        .wat-meta-chip strong { font-size:13px; color:var(--ink); }
+
+        .wat-approval-card { border-radius:14px; padding:18px 20px; margin:16px 0; border:1px solid; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+        .wat-approval-card.waiting { background:#fffaf0; border-color:#f0d4a8; }
+        .wat-approval-card.rejected { background:#fdeded; border-color:#f3c6c6; }
+        .wat-approval-card .wat-approval-text b { display:block; font-size:14px; color:var(--ink); margin-bottom:2px; }
+        .wat-approval-card .wat-approval-text span { font-size:12.5px; color:var(--muted); }
+        .wat-approval-actions { display:flex; gap:8px; }
+        .wat-btn { border:none; border-radius:9px; padding:10px 18px; font-size:13px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+        .wat-btn.approve { background:var(--success); color:#fff; }
+        .wat-btn.reject { background:#fff; color:var(--danger); border:1.5px solid #f3c6c6; }
+        .wat-btn.primary { background:var(--blue); color:#fff; }
+        .wat-btn.outline { background:#fff; color:var(--muted); border:1.5px solid var(--line); }
+        .wat-btn.success { background:var(--success); color:#fff; }
+        .wat-btn:disabled { opacity:.5; cursor:not-allowed; }
+
+        .wat-claim-box { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; background:var(--soft); border:1px dashed var(--line); border-radius:12px; padding:14px 18px; margin:16px 0; }
+        .wat-claim-box.held { background:#e5f6ee; border:1px solid #bfe6d2; border-style:solid; }
+        .wat-claim-who { display:flex; align-items:center; gap:10px; }
+        .wat-avatar { width:34px; height:34px; border-radius:50%; background:var(--blue); color:#fff; font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        .wat-claim-box.held .wat-avatar { background:var(--success); }
+        .wat-claim-who b { display:block; font-size:13px; color:var(--ink); }
+        .wat-claim-who span { font-size:11.5px; color:var(--muted); }
+        .wat-transfer-form { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        .wat-transfer-form select { border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12.5px; background:#fff; }
+
+        .wat-panel { background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); overflow:hidden; margin-top:18px; }
+        .wat-panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+        .wat-panel-head h2 { margin:0; font-size:15px; }
+        .wat-tabs { display:flex; gap:4px; background:var(--soft); border-radius:10px; padding:4px; }
+        .wat-tab { border:none; background:transparent; padding:8px 16px; border-radius:7px; font-size:12.5px; font-weight:800; color:var(--muted); cursor:pointer; }
+        .wat-tab.active { background:#fff; color:var(--blue); box-shadow:0 1px 3px rgba(14,35,70,.1); }
+
+        .wat-thread { display:flex; flex-direction:column; gap:12px; padding:20px; max-height:460px; overflow-y:auto; }
+        .wat-msg { max-width:72%; padding:11px 14px; border-radius:14px; font-size:13px; line-height:1.5; }
+        .wat-msg.out { align-self:flex-end; background:var(--blue); color:#fff; border-bottom-right-radius:3px; }
+        .wat-msg.in { align-self:flex-start; background:var(--soft); color:var(--ink); border-bottom-left-radius:3px; }
+        .wat-msg.internal { align-self:flex-start; background:#fffaf0; border:1px dashed #f0d4a8; color:var(--ink); border-radius:12px; }
+        .wat-msg.sys { align-self:center; background:transparent; color:var(--muted); font-size:11.5px; font-style:italic; }
+        .wat-msg .wat-msg-who { display:block; font-size:10.5px; font-weight:800; opacity:.85; margin-bottom:3px; }
+        .wat-msg.out .wat-msg-who { color:#dce8ff; }
+        .wat-msg .wat-msg-time { display:block; font-size:9.5px; opacity:.65; margin-top:5px; }
+        .wat-empty { text-align:center; color:var(--muted); font-size:13px; padding:30px 0; }
+
+        .wat-composer { display:flex; gap:10px; padding:16px 20px; border-top:1px solid var(--line); background:var(--soft); align-items:flex-end; }
+        .wat-composer textarea { flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 14px; font:inherit; font-size:13px; resize:vertical; min-height:44px; background:#fff; }
+        .wat-composer.internal { background:#fff8ec; }
+
+        .wat-close-card { display:flex; flex-direction:column; gap:10px; padding:18px 20px; }
+        .wat-close-card textarea { border:1px solid var(--line); border-radius:10px; padding:10px 14px; font:inherit; font-size:13px; resize:vertical; }
+
+        @media (max-width:640px) { .wat-msg { max-width:88%; } .wat-approval-card { flex-direction:column; align-items:stretch; } .wat-approval-actions { justify-content:stretch; } .wat-approval-actions .wat-btn { flex:1; justify-content:center; } }
         .ticket-chip-list { display:flex; flex-wrap:wrap; gap:8px; }
         .ticket-chip { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:5px 6px 5px 10px; border:1px solid #c6d5ea; border-radius:999px; background:#f4f8ff; font-size:12px; font-weight:750; color:#1557c2; }
         .ticket-chip-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; }

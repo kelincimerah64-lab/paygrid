@@ -2,143 +2,150 @@
 
 @php
     $statusLabel = fn ($status) => App\Support\PayGridLabels::status($status);
-    $statusClass = fn ($status) => match ($status) {
-        'closed' => 'ok',
-        'in_progress' => 'warn',
-        default => 'danger',
+    $statusPillClass = match ($ticket->status) {
+        'closed' => 'closed',
+        'in_progress' => 'progress',
+        default => 'open',
     };
     $toToko = $ticket->messages->where('is_internal', false);
     $internal = $ticket->messages->where('is_internal', true);
+    $initials = fn (?string $name) => $name ? strtoupper(substr(trim($name), 0, 1).substr(trim(strrchr(' '.$name, ' ')), 1, 1)) : '?';
 @endphp
 
 @section('content')
-<div class="qris-hero">
+<div class="wat-hero">
     <div>
-        <div class="eyebrow">{{ $ticket->merchant?->name ?: '-' }}</div>
+        <p class="eyebrow">{{ $ticket->merchant?->name ?: '-' }} &middot; {{ ucfirst($ticket->department) }}</p>
         <h1>{{ $ticket->ticket_no }}</h1>
     </div>
-    <a class="btn compact-btn" href="{{ route('ma.wa-tickets.index') }}">Kembali</a>
+    <div style="display:flex; align-items:center; gap:10px">
+        <span class="wat-pill {{ $statusPillClass }}">{{ $statusLabel($ticket->status) }}</span>
+        @if(in_array(auth()->user()->role, ['ma', 'superadmin'], true))
+            <a class="btn compact-btn" href="{{ route('ma.wa-tickets.index') }}">&larr; Kembali</a>
+        @else
+            <a class="btn compact-btn" href="{{ route('dept-tickets.index') }}">&larr; Kembali</a>
+        @endif
+    </div>
 </div>
 
 @if(session('status'))
     <section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>
 @endif
 
-<section class="card qris-panel section">
-    <div class="qris-toolbar"><h2>Detail Tiket</h2><span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span></div>
-    <div class="approval-detail-grid">
-        <div class="fee-pill"><span>Department</span><strong>{{ ucfirst($ticket->department) }}</strong></div>
-        <div class="fee-pill"><span>Kategori</span><strong>{{ $ticket->category }}</strong></div>
-        <div class="fee-pill"><span>Dibuat</span><strong>{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</strong></div>
+<section class="card pad">
+    <div class="wat-meta-row">
+        <div class="wat-meta-chip"><span>Kategori</span><strong>{{ $ticket->category }}</strong></div>
+        <div class="wat-meta-chip"><span>Dibuat</span><strong>{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M Y, H:i') }} WIB</strong></div>
         @foreach($ticket->metadata ?? [] as $key => $value)
-            <div class="fee-pill"><span>{{ ucfirst(str_replace('_', ' ', $key)) }}</span><strong>{{ is_numeric($value) ? 'Rp'.number_format((float) $value, 0, ',', '.') : $value }}</strong></div>
+            <div class="wat-meta-chip"><span>{{ ucfirst(str_replace('_', ' ', $key)) }}</span><strong>{{ is_numeric($value) ? 'Rp '.number_format((float) $value, 0, ',', '.') : $value }}</strong></div>
         @endforeach
     </div>
-    <p style="margin-top:12px; white-space:pre-wrap">{{ $ticket->description }}</p>
+    <p style="margin:0; white-space:pre-wrap; font-size:13.5px; color:var(--ink)">{{ $ticket->description }}</p>
 
     @if($ticket->approval_status === 'waiting')
-        <div class="pad" style="padding-left:0; padding-right:0">
-            <span class="badge warn" style="margin-bottom:10px; display:inline-block">Menunggu Approval</span>
-            <form method="post" action="{{ route('ma.wa-tickets.approve', $ticket) }}" style="display:inline-block; margin-right:8px">
-                @csrf
-                <button class="btn primary compact-btn" type="submit">Approve</button>
-            </form>
-            <form method="post" action="{{ route('ma.wa-tickets.reject', $ticket) }}" style="display:inline-block">
-                @csrf
-                <button class="btn compact-btn" type="submit" style="color:#c62828">Reject</button>
-            </form>
+        <div class="wat-approval-card waiting">
+            <div class="wat-approval-text"><b>&#9203; Menunggu Approval</b><span>Tiket ini butuh persetujuan sebelum bisa dikerjakan.</span></div>
+            <div class="wat-approval-actions">
+                <form method="post" action="{{ route('ma.wa-tickets.approve', $ticket) }}">@csrf<button class="wat-btn approve" type="submit">&#10003; Approve</button></form>
+                <form method="post" action="{{ route('ma.wa-tickets.reject', $ticket) }}">@csrf<button class="wat-btn reject" type="submit">&#10005; Reject</button></form>
+            </div>
         </div>
     @elseif($ticket->approval_status === 'rejected')
-        <div class="pad" style="padding-left:0; padding-right:0">
-            <span class="badge danger">Ditolak oleh {{ $ticket->approval_by }}{{ $ticket->approval_note ? ' — '.$ticket->approval_note : '' }}</span>
+        <div class="wat-approval-card rejected">
+            <div class="wat-approval-text"><b>&#10005; Ditolak</b><span>Oleh {{ $ticket->approval_by }}{{ $ticket->approval_note ? ' — '.$ticket->approval_note : '' }}</span></div>
         </div>
     @else
-    <div class="pad" style="padding-left:0; padding-right:0">
         @if($ticket->approval_status === 'approved')
-            <span class="badge ok" style="margin-bottom:10px; display:inline-block">Disetujui oleh {{ $ticket->approval_by }}</span>
+            <div style="margin:14px 0 0"><span class="wat-pill approved">&#10003; Disetujui oleh {{ $ticket->approval_by }}</span></div>
         @endif
+
         @if(!$ticket->claimed_by_user_id)
-            <form method="post" action="{{ route('ma.wa-tickets.claim', $ticket) }}">
-                @csrf
-                <button class="btn primary" type="submit" @disabled($ticket->status === 'closed')>Ambil Tiket Ini</button>
-            </form>
-        @else
-            <div class="fee-pill" style="display:inline-flex; margin-bottom:10px"><span>Dipegang oleh</span><strong>{{ $ticket->claimedBy?->name }} &middot; {{ $ticket->claimed_at?->timezone('Asia/Jakarta')->format('d M Y H:i') }}</strong></div>
-            @if($ticket->status !== 'closed')
-                <form method="post" action="{{ route('ma.wa-tickets.transfer', $ticket) }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <div class="wat-claim-box">
+                <div class="wat-claim-who"><div class="wat-avatar">?</div><div><b>Belum ada yang pegang</b><span>Tiket ini masih di antrean</span></div></div>
+                <form method="post" action="{{ route('ma.wa-tickets.claim', $ticket) }}">
                     @csrf
-                    <select name="to_user_id">
-                        <option value="">Lepas ke Antrean</option>
-                        @foreach($teammates as $mate)
-                            <option value="{{ $mate->id }}" @selected($mate->id === $ticket->claimed_by_user_id)>{{ $mate->name }}</option>
-                        @endforeach
-                    </select>
-                    <button class="btn compact-btn" type="submit">Lempar Tiket</button>
+                    <button class="wat-btn primary" type="submit" @disabled($ticket->status === 'closed')>Ambil Tiket Ini</button>
                 </form>
-            @endif
+            </div>
+        @else
+            <div class="wat-claim-box held">
+                <div class="wat-claim-who">
+                    <div class="wat-avatar">{{ $initials($ticket->claimedBy?->name) }}</div>
+                    <div><b>{{ $ticket->claimedBy?->name }}</b><span>Diambil {{ $ticket->claimed_at?->timezone('Asia/Jakarta')->diffForHumans() }}</span></div>
+                </div>
+                @if($ticket->status !== 'closed')
+                    <form method="post" action="{{ route('ma.wa-tickets.transfer', $ticket) }}" class="wat-transfer-form">
+                        @csrf
+                        <select name="to_user_id">
+                            <option value="">&#8634; Lepas ke Antrean</option>
+                            @foreach($teammates as $mate)
+                                <option value="{{ $mate->id }}" @selected($mate->id === $ticket->claimed_by_user_id)>{{ $mate->name }}</option>
+                            @endforeach
+                        </select>
+                        <button class="wat-btn outline" type="submit">&#8646; Lempar Tiket</button>
+                    </form>
+                @endif
+            </div>
         @endif
-    </div>
     @endif
 </section>
 
 @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting')
-<section class="card qris-panel section">
-    <div class="qris-toolbar"><h2>Tandai Selesai</h2></div>
-    <form method="post" action="{{ route('ma.wa-tickets.close', $ticket) }}" class="pad" style="display:flex; flex-direction:column; gap:10px">
+<section class="wat-panel">
+    <div class="wat-panel-head"><h2>Tandai Selesai</h2></div>
+    <form method="post" action="{{ route('ma.wa-tickets.close', $ticket) }}" class="wat-close-card">
         @csrf
         <textarea name="note" rows="2" maxlength="2000" placeholder="Catatan penutup buat toko (opsional)..."></textarea>
-        <div><button class="btn primary compact-btn" type="submit">Tandai Selesai &amp; Tutup Tiket</button></div>
+        <div><button class="wat-btn success" type="submit">&#10003; Tandai Selesai &amp; Tutup Tiket</button></div>
     </form>
 </section>
 @endif
 
-<section class="card qris-panel section">
-    <div class="qris-toolbar">
+<section class="wat-panel">
+    <div class="wat-panel-head">
         <h2>Percakapan</h2>
-        <div class="ma-tabs">
-            <button class="btn compact-btn active" type="button" data-wa-tab="toko">Ke Toko</button>
-            <button class="btn compact-btn" type="button" data-wa-tab="internal">&#128274; Internal</button>
+        <div class="wat-tabs">
+            <button class="wat-tab active" type="button" data-wa-tab="toko">Ke Toko</button>
+            <button class="wat-tab" type="button" data-wa-tab="internal">&#128274; Internal</button>
         </div>
     </div>
 
     <div data-wa-panel="toko">
-        <div class="ticket-thread">
+        <div class="wat-thread">
             @forelse($toToko as $message)
-                <div class="ticket-message {{ $message->is_staff ? 'staff' : 'store' }}">
-                    <div class="ticket-message-meta"><strong>{{ $message->is_staff ? 'Tim '.ucfirst($ticket->department) : ($message->user->name ?? 'Toko') }}</strong><span class="muted">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</span></div>
-                    <div class="ticket-message-body">{{ $message->body }}</div>
-                </div>
+                @if($message->is_staff === false)
+                    <div class="wat-msg in"><span class="wat-msg-who">{{ $message->user->name ?? 'Toko' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
+                @else
+                    <div class="wat-msg out"><span class="wat-msg-who">Tim {{ ucfirst($ticket->department) }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
+                @endif
             @empty
-                <p class="muted">Belum ada pesan ke toko.</p>
+                <p class="wat-empty">Belum ada pesan ke toko.</p>
             @endforelse
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting')
-            <form method="post" action="{{ route('ma.wa-tickets.reply', $ticket) }}" class="ticket-reply-form">
+            <form method="post" action="{{ route('ma.wa-tickets.reply', $ticket) }}" class="wat-composer">
                 @csrf
                 <input type="hidden" name="is_internal" value="0">
-                <textarea name="body" rows="3" maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
-                <button class="btn primary compact-btn" type="submit">Kirim ke Toko</button>
+                <textarea name="body" maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
+                <button class="wat-btn primary" type="submit">Kirim</button>
             </form>
         @endif
     </div>
 
     <div data-wa-panel="internal" hidden>
-        <div class="ticket-thread">
+        <div class="wat-thread">
             @forelse($internal as $message)
-                <div class="ticket-message staff">
-                    <div class="ticket-message-meta"><strong>{{ $message->user->name ?? 'Sistem' }}</strong><span class="muted">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</span></div>
-                    <div class="ticket-message-body">{{ $message->body }}</div>
-                </div>
+                <div class="wat-msg internal"><span class="wat-msg-who">{{ $message->user->name ?? 'Sistem' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
             @empty
-                <p class="muted">Belum ada diskusi internal.</p>
+                <p class="wat-empty">Belum ada diskusi internal. Cuma tim CS yang lihat ini, toko nggak bisa baca.</p>
             @endforelse
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting')
-            <form method="post" action="{{ route('ma.wa-tickets.reply', $ticket) }}" class="ticket-reply-form">
+            <form method="post" action="{{ route('ma.wa-tickets.reply', $ticket) }}" class="wat-composer internal">
                 @csrf
                 <input type="hidden" name="is_internal" value="1">
-                <textarea name="body" rows="3" maxlength="2000" required placeholder="Diskusi internal (toko nggak lihat)..."></textarea>
-                <button class="btn compact-btn" type="submit">Kirim Internal</button>
+                <textarea name="body" maxlength="2000" required placeholder="Diskusi internal (toko nggak lihat)..."></textarea>
+                <button class="wat-btn outline" type="submit">Kirim</button>
             </form>
         @endif
     </div>

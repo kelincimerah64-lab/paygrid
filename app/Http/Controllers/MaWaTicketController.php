@@ -102,12 +102,14 @@ class MaWaTicketController extends Controller
 
     public function show(Request $request, MerchantTicket $ticket, MenuBuilder $menus): View
     {
-        $this->authorizeTicket($request->user(), $ticket);
+        $user = $request->user();
+        $this->authorizeTicket($user, $ticket);
+        $isMa = in_array($user->role, ['ma', 'superadmin'], true);
 
         return view('paygrid.ma-wa-tickets-show', [
-            'roleLabel' => 'MA',
-            'menus' => $menus->ma(),
-            'active' => 'wa-tickets',
+            'roleLabel' => $isMa ? 'MA' : 'CS Pusat',
+            'menus' => $isMa ? $menus->ma() : $menus->centerSupport(),
+            'active' => $isMa ? 'wa-tickets' : 'manual-tickets',
             'ticket' => $ticket->load(['merchant', 'claimedBy', 'messages.user']),
             'teammates' => $this->teammates(),
         ]);
@@ -203,9 +205,15 @@ class MaWaTicketController extends Controller
         return redirect()->route('ma.wa-tickets.show', $ticket)->with('status', 'Tiket ditutup.');
     }
 
+    /**
+     * MA sees only their own agents' merchants (the create/index dashboard is
+     * MA-only anyway). CS Pusat handles tickets company-wide - they only ever
+     * reach a specific ticket via its WA link, never browse a merchant-scoped
+     * list, so there's nothing to narrow their access by.
+     */
     private function scopedMerchantIds(User $user): \Illuminate\Support\Collection
     {
-        if ($user->role === 'superadmin') {
+        if (in_array($user->role, ['superadmin', 'cs_pusat'], true)) {
             return Merchant::query()->pluck('id');
         }
 

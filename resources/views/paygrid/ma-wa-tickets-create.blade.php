@@ -1,17 +1,17 @@
 @extends('layouts.paygrid')
 
 @section('content')
-<div class="qris-hero">
+<div class="wat-hero">
     <div>
-        <div class="eyebrow">{{ $roleLabel }}</div>
+        <p class="eyebrow">{{ $roleLabel }} &middot; Pilot</p>
         <h1>Buat Tiket Percobaan</h1>
-        <p class="sub muted">Buat tiket uji coba untuk menguji alur notifikasi WhatsApp &rarr; klaim &rarr; handling di web.</p>
+        <p class="muted" style="margin:6px 0 0; font-size:13px">Untuk menguji alur notifikasi WhatsApp &rarr; klaim &rarr; handling di web.</p>
     </div>
-    <a class="btn compact-btn" href="{{ route('ma.wa-tickets.index') }}">Kembali</a>
+    <a class="wat-btn outline" href="{{ route('ma.wa-tickets.index') }}">&larr; Kembali</a>
 </div>
 
-<section class="card qris-panel section">
-    <div class="qris-toolbar"><h2>Form Tiket</h2></div>
+<section class="wat-panel">
+    <div class="wat-panel-head"><h2>Form Tiket</h2></div>
     <form method="post" action="{{ route('ma.wa-tickets.store') }}" class="pad" style="display:flex; flex-direction:column; gap:14px">
         @csrf
         <div class="form-grid">
@@ -46,7 +46,7 @@
         @error('department')<span class="badge danger">{{ $message }}</span>@enderror
         @error('category')<span class="badge danger">{{ $message }}</span>@enderror
         @error('description')<span class="badge danger">{{ $message }}</span>@enderror
-        <div><button class="btn primary" type="submit">Buat Tiket &amp; Kirim Notifikasi WA</button></div>
+        <div><button class="wat-btn primary" type="submit">Buat Tiket &amp; Kirim Notifikasi WA</button></div>
     </form>
 </section>
 @endsection

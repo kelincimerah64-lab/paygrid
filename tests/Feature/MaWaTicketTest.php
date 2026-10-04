@@ -152,6 +152,22 @@ class MaWaTicketTest extends TestCase
         $this->actingAs($ma)->post(route('ma.wa-tickets.claim', $ticket))->assertForbidden();
     }
 
+    public function test_cs_pusat_can_open_and_claim_a_ticket_via_its_wa_link(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $cs = User::factory()->create(['role' => 'cs_pusat', 'is_active' => true]);
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Dari link WA.',
+        ]);
+
+        $this->actingAs($cs)->get(route('ma.wa-tickets.show', $ticket))->assertOk()->assertSee('CS Pusat');
+        $this->actingAs($cs)->post(route('ma.wa-tickets.claim', $ticket))->assertRedirect();
+
+        $this->assertSame($cs->id, $ticket->fresh()->claimed_by_user_id);
+    }
+
     public function test_topup_saldo_ticket_requires_approval_and_notifies_the_approval_group(): void
     {
         Bus::fake();

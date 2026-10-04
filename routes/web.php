@@ -66,6 +66,11 @@ Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
 Route::get('/ma/wa-tickets', [MaWaTicketController::class, 'index'])->name('ma.wa-tickets.index');
 Route::get('/ma/wa-tickets/create', [MaWaTicketController::class, 'create'])->name('ma.wa-tickets.create');
 Route::post('/ma/wa-tickets', [MaWaTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.store');
+});
+
+// CS Pusat reaches these only via the WA-link (no sidebar entry for them) - see
+// MenuBuilder::ma(). MA/superadmin also need these to work the pilot themselves.
+Route::middleware(['auth', 'role:ma,cs_pusat,superadmin'])->group(function () {
 Route::get('/ma/wa-tickets/{ticket}', [MaWaTicketController::class, 'show'])->name('ma.wa-tickets.show');
 Route::post('/ma/wa-tickets/{ticket}/approve', [MaWaTicketController::class, 'approve'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.approve');
 Route::post('/ma/wa-tickets/{ticket}/reject', [MaWaTicketController::class, 'reject'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.reject');
