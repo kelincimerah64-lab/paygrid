@@ -43,6 +43,11 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping(5)
             ->runInBackground();
 
+        $schedule->command('wa-tickets:remind-unclaimed')
+            ->everyFiveMinutes()
+            ->withoutOverlapping(4)
+            ->runInBackground();
+
         $schedule->command('paygrid:queue-monitor')
             ->everyMinute()
             ->withoutOverlapping(1)

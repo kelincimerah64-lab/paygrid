@@ -11,6 +11,9 @@ class MerchantTicket extends Model
     protected $fillable = [
         'merchant_id',
         'created_by_user_id',
+        'claimed_by_user_id',
+        'claimed_at',
+        'wa_reminder_sent_at',
         'ticket_no',
         'department',
         'category',
@@ -33,6 +36,8 @@ class MerchantTicket extends Model
         'last_message_at' => 'datetime',
         'closed_at' => 'datetime',
         'approval_completed_at' => 'datetime',
+        'claimed_at' => 'datetime',
+        'wa_reminder_sent_at' => 'datetime',
     ];
 
     public function merchant(): BelongsTo
@@ -43,6 +48,11 @@ class MerchantTicket extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function claimedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'claimed_by_user_id');
     }
 
     public function messages(): HasMany

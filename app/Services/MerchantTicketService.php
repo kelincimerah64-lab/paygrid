@@ -278,11 +278,12 @@ class MerchantTicketService
             ->all();
     }
 
-    public function addMessage(MerchantTicket $ticket, User $user, string $body, bool $isStaff): MerchantTicketMessage
+    public function addMessage(MerchantTicket $ticket, User $user, string $body, bool $isStaff, bool $isInternal = false): MerchantTicketMessage
     {
         $message = $ticket->messages()->create([
             'user_id' => $user->id,
             'is_staff' => $isStaff,
+            'is_internal' => $isInternal,
             'body' => $body,
         ]);
 
@@ -293,5 +294,49 @@ class MerchantTicketService
         $ticket->save();
 
         return $message;
+    }
+
+    /**
+     * Atomic claim - only succeeds if nobody has claimed yet. Returns false
+     * (without changing anything) if another staff member beat this call to it.
+     */
+    public function claim(MerchantTicket $ticket, User $user): bool
+    {
+        $claimed = MerchantTicket::query()
+            ->where('id', $ticket->id)
+            ->whereNull('claimed_by_user_id')
+            ->update(['claimed_by_user_id' => $user->id, 'claimed_at' => now()]);
+
+        if ($claimed) {
+            $ticket->forceFill(['claimed_by_user_id' => $user->id, 'claimed_at' => now()]);
+        }
+
+        return (bool) $claimed;
+    }
+
+    /**
+     * Reassign to a specific teammate, or release back to the pool (null) so
+     * anyone can claim it again. Logs an internal-only system message either way.
+     */
+    public function transfer(MerchantTicket $ticket, User $actor, ?User $to): void
+    {
+        $from = $ticket->claimedBy;
+        $ticket->forceFill([
+            'claimed_by_user_id' => $to?->id,
+            'claimed_at' => $to ? now() : null,
+        ])->save();
+
+        $note = $to
+            ? 'Dialihkan dari '.($from?->name ?? 'antrean').' ke '.$to->name.'.'
+            : 'Dilepas ke antrean oleh '.$actor->name.'.';
+        $ticket->messages()->create(['user_id' => null, 'is_staff' => true, 'is_internal' => true, 'body' => $note]);
+    }
+
+    public function closeWithNote(MerchantTicket $ticket, User $user, ?string $note): void
+    {
+        if ($note) {
+            $this->addMessage($ticket, $user, $note, true);
+        }
+        $ticket->forceFill(['status' => 'closed', 'closed_at' => now()])->save();
     }
 }

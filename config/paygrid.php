@@ -111,4 +111,11 @@ return [
         'api_key' => env('ANTHROPIC_API_KEY'),
         'model' => env('PAYGRID_ASSISTANT_MODEL', 'claude-opus-5'),
     ],
+
+    'whatsapp' => [
+        'api_url' => env('PAYGRID_WHATSAPP_API_URL'),
+        'api_key' => env('PAYGRID_WHATSAPP_API_KEY'),
+        'ticket_group_id' => env('PAYGRID_WHATSAPP_TICKET_GROUP_ID'),
+        'reminder_minutes' => (int) env('PAYGRID_WHATSAPP_REMINDER_MINUTES', 15),
+    ],
 ];

@@ -11,11 +11,13 @@ class MerchantTicketMessage extends Model
         'merchant_ticket_id',
         'user_id',
         'is_staff',
+        'is_internal',
         'body',
     ];
 
     protected $casts = [
         'is_staff' => 'boolean',
+        'is_internal' => 'boolean',
     ];
 
     public function ticket(): BelongsTo

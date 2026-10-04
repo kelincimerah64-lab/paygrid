@@ -357,6 +357,26 @@ Artisan::command('tickets:auto-create-pending', function (
     $this->info("Checked {$checked} overdue pending transaction(s), auto-created {$created} ticket(s).");
 })->purpose('Re-verify overdue pending transactions against the gateway and auto-create tickets for ones still pending.');
 
+Artisan::command('wa-tickets:remind-unclaimed', function () {
+    $minutes = (int) config('paygrid.whatsapp.reminder_minutes', 15);
+    $reminded = 0;
+
+    \App\Models\MerchantTicket::query()
+        ->whereNull('claimed_by_user_id')
+        ->whereNull('wa_reminder_sent_at')
+        ->where('status', 'open')
+        ->where('created_at', '<=', now()->subMinutes($minutes))
+        ->chunkById(100, function ($tickets) use (&$reminded) {
+            foreach ($tickets as $ticket) {
+                \App\Jobs\NotifyWaTicketLink::dispatch($ticket->id, 'reminder');
+                $ticket->forceFill(['wa_reminder_sent_at' => now()])->save();
+                $reminded++;
+            }
+        });
+
+    $this->info("Sent {$reminded} unclaimed-ticket reminder(s).");
+})->purpose('Remind the WhatsApp group about tickets still unclaimed past the configured threshold.');
+
 Artisan::command('gateway:health-hilogate {merchant}', function (\App\Services\Gateway\GatewayManager $gateways) {
     $merchant = Merchant::query()
         ->where('slug', $this->argument('merchant'))

@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentTicketController;
 use App\Http\Controllers\MaTicketController;
+use App\Http\Controllers\MaWaTicketController;
 use App\Http\Controllers\MerchantTicketController;
 use App\Http\Controllers\MobileAppController;
 use App\Http\Controllers\GatewayCallbackController;
@@ -59,6 +60,17 @@ Route::post('/ma/assistant/ask', [MaAssistantController::class, 'ask'])->middlew
 Route::middleware(['auth', 'role:ma,agent,superadmin'])->group(function () {
 Route::get('/ma/tickets', [MaTicketController::class, 'index'])->name('ma.tickets.index');
 Route::post('/ma/tickets', [MaTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('ma.tickets.store');
+});
+
+Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
+Route::get('/ma/wa-tickets', [MaWaTicketController::class, 'index'])->name('ma.wa-tickets.index');
+Route::get('/ma/wa-tickets/create', [MaWaTicketController::class, 'create'])->name('ma.wa-tickets.create');
+Route::post('/ma/wa-tickets', [MaWaTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.store');
+Route::get('/ma/wa-tickets/{ticket}', [MaWaTicketController::class, 'show'])->name('ma.wa-tickets.show');
+Route::post('/ma/wa-tickets/{ticket}/claim', [MaWaTicketController::class, 'claim'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.claim');
+Route::post('/ma/wa-tickets/{ticket}/reply', [MaWaTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.reply');
+Route::post('/ma/wa-tickets/{ticket}/transfer', [MaWaTicketController::class, 'transfer'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.transfer');
+Route::post('/ma/wa-tickets/{ticket}/close', [MaWaTicketController::class, 'close'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.close');
 });
 
 Route::middleware(['auth', 'role:superadmin'])->group(function () {

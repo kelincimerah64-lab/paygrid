@@ -36,6 +36,7 @@ class MenuBuilder
             ['key' => 'analytics', 'label' => 'Analytics', 'url' => route('ma.analytics')],
             ['key' => 'monitor', 'label' => 'Monitor CS', 'url' => route('cs-scope.index')],
             ['key' => 'create-ticket', 'label' => 'Create Ticket', 'url' => route('ma.tickets.index')],
+            ['key' => 'wa-tickets', 'label' => 'Tiket WA (Uji Coba)', 'url' => route('ma.wa-tickets.index')],
         ];
     }
 
