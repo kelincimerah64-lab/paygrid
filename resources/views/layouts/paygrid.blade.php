@@ -569,6 +569,12 @@
         .form-grid.create-store-grid .fee-rate-grid, .form-grid.create-store-grid .field-span-full { grid-column:1 / -1; }
         @media (max-width: 1100px) { .form-grid.create-store-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 800px) { .form-grid.create-store-grid { grid-template-columns:1fr; } }
+        .multi-field-row { display:flex; gap:6px; margin-top:8px; }
+        .multi-field-row:first-child { margin-top:0; }
+        .multi-field-row .multi-field-input { margin-top:0 !important; flex:1; }
+        .multi-field-row:only-of-type .multi-field-remove { display:none; }
+        .multi-field-remove { flex:0 0 auto; width:30px; min-height:30px; border:1px solid #b9cef6; background:#fff; color:var(--danger); border-radius:6px; font-size:16px; line-height:1; cursor:pointer; }
+        .multi-field-add { margin-top:8px; border:1px dashed #b9cef6; background:#fff; color:var(--blue); border-radius:6px; min-height:28px; padding:4px 10px; font-size:12px; font-weight:800; cursor:pointer; }
         .ticket-create-form { display:flex; flex-direction:column; gap:14px; max-width:520px; padding:14px; }
         .ticket-create-form label { display:grid; gap:8px; margin:0; text-transform:none; letter-spacing:normal; }
         .ticket-create-form textarea, .ticket-reply-form textarea { width:100%; border:1px solid #c9d6ea; border-radius:7px; padding:8px 10px; font:inherit; font-size:13px; resize:vertical; }
