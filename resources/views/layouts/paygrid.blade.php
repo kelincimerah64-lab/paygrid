@@ -564,7 +564,11 @@
         .truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
         .form-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
         .form-grid label { font-weight:900; color:#10233f; }
-        .form-grid input, .form-grid select { width:100%; margin-top:8px; }
+        .form-grid input, .form-grid select, .form-grid textarea { width:100%; margin-top:8px; }
+        .form-grid.create-store-grid { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+        .form-grid.create-store-grid .fee-rate-grid, .form-grid.create-store-grid .field-span-full { grid-column:1 / -1; }
+        @media (max-width: 1100px) { .form-grid.create-store-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 800px) { .form-grid.create-store-grid { grid-template-columns:1fr; } }
         .ticket-create-form { display:flex; flex-direction:column; gap:14px; max-width:520px; padding:14px; }
         .ticket-create-form label { display:grid; gap:8px; margin:0; text-transform:none; letter-spacing:normal; }
         .ticket-create-form textarea, .ticket-reply-form textarea { width:100%; border:1px solid #c9d6ea; border-radius:7px; padding:8px 10px; font:inherit; font-size:13px; resize:vertical; }

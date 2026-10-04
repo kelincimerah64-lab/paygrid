@@ -35,6 +35,7 @@ class Merchant extends Model
         'withdrawal_callback_url',
         'pic_email',
         'pic_telegram',
+        'pic_whatsapp',
         'finance_email',
         'finance_telegram',
         'cs_email',
