@@ -62,22 +62,41 @@ Route::get('/ma/tickets', [MaTicketController::class, 'index'])->name('ma.ticket
 Route::post('/ma/tickets', [MaTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('ma.tickets.store');
 });
 
+// MA-only admin surface for the pilot: monitoring dashboard + test-ticket form.
 Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
 Route::get('/ma/wa-tickets', [MaWaTicketController::class, 'index'])->name('ma.wa-tickets.index');
 Route::get('/ma/wa-tickets/create', [MaWaTicketController::class, 'create'])->name('ma.wa-tickets.create');
 Route::post('/ma/wa-tickets', [MaWaTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.store');
 });
 
-// CS Pusat reaches these only via the WA-link (no sidebar entry for them) - see
-// MenuBuilder::ma(). MA/superadmin also need these to work the pilot themselves.
+// Real entry point for everyone who reaches a ticket via its WA link - deliberately
+// NOT under /ma/* (that prefix implied MA-only, which was wrong once CS Pusat and
+// Approver also need to land here). Viewing is open to every role that can act on
+// a ticket in some way; approve/claim/etc below are gated more tightly per action.
+Route::middleware(['auth', 'role:ma,cs_pusat,approver,superadmin'])->group(function () {
+Route::get('/tickets/{ticket}', [MaWaTicketController::class, 'show'])->name('wa-tickets.show');
+});
+
+// Approver's landing page after login - the queue of tickets waiting on them.
+Route::middleware(['auth', 'role:approver,superadmin'])->group(function () {
+Route::get('/tickets', [MaWaTicketController::class, 'pendingApprovals'])->name('wa-tickets.pending');
+});
+
+// Separation of duties: only Approver (+ superadmin as a break-glass override)
+// can approve/reject - this used to be reachable by MA/CS Pusat too, including a
+// ticket's own creator, which was a self-approval hole.
+Route::middleware(['auth', 'role:approver,superadmin'])->group(function () {
+Route::post('/tickets/{ticket}/approve', [MaWaTicketController::class, 'approve'])->middleware('throttle:dashboard-writes')->name('wa-tickets.approve');
+Route::post('/tickets/{ticket}/reject', [MaWaTicketController::class, 'reject'])->middleware('throttle:dashboard-writes')->name('wa-tickets.reject');
+});
+
+// Handling actions stay with MA/CS Pusat (+ superadmin) - Approver's job ends at
+// the approval decision, they don't claim/work tickets.
 Route::middleware(['auth', 'role:ma,cs_pusat,superadmin'])->group(function () {
-Route::get('/ma/wa-tickets/{ticket}', [MaWaTicketController::class, 'show'])->name('ma.wa-tickets.show');
-Route::post('/ma/wa-tickets/{ticket}/approve', [MaWaTicketController::class, 'approve'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.approve');
-Route::post('/ma/wa-tickets/{ticket}/reject', [MaWaTicketController::class, 'reject'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.reject');
-Route::post('/ma/wa-tickets/{ticket}/claim', [MaWaTicketController::class, 'claim'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.claim');
-Route::post('/ma/wa-tickets/{ticket}/reply', [MaWaTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.reply');
-Route::post('/ma/wa-tickets/{ticket}/transfer', [MaWaTicketController::class, 'transfer'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.transfer');
-Route::post('/ma/wa-tickets/{ticket}/close', [MaWaTicketController::class, 'close'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.close');
+Route::post('/tickets/{ticket}/claim', [MaWaTicketController::class, 'claim'])->middleware('throttle:dashboard-writes')->name('wa-tickets.claim');
+Route::post('/tickets/{ticket}/reply', [MaWaTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('wa-tickets.reply');
+Route::post('/tickets/{ticket}/transfer', [MaWaTicketController::class, 'transfer'])->middleware('throttle:dashboard-writes')->name('wa-tickets.transfer');
+Route::post('/tickets/{ticket}/close', [MaWaTicketController::class, 'close'])->middleware('throttle:dashboard-writes')->name('wa-tickets.close');
 });
 
 Route::middleware(['auth', 'role:superadmin'])->group(function () {

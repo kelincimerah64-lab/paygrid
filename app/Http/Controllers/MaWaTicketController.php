@@ -24,6 +24,26 @@ use Illuminate\View\View;
  */
 class MaWaTicketController extends Controller
 {
+    /**
+     * Approver's landing page after login - they have no merchant-scoped
+     * dashboard, just the queue of tickets waiting on them, company-wide.
+     */
+    public function pendingApprovals(): View
+    {
+        $tickets = MerchantTicket::query()
+            ->with(['merchant', 'createdBy'])
+            ->where('approval_status', 'waiting')
+            ->latest('created_at')
+            ->paginate(config('paygrid.reports.default_page_size', 50));
+
+        return view('paygrid.ma-wa-tickets-pending', [
+            'roleLabel' => 'Approver',
+            'menus' => [],
+            'active' => 'wa-tickets',
+            'tickets' => $tickets,
+        ]);
+    }
+
     public function index(Request $request, MenuBuilder $menus): View
     {
         $merchantIds = $this->scopedMerchantIds($request->user());
@@ -97,19 +117,25 @@ class MaWaTicketController extends Controller
 
         $status = $needsApproval ? 'Tiket dibuat: '.$ticket->ticket_no.'. Menunggu approval, notifikasi dikirim ke grup approval.' : 'Tiket dibuat: '.$ticket->ticket_no.'. Notifikasi WA dikirim.';
 
-        return redirect()->route('ma.wa-tickets.show', $ticket)->with('status', $status);
+        return redirect()->route('wa-tickets.show', $ticket)->with('status', $status);
     }
 
     public function show(Request $request, MerchantTicket $ticket, MenuBuilder $menus): View
     {
         $user = $request->user();
         $this->authorizeTicket($user, $ticket);
-        $isMa = in_array($user->role, ['ma', 'superadmin'], true);
+        [$roleLabel, $menus, $active] = match ($user->role) {
+            'approver' => ['Approver', [], 'wa-tickets'],
+            'cs_pusat' => ['CS Pusat', $menus->centerSupport(), 'manual-tickets'],
+            default => ['MA', $menus->ma(), 'wa-tickets'],
+        };
 
         return view('paygrid.ma-wa-tickets-show', [
-            'roleLabel' => $isMa ? 'MA' : 'CS Pusat',
-            'menus' => $isMa ? $menus->ma() : $menus->centerSupport(),
-            'active' => $isMa ? 'wa-tickets' : 'manual-tickets',
+            'roleLabel' => $roleLabel,
+            'menus' => $menus,
+            'active' => $active,
+            'canApprove' => in_array($user->role, ['approver', 'superadmin'], true),
+            'isCreator' => $ticket->created_by_user_id === $user->id,
             'ticket' => $ticket->load(['merchant', 'claimedBy', 'messages.user']),
             'teammates' => $this->teammates(),
         ]);
@@ -119,6 +145,7 @@ class MaWaTicketController extends Controller
     {
         $this->authorizeTicket($request->user(), $ticket);
         abort_unless($ticket->approval_status === 'waiting', 422, 'Tiket ini tidak sedang menunggu approval.');
+        abort_if($ticket->created_by_user_id === $request->user()->id, 403, 'Tidak bisa approve tiket buatan sendiri.');
 
         $before = $ticket->only(['approval_status', 'approval_by']);
         $ticket->forceFill([
@@ -150,7 +177,7 @@ class MaWaTicketController extends Controller
         ])->save();
         $audit->record('wa_ticket.rejected', $ticket, $before, $ticket->only(['approval_status', 'approval_by', 'status']));
 
-        return redirect()->route('ma.wa-tickets.show', $ticket)->with('status', 'Tiket ditolak dan ditutup.');
+        return redirect()->route('wa-tickets.show', $ticket)->with('status', 'Tiket ditolak dan ditutup.');
     }
 
     public function claim(Request $request, MerchantTicket $ticket, MerchantTicketService $tickets): RedirectResponse
@@ -202,18 +229,18 @@ class MaWaTicketController extends Controller
         $data = $request->validate(['note' => ['nullable', 'string', 'max:2000']]);
         $tickets->closeWithNote($ticket, $request->user(), $data['note'] ?? null);
 
-        return redirect()->route('ma.wa-tickets.show', $ticket)->with('status', 'Tiket ditutup.');
+        return redirect()->route('wa-tickets.show', $ticket)->with('status', 'Tiket ditutup.');
     }
 
     /**
      * MA sees only their own agents' merchants (the create/index dashboard is
-     * MA-only anyway). CS Pusat handles tickets company-wide - they only ever
-     * reach a specific ticket via its WA link, never browse a merchant-scoped
-     * list, so there's nothing to narrow their access by.
+     * MA-only anyway). CS Pusat and Approver handle tickets company-wide - they
+     * only ever reach a specific ticket via its WA link, never browse a
+     * merchant-scoped list, so there's nothing to narrow their access by.
      */
     private function scopedMerchantIds(User $user): \Illuminate\Support\Collection
     {
-        if (in_array($user->role, ['superadmin', 'cs_pusat'], true)) {
+        if (in_array($user->role, ['superadmin', 'cs_pusat', 'approver'], true)) {
             return Merchant::query()->pluck('id');
         }
 

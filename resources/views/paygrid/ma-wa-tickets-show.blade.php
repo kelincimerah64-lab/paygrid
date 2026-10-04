@@ -22,6 +22,8 @@
         <span class="wat-pill {{ $statusPillClass }}">{{ $statusLabel($ticket->status) }}</span>
         @if(in_array(auth()->user()->role, ['ma', 'superadmin'], true))
             <a class="btn compact-btn" href="{{ route('ma.wa-tickets.index') }}">&larr; Kembali</a>
+        @elseif(auth()->user()->role === 'approver')
+            <a class="btn compact-btn" href="{{ route('wa-tickets.pending') }}">&larr; Kembali</a>
         @else
             <a class="btn compact-btn" href="{{ route('dept-tickets.index') }}">&larr; Kembali</a>
         @endif
@@ -45,10 +47,16 @@
     @if($ticket->approval_status === 'waiting')
         <div class="wat-approval-card waiting">
             <div class="wat-approval-text"><b>&#9203; Menunggu Approval</b><span>Tiket ini butuh persetujuan sebelum bisa dikerjakan.</span></div>
-            <div class="wat-approval-actions">
-                <form method="post" action="{{ route('ma.wa-tickets.approve', $ticket) }}">@csrf<button class="wat-btn approve" type="submit">&#10003; Approve</button></form>
-                <form method="post" action="{{ route('ma.wa-tickets.reject', $ticket) }}">@csrf<button class="wat-btn reject" type="submit">&#10005; Reject</button></form>
-            </div>
+            @if($canApprove && !$isCreator)
+                <div class="wat-approval-actions">
+                    <form method="post" action="{{ route('wa-tickets.approve', $ticket) }}">@csrf<button class="wat-btn approve" type="submit">&#10003; Approve</button></form>
+                    <form method="post" action="{{ route('wa-tickets.reject', $ticket) }}">@csrf<button class="wat-btn reject" type="submit">&#10005; Reject</button></form>
+                </div>
+            @elseif($canApprove && $isCreator)
+                <span class="wat-pill">Tidak bisa approve tiket buatan sendiri</span>
+            @else
+                <span class="wat-pill">Menunggu approval dari tim Approval</span>
+            @endif
         </div>
     @elseif($ticket->approval_status === 'rejected')
         <div class="wat-approval-card rejected">
@@ -62,10 +70,12 @@
         @if(!$ticket->claimed_by_user_id)
             <div class="wat-claim-box">
                 <div class="wat-claim-who"><div class="wat-avatar">?</div><div><b>Belum ada yang pegang</b><span>Tiket ini masih di antrean</span></div></div>
-                <form method="post" action="{{ route('ma.wa-tickets.claim', $ticket) }}">
-                    @csrf
-                    <button class="wat-btn primary" type="submit" @disabled($ticket->status === 'closed')>Ambil Tiket Ini</button>
-                </form>
+                @unless(auth()->user()->role === 'approver')
+                    <form method="post" action="{{ route('wa-tickets.claim', $ticket) }}">
+                        @csrf
+                        <button class="wat-btn primary" type="submit" @disabled($ticket->status === 'closed')>Ambil Tiket Ini</button>
+                    </form>
+                @endunless
             </div>
         @else
             <div class="wat-claim-box held">
@@ -73,8 +83,8 @@
                     <div class="wat-avatar">{{ $initials($ticket->claimedBy?->name) }}</div>
                     <div><b>{{ $ticket->claimedBy?->name }}</b><span>Diambil {{ $ticket->claimed_at?->timezone('Asia/Jakarta')->diffForHumans() }}</span></div>
                 </div>
-                @if($ticket->status !== 'closed')
-                    <form method="post" action="{{ route('ma.wa-tickets.transfer', $ticket) }}" class="wat-transfer-form">
+                @if($ticket->status !== 'closed' && auth()->user()->role !== 'approver')
+                    <form method="post" action="{{ route('wa-tickets.transfer', $ticket) }}" class="wat-transfer-form">
                         @csrf
                         <select name="to_user_id">
                             <option value="">&#8634; Lepas ke Antrean</option>
@@ -90,10 +100,10 @@
     @endif
 </section>
 
-@if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting')
+@if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
 <section class="wat-panel">
     <div class="wat-panel-head"><h2>Tandai Selesai</h2></div>
-    <form method="post" action="{{ route('ma.wa-tickets.close', $ticket) }}" class="wat-close-card">
+    <form method="post" action="{{ route('wa-tickets.close', $ticket) }}" class="wat-close-card">
         @csrf
         <textarea name="note" rows="2" maxlength="2000" placeholder="Catatan penutup buat toko (opsional)..."></textarea>
         <div><button class="wat-btn success" type="submit">&#10003; Tandai Selesai &amp; Tutup Tiket</button></div>
@@ -122,8 +132,8 @@
                 <p class="wat-empty">Belum ada pesan ke toko.</p>
             @endforelse
         </div>
-        @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting')
-            <form method="post" action="{{ route('ma.wa-tickets.reply', $ticket) }}" class="wat-composer">
+        @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
+            <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer">
                 @csrf
                 <input type="hidden" name="is_internal" value="0">
                 <textarea name="body" maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
@@ -140,8 +150,8 @@
                 <p class="wat-empty">Belum ada diskusi internal. Cuma tim CS yang lihat ini, toko nggak bisa baca.</p>
             @endforelse
         </div>
-        @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting')
-            <form method="post" action="{{ route('ma.wa-tickets.reply', $ticket) }}" class="wat-composer internal">
+        @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
+            <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer internal">
                 @csrf
                 <input type="hidden" name="is_internal" value="1">
                 <textarea name="body" maxlength="2000" required placeholder="Diskusi internal (toko nggak lihat)..."></textarea>

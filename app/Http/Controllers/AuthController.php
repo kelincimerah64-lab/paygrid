@@ -111,6 +111,7 @@ class AuthController extends Controller
         return match ($role) {
             'superadmin' => route('superadmin.overview'),
             'cs_pusat' => route('center-support.tickets'),
+            'approver' => route('wa-tickets.pending'),
             'agent' => route('agent.overview'),
             'admin' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),
             'readonly_admin' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),

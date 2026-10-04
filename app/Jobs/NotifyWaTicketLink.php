@@ -40,7 +40,7 @@ class NotifyWaTicketLink implements ShouldQueue
             return;
         }
 
-        $link = route('ma.wa-tickets.show', $ticket);
+        $link = route('wa-tickets.show', $ticket);
         $store = $ticket->merchant?->name ?? '-';
 
         $message = match ($this->event) {

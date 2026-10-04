@@ -53,7 +53,7 @@
                         @endif
                     </td>
                     <td data-label="Dibuat">{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</td>
-                    <td data-label=""><a class="btn compact-btn" href="{{ route('ma.wa-tickets.show', $ticket) }}">Buka</a></td>
+                    <td data-label=""><a class="btn compact-btn" href="{{ route('wa-tickets.show', $ticket) }}">Buka</a></td>
                 </tr>
             @empty
                 <tr><td colspan="8" class="empty">Belum ada tiket. Klik "Buat Tiket Percobaan" untuk mulai.</td></tr>

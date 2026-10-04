@@ -29,6 +29,11 @@ class MaWaTicketTest extends TestCase
         return User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
     }
 
+    private function approver(): User
+    {
+        return User::factory()->create(['role' => 'approver', 'is_active' => true]);
+    }
+
     public function test_ma_can_create_a_wa_ticket_and_a_notify_job_is_dispatched(): void
     {
         Bus::fake();
@@ -44,7 +49,7 @@ class MaWaTicketTest extends TestCase
         ]);
 
         $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
-        $response->assertRedirect(route('ma.wa-tickets.show', $ticket));
+        $response->assertRedirect(route('wa-tickets.show', $ticket));
         $this->assertSame('tech', $ticket->department);
         $this->assertNull($ticket->claimed_by_user_id);
 
@@ -61,11 +66,11 @@ class MaWaTicketTest extends TestCase
             'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
         ]);
 
-        $first = $this->actingAs($ma)->post(route('ma.wa-tickets.claim', $ticket));
+        $first = $this->actingAs($ma)->post(route('wa-tickets.claim', $ticket));
         $first->assertRedirect();
         $this->assertSame($ma->id, $ticket->fresh()->claimed_by_user_id);
 
-        $second = $this->actingAs($other)->post(route('ma.wa-tickets.claim', $ticket));
+        $second = $this->actingAs($other)->post(route('wa-tickets.claim', $ticket));
         $second->assertSessionHas('status', 'Tiket ini sudah diambil orang lain duluan.');
         $this->assertSame($ma->id, $ticket->fresh()->claimed_by_user_id);
     }
@@ -79,12 +84,12 @@ class MaWaTicketTest extends TestCase
             'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
         ]);
 
-        $this->actingAs($ma)->post(route('ma.wa-tickets.reply', $ticket), [
+        $this->actingAs($ma)->post(route('wa-tickets.reply', $ticket), [
             'body' => 'Update buat toko.',
             'is_internal' => '0',
         ])->assertRedirect();
 
-        $this->actingAs($ma)->post(route('ma.wa-tickets.reply', $ticket), [
+        $this->actingAs($ma)->post(route('wa-tickets.reply', $ticket), [
             'body' => 'Diskusi internal doang.',
             'is_internal' => '1',
         ])->assertRedirect();
@@ -92,7 +97,7 @@ class MaWaTicketTest extends TestCase
         $this->assertDatabaseHas('merchant_ticket_messages', ['body' => 'Update buat toko.', 'is_internal' => false]);
         $this->assertDatabaseHas('merchant_ticket_messages', ['body' => 'Diskusi internal doang.', 'is_internal' => true]);
 
-        $show = $this->actingAs($ma)->get(route('ma.wa-tickets.show', $ticket));
+        $show = $this->actingAs($ma)->get(route('wa-tickets.show', $ticket));
         $show->assertSee('Update buat toko.')->assertSee('Diskusi internal doang.');
     }
 
@@ -108,7 +113,7 @@ class MaWaTicketTest extends TestCase
         ]);
         app(\App\Services\MerchantTicketService::class)->claim($ticket, $ma);
 
-        $this->actingAs($ma)->post(route('ma.wa-tickets.transfer', $ticket), [
+        $this->actingAs($ma)->post(route('wa-tickets.transfer', $ticket), [
             'to_user_id' => $target->id,
         ])->assertRedirect();
 
@@ -127,9 +132,9 @@ class MaWaTicketTest extends TestCase
             'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
         ]);
 
-        $this->actingAs($ma)->post(route('ma.wa-tickets.close', $ticket), [
+        $this->actingAs($ma)->post(route('wa-tickets.close', $ticket), [
             'note' => 'Sudah diperbaiki, silakan dicek ulang.',
-        ])->assertRedirect(route('ma.wa-tickets.show', $ticket));
+        ])->assertRedirect(route('wa-tickets.show', $ticket));
 
         $ticket->refresh();
         $this->assertSame('closed', $ticket->status);
@@ -148,8 +153,8 @@ class MaWaTicketTest extends TestCase
             'department' => 'cs', 'category' => 'others', 'description' => 'Punya MA lain.',
         ]);
 
-        $this->actingAs($ma)->get(route('ma.wa-tickets.show', $ticket))->assertForbidden();
-        $this->actingAs($ma)->post(route('ma.wa-tickets.claim', $ticket))->assertForbidden();
+        $this->actingAs($ma)->get(route('wa-tickets.show', $ticket))->assertForbidden();
+        $this->actingAs($ma)->post(route('wa-tickets.claim', $ticket))->assertForbidden();
     }
 
     public function test_cs_pusat_can_open_and_claim_a_ticket_via_its_wa_link(): void
@@ -162,8 +167,8 @@ class MaWaTicketTest extends TestCase
             'department' => 'cs', 'category' => 'others', 'description' => 'Dari link WA.',
         ]);
 
-        $this->actingAs($cs)->get(route('ma.wa-tickets.show', $ticket))->assertOk()->assertSee('CS Pusat');
-        $this->actingAs($cs)->post(route('ma.wa-tickets.claim', $ticket))->assertRedirect();
+        $this->actingAs($cs)->get(route('wa-tickets.show', $ticket))->assertOk()->assertSee('CS Pusat');
+        $this->actingAs($cs)->post(route('wa-tickets.claim', $ticket))->assertRedirect();
 
         $this->assertSame($cs->id, $ticket->fresh()->claimed_by_user_id);
     }
@@ -185,7 +190,7 @@ class MaWaTicketTest extends TestCase
         ]);
 
         $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
-        $response->assertRedirect(route('ma.wa-tickets.show', $ticket));
+        $response->assertRedirect(route('wa-tickets.show', $ticket));
         $this->assertSame('waiting', $ticket->approval_status);
         $this->assertSame(['nominal' => '5000000'], $ticket->metadata);
 
@@ -202,7 +207,7 @@ class MaWaTicketTest extends TestCase
         ]);
         $ticket->forceFill(['approval_status' => 'waiting'])->save();
 
-        $this->actingAs($ma)->post(route('ma.wa-tickets.claim', $ticket))->assertStatus(422);
+        $this->actingAs($ma)->post(route('wa-tickets.claim', $ticket))->assertStatus(422);
         $this->assertNull($ticket->fresh()->claimed_by_user_id);
     }
 
@@ -213,19 +218,20 @@ class MaWaTicketTest extends TestCase
         $this->seed();
         $merchant = $this->pilotMerchant();
         $ma = $this->ma();
+        $approver = $this->approver();
         $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
             'department' => 'finance', 'category' => 'topdown_saldo', 'description' => 'Test.',
         ]);
         $ticket->forceFill(['approval_status' => 'waiting'])->save();
 
-        $this->actingAs($ma)->post(route('ma.wa-tickets.approve', $ticket))->assertRedirect();
+        $this->actingAs($approver)->post(route('wa-tickets.approve', $ticket))->assertRedirect();
 
         $ticket->refresh();
         $this->assertSame('approved', $ticket->approval_status);
-        $this->assertSame($ma->name, $ticket->approval_by);
+        $this->assertSame($approver->name, $ticket->approval_by);
         Bus::assertDispatched(NotifyWaTicketLink::class, fn ($job) => $job->ticketId === $ticket->id && $job->event === 'approved' && $job->groupId === 'handling-group@g.us');
 
-        $this->actingAs($ma)->post(route('ma.wa-tickets.claim', $ticket))->assertRedirect();
+        $this->actingAs($ma)->post(route('wa-tickets.claim', $ticket))->assertRedirect();
         $this->assertSame($ma->id, $ticket->fresh()->claimed_by_user_id);
     }
 
@@ -234,19 +240,86 @@ class MaWaTicketTest extends TestCase
         $this->seed();
         $merchant = $this->pilotMerchant();
         $ma = $this->ma();
+        $approver = $this->approver();
         $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
             'department' => 'tech', 'category' => 'ip_whitelist', 'description' => 'Test.',
         ]);
         $ticket->forceFill(['approval_status' => 'waiting'])->save();
 
-        $this->actingAs($ma)->post(route('ma.wa-tickets.reject', $ticket), [
+        $this->actingAs($approver)->post(route('wa-tickets.reject', $ticket), [
             'note' => 'Server belum terverifikasi.',
-        ])->assertRedirect(route('ma.wa-tickets.show', $ticket));
+        ])->assertRedirect(route('wa-tickets.show', $ticket));
 
         $ticket->refresh();
         $this->assertSame('rejected', $ticket->approval_status);
         $this->assertSame('closed', $ticket->status);
         $this->assertSame('Server belum terverifikasi.', $ticket->approval_note);
+    }
+
+    public function test_ma_and_cs_pusat_cannot_approve_or_reject(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $cs = User::factory()->create(['role' => 'cs_pusat', 'is_active' => true]);
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'tech', 'category' => 'ip_whitelist', 'description' => 'Test.',
+        ]);
+        $ticket->forceFill(['approval_status' => 'waiting'])->save();
+
+        $this->actingAs($ma)->post(route('wa-tickets.approve', $ticket))->assertForbidden();
+        $this->actingAs($cs)->post(route('wa-tickets.approve', $ticket))->assertForbidden();
+        $this->actingAs($ma)->post(route('wa-tickets.reject', $ticket))->assertForbidden();
+        $this->assertSame('waiting', $ticket->fresh()->approval_status);
+    }
+
+    public function test_approver_cannot_approve_their_own_ticket(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $approver = $this->approver();
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $approver, [
+            'department' => 'tech', 'category' => 'ip_whitelist', 'description' => 'Test.',
+        ]);
+        $ticket->forceFill(['approval_status' => 'waiting'])->save();
+
+        $this->actingAs($approver)->post(route('wa-tickets.approve', $ticket))->assertForbidden();
+        $this->assertSame('waiting', $ticket->fresh()->approval_status);
+    }
+
+    public function test_approver_cannot_claim_reply_transfer_or_close(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $approver = $this->approver();
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
+        ]);
+
+        $this->actingAs($approver)->post(route('wa-tickets.claim', $ticket))->assertForbidden();
+        $this->actingAs($approver)->post(route('wa-tickets.reply', $ticket), ['body' => 'x'])->assertForbidden();
+        $this->actingAs($approver)->post(route('wa-tickets.transfer', $ticket))->assertForbidden();
+        $this->actingAs($approver)->post(route('wa-tickets.close', $ticket))->assertForbidden();
+    }
+
+    public function test_approver_pending_approvals_page_lists_only_waiting_tickets_company_wide(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $approver = $this->approver();
+        $waiting = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'tech', 'category' => 'ip_whitelist', 'description' => 'Butuh approval.',
+        ]);
+        $waiting->forceFill(['approval_status' => 'waiting'])->save();
+        $notWaiting = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Tidak butuh approval.',
+        ]);
+
+        $response = $this->actingAs($approver)->get(route('wa-tickets.pending'));
+
+        $response->assertOk()->assertSee($waiting->ticket_no)->assertDontSee($notWaiting->ticket_no);
     }
 
     public function test_reminder_command_notifies_once_for_unclaimed_tickets_past_threshold(): void
