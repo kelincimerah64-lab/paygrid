@@ -77,11 +77,11 @@
         .metric.blue { background:linear-gradient(135deg, #1f6fe5, #1557c2); color:#fff; border-color:#1d67d7; }
         .metric.success { background:#ecfff5; border-color:#a4ebc4; }
         .metric.warn-soft { background:#fff9e9; border-color:#ffd46d; }
-        .table-wrap { max-width:100%; max-height:70vh; overflow:auto; }
+        .table-wrap { max-width:100%; max-height:70vh; overflow:auto; will-change:scroll-position; transform:translateZ(0); }
         .table { width:100%; min-width:0; border-collapse:collapse; }
         .table th, .table td { border-top:1px solid #e7edf6; padding:7px 10px; text-align:left; vertical-align:middle; }
         .table th { background:#f7faff; white-space:nowrap; }
-        .table-wrap thead th { position:sticky; top:0; z-index:2; box-shadow:0 1px 0 #e7edf6; }
+        .table-wrap thead th { position:sticky; top:0; z-index:2; box-shadow:0 1px 0 #e7edf6; contain:paint; }
         .table td { line-height:1.18; }
         .table strong { font-weight:900; }
         .badge { display:inline-flex; align-items:center; justify-content:center; min-height:24px; padding:4px 9px; border-radius:999px; font-weight:900; font-size:11px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
