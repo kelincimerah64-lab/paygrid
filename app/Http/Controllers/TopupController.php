@@ -85,7 +85,9 @@ class TopupController extends Controller
     {
         abort_unless($topupRequest->merchant_id === $merchant->id, 404);
         $this->ensurePublicToken($topupRequest);
-        abort_unless($topupRequest->status === 'expired', 422);
+        $this->ensureExpiry($topupRequest);
+        $this->expireIfNeeded($topupRequest);
+        abort_unless(in_array($topupRequest->status, ['pending', 'expired'], true), 422);
 
         $newTopup = $topups->create($merchant, (string) $topupRequest->customer_reference, (int) $topupRequest->amount);
 

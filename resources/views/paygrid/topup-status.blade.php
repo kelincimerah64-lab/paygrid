@@ -98,7 +98,6 @@
         modal.style.display = 'none';
     });
     const finalStatuses = ['success', 'expired', 'failed', 'rejected'];
-    let expiredModalShown = false;
 
     async function refreshTopupStatus() {
         try {
@@ -128,14 +127,16 @@
     }
 
     function tickCountdown() {
+        // This countdown is purely visual (based on the customer's own device clock,
+        // which can't be trusted). It must never decide "expired" on its own - that
+        // would let a skewed phone clock show the QR as expired before the server
+        // agrees, so "Generate Ulang QR" then gets rejected (server still says
+        // pending) and the customer is stuck seeing the same expired screen forever.
+        // The actual expired state only ever comes from refreshTopupStatus() polling
+        // the server.
         const remaining = expiryMs - Date.now();
         if (remaining <= 0 && !finalStatuses.includes(statusNode.textContent.toLowerCase())) {
-            statusNode.textContent = 'EXPIRED';
             countdownNode.textContent = '00:00';
-            if (!expiredModalShown) {
-                expiredModalShown = true;
-                showModal('QRIS Expired', 'QRIS sudah kedaluwarsa. Generate ulang QR untuk melanjutkan pembayaran.', true, 'expired');
-            }
 
             return;
         }

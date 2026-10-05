@@ -143,6 +143,70 @@ class PayGridRoutingTest extends TestCase
             ->assertHeader('Content-Type', 'image/png');
     }
 
+    public function test_topup_regenerate_succeeds_when_still_pending_past_its_expiry(): void
+    {
+        // Regression for: a customer's device clock showed the QR as expired
+        // (client-side countdown) before the server had actually flagged the
+        // row 'expired' - clicking "Generate Ulang QR" must still succeed and
+        // self-heal the stale status, not 422 and strand the customer on a
+        // dead QR with no way to pay.
+        $this->seed();
+        $merchant = Merchant::query()->where('slug', 'nnp-cm-bj')->firstOrFail();
+        $this->app->instance(HilogateClient::class, new class implements GatewayClientInterface {
+            public function createQrisTransaction(Merchant $merchant, string $reference, int $amount, int $expiresInMinutes = 30): array
+            {
+                return ['data' => ['status' => 'PENDING', 'qris' => 'fresh-qr-string', 'reference' => 'qris_regen_test']];
+            }
+
+            public function getTransaction(Merchant $merchant, string $reference): array
+            {
+                return [];
+            }
+
+            public function pullTransactions(Merchant $merchant, array $filters = []): array
+            {
+                return [];
+            }
+
+            public function pullSettlements(Merchant $merchant, array $filters = []): array
+            {
+                return [];
+            }
+
+            public function createMerchant(array $payload): array
+            {
+                return [];
+            }
+        });
+
+        $stale = TopupRequest::query()->create([
+            'merchant_id' => $merchant->id,
+            'customer_reference' => 'PLAYER-STALE-CLOCK',
+            'idempotency_key' => 'stale-clock-test',
+            'public_token' => (string) \Illuminate\Support\Str::uuid(),
+            'gateway' => $merchant->gateway,
+            'data_source' => 'gateway_create',
+            'gateway_ref_id' => 'qris_stale_ref',
+            'qr_string' => 'stale-qr-string',
+            'status' => 'pending',
+            'amount' => 50000,
+            'submitted_at' => now()->subMinutes(45),
+            'expires_at' => now()->subMinutes(15),
+        ]);
+
+        $this->post(route('topup.regenerate', [$merchant, $stale->public_token]))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('topup_requests', ['id' => $stale->id, 'status' => 'expired']);
+        $this->assertDatabaseHas('topup_requests', [
+            'merchant_id' => $merchant->id,
+            'customer_reference' => 'PLAYER-STALE-CLOCK',
+            'status' => 'pending',
+            'qr_string' => 'fresh-qr-string',
+        ]);
+        $this->assertSame(2, TopupRequest::query()->where('customer_reference', 'PLAYER-STALE-CLOCK')->count());
+    }
+
     public function test_topup_submit_returns_form_error_when_gateway_fails(): void
     {
         $this->seed();
