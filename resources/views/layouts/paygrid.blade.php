@@ -634,6 +634,11 @@
         .wat-tab { border:none; background:transparent; padding:8px 16px; border-radius:7px; font-size:12.5px; font-weight:800; color:var(--muted); cursor:pointer; }
         .wat-tab.active { background:#fff; color:var(--blue); box-shadow:0 1px 3px rgba(14,35,70,.1); }
 
+        .wat-filter-bar { display:flex; gap:8px; align-items:center; padding:10px 20px; border-bottom:1px solid var(--line); background:var(--soft); flex-wrap:wrap; }
+        .wat-filter-search { flex:1; min-width:160px; border:1px solid var(--line); border-radius:8px; padding:7px 12px; font:inherit; font-size:12.5px; background:#fff; }
+        .wat-filter-date { border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; font-size:12.5px; background:#fff; }
+        .wat-filter-reset { border:1px solid var(--line); background:#fff; border-radius:8px; padding:7px 12px; font-size:12px; font-weight:700; color:var(--muted); cursor:pointer; }
+
         .wat-thread { display:flex; flex-direction:column; gap:12px; padding:20px; max-height:460px; overflow-y:auto; }
         .wat-msg { max-width:72%; padding:11px 14px; border-radius:14px; font-size:13px; line-height:1.5; }
         .wat-msg.out { align-self:flex-end; background:var(--blue); color:#fff; border-bottom-right-radius:3px; }

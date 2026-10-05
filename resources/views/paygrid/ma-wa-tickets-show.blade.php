@@ -124,17 +124,24 @@
         </div>
     </div>
 
+    <div class="wat-filter-bar">
+        <input type="search" class="wat-filter-search" name="wat_search" data-preserve-key="wat-search" placeholder="Cari teks pesan...">
+        <input type="date" class="wat-filter-date" name="wat_filter_date" data-preserve-key="wat-filter-date">
+        <button type="button" class="wat-filter-reset">Reset</button>
+    </div>
+
     <div data-wa-panel="toko">
         <div class="wat-thread">
             @forelse($toToko as $message)
                 @if($message->is_staff === false)
-                    <div class="wat-msg in"><span class="wat-msg-who">{{ $message->user->name ?? 'Toko' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
+                    <div class="wat-msg in" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}"><span class="wat-msg-who">{{ $message->user->name ?? 'Toko' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
                 @else
-                    <div class="wat-msg out"><span class="wat-msg-who">Tim {{ ucfirst($ticket->department) }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
+                    <div class="wat-msg out" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}"><span class="wat-msg-who">Tim {{ ucfirst($ticket->department) }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
                 @endif
             @empty
                 <p class="wat-empty">Belum ada pesan ke toko.</p>
             @endforelse
+            <p class="wat-empty wat-filter-empty" hidden>Tidak ada pesan yang cocok dengan filter.</p>
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
             <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer" data-live-form>
@@ -149,10 +156,11 @@
     <div data-wa-panel="internal" hidden>
         <div class="wat-thread">
             @forelse($internal as $message)
-                <div class="wat-msg internal"><span class="wat-msg-who">{{ $message->user->name ?? 'Sistem' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
+                <div class="wat-msg internal" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}"><span class="wat-msg-who">{{ $message->user->name ?? 'Sistem' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
             @empty
                 <p class="wat-empty">Belum ada diskusi internal. Cuma tim CS yang lihat ini, toko nggak bisa baca.</p>
             @endforelse
+            <p class="wat-empty wat-filter-empty" hidden>Tidak ada pesan yang cocok dengan filter.</p>
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
             <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer internal" data-live-form>
@@ -188,8 +196,55 @@
         panels.forEach(function (p) { p.hidden = p.dataset.waPanel !== activeKey; });
     }
 
+    function applyFilter() {
+        var search = document.querySelector('.wat-filter-search');
+        var dateInput = document.querySelector('.wat-filter-date');
+        if (!search || !dateInput) return;
+        var query = search.value.trim().toLowerCase();
+        var date = dateInput.value;
+        document.querySelectorAll('[data-wa-panel]').forEach(function (panel) {
+            var messages = panel.querySelectorAll('.wat-msg');
+            var hadMessages = messages.length > 0;
+            var visibleCount = 0;
+            messages.forEach(function (msg) {
+                var show = (!query || msg.textContent.toLowerCase().includes(query)) && (!date || msg.dataset.date === date);
+                msg.hidden = !show;
+                if (show) visibleCount++;
+            });
+            var emptyFilterMsg = panel.querySelector('.wat-filter-empty');
+            if (emptyFilterMsg) emptyFilterMsg.hidden = !(hadMessages && visibleCount === 0 && (query || date));
+        });
+    }
+
+    function setupFilter() {
+        var search = document.querySelector('.wat-filter-search');
+        var dateInput = document.querySelector('.wat-filter-date');
+        var reset = document.querySelector('.wat-filter-reset');
+        if (search && !search.dataset.filterReady) {
+            search.dataset.filterReady = 'true';
+            search.addEventListener('input', applyFilter);
+        }
+        if (dateInput && !dateInput.dataset.filterReady) {
+            dateInput.dataset.filterReady = 'true';
+            dateInput.addEventListener('change', applyFilter);
+        }
+        if (reset && !reset.dataset.filterReady) {
+            reset.dataset.filterReady = 'true';
+            reset.addEventListener('click', function () {
+                search.value = '';
+                dateInput.value = '';
+                applyFilter();
+            });
+        }
+        applyFilter();
+    }
+
     setupTabs();
-    if (root) root.addEventListener('paygrid:refreshed', setupTabs);
+    setupFilter();
+    if (root) root.addEventListener('paygrid:refreshed', function () {
+        setupTabs();
+        setupFilter();
+    });
 })();
 </script>
 @endpush
