@@ -92,10 +92,17 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-bot-detail]').forEach((button) => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', (e) => {
+            e.stopPropagation();
             const target = document.getElementById(button.dataset.botDetail);
             if (!target) return;
             target.hidden = button.classList.contains('bot-detail-close') ? true : !target.hidden;
+        });
+    });
+
+    document.addEventListener('click', (e) => {
+        document.querySelectorAll('.bot-detail-row:not([hidden])').forEach((row) => {
+            if (!row.contains(e.target)) row.hidden = true;
         });
     });
 
