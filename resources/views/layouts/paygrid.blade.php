@@ -120,15 +120,15 @@
         .bot-chart-box { position:relative; height:200px; }
         .bot-monitoring-table td { white-space:normal !important; }
         .bot-monitoring-wrap { overflow-x:auto; }
-        .bot-monitoring-table th:nth-child(1) { width:12%; }
-        .bot-monitoring-table th:nth-child(2) { width:18%; }
-        .bot-monitoring-table th:nth-child(3) { width:14%; }
-        .bot-monitoring-table th:nth-child(4) { width:10%; }
-        .bot-monitoring-table th:nth-child(5) { width:14%; }
-        .bot-monitoring-table th:nth-child(6) { width:14%; }
-        .bot-monitoring-table th:nth-child(7) { width:10%; }
-        .bot-monitoring-table th:nth-child(8) { width:8%; }
-        .bot-monitoring-table .bot-note-row td { height:auto; padding-top:0; color:var(--muted); background:#fbfdff; font-size:11px; }
+        .bot-monitoring-table th:nth-child(1) { width:11%; }
+        .bot-monitoring-table th:nth-child(2) { width:16%; }
+        .bot-monitoring-table th:nth-child(3) { width:12%; }
+        .bot-monitoring-table th:nth-child(4) { width:9%; }
+        .bot-monitoring-table th:nth-child(5) { width:12%; }
+        .bot-monitoring-table th:nth-child(6) { width:13%; }
+        .bot-monitoring-table th:nth-child(7) { width:9%; }
+        .bot-monitoring-table th:nth-child(8) { width:10%; }
+        .bot-monitoring-table th:nth-child(9) { width:8%; }
         .bot-monitoring-table .bot-detail-row td { height:auto; padding:0 8px 10px; background:#fbfdff; }
         .bot-detail-card { border:1px solid #dbe5f2; border-radius:10px; background:#fff; box-shadow:0 8px 22px rgba(14, 35, 70, .045); overflow:hidden; }
         .bot-detail-card .approval-detail-grid { padding:12px; }
@@ -953,9 +953,10 @@
             .bot-monitoring-table td:nth-child(5)::before { content:'Handler'; }
             .bot-monitoring-table td:nth-child(6)::before { content:'SLA'; }
             .bot-monitoring-table td:nth-child(7)::before { content:'Timeline'; }
-            .bot-monitoring-table td:nth-child(8)::before { content:'Detail'; }
-            .bot-monitoring-table .bot-note-row td, .bot-monitoring-table .bot-detail-row td { display:block; }
-            .bot-monitoring-table .bot-note-row td::before, .bot-monitoring-table .bot-detail-row td::before { content:none; }
+            .bot-monitoring-table td:nth-child(8)::before { content:'Update Terakhir'; }
+            .bot-monitoring-table td:nth-child(9)::before { content:'Detail'; }
+            .bot-monitoring-table .bot-detail-row td { display:block; }
+            .bot-monitoring-table .bot-detail-row td::before { content:none; }
             .ma-store-summary-table { min-width:0; }
             .ma-store-summary-table td:nth-child(1)::before { content:'Nama Toko'; }
             .ma-store-summary-table td:nth-child(2)::before { content:'Agen'; }

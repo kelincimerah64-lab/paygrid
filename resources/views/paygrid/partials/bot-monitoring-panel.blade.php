@@ -48,7 +48,7 @@
         <div class="qris-toolbar"><h2>Daftar Ticket</h2><span class="badge ok">{{ count($bm['tickets']) }} ticket</span></div>
         <div class="table-wrap sticky-head bot-monitoring-wrap">
             <table class="table qris-table bot-monitoring-table">
-                <thead><tr><th>Ticket</th><th>Requester</th><th>Kategori</th><th>Status</th><th>Handler</th><th>SLA</th><th>Timeline</th><th>Detail</th></tr></thead>
+                <thead><tr><th>Ticket</th><th>Requester</th><th>Kategori</th><th>Status</th><th>Handler</th><th>SLA</th><th>Timeline</th><th>Update Terakhir</th><th>Detail</th></tr></thead>
                 <tbody>
                 @if(count($bm['tickets']))
                 @foreach($bm['tickets'] as $t)
@@ -62,11 +62,11 @@
                         <td>{{ ($t['assigned_name'] ?? null) ?: '-' }}</td>
                         <td><strong>{{ $t['total_resolution_minutes'] ?? '-' }} min</strong><br><span class="muted">Pickup {{ $t['pickup_minutes'] ?? '-' }} / Handling {{ $t['handling_minutes'] ?? '-' }}</span></td>
                         <td class="time-cell">{{ $t['created_at']?->format('d/m/y') ?? '-' }}<span>{{ $t['created_at']?->format('H.i') ? $t['created_at']?->format('H.i').' WIB' : '-' }}</span></td>
+                        <td>{{ ($t['last_update'] ?? null) ?: '-' }}</td>
                         <td><button class="btn compact-btn bot-detail-open" type="button" data-bot-detail="{{ $ticketModalId }}">Detail</button></td>
                     </tr>
-                    <tr class="bot-note-row"><td colspan="8"><span class="muted">Update terakhir:</span> {{ ($t['last_update'] ?? null) ?: '-' }}</td></tr>
                     <tr class="bot-detail-row" id="{{ $ticketModalId }}" hidden>
-                        <td colspan="8">
+                        <td colspan="9">
                             <div class="bot-detail-card">
                                 <div class="qris-toolbar"><div><h3>Detail Ticket {{ $t['ticket_id'] ?? '-' }}</h3><p class="muted" style="margin:4px 0 0">Semua kolom dari Google Sheet ditampilkan di sini.</p></div><button class="btn compact-btn bot-detail-close" type="button" data-bot-detail="{{ $ticketModalId }}">Tutup</button></div>
                                 <div class="approval-detail-grid">
@@ -79,7 +79,7 @@
                     </tr>
                 @endforeach
                 @else
-                    <tr><td colspan="8" class="empty">Belum ada ticket untuk filter ini.</td></tr>
+                    <tr><td colspan="9" class="empty">Belum ada ticket untuk filter ini.</td></tr>
                 @endif
                 </tbody>
             </table>
