@@ -13,12 +13,13 @@
 @endphp
 
 @section('content')
+<div data-live-root data-live-interval="4000">
 <div class="wat-hero">
     <div>
         <p class="eyebrow">{{ $ticket->merchant?->name ?: '-' }} &middot; {{ ucfirst($ticket->department) }}</p>
         <h1>{{ $ticket->ticket_no }}</h1>
     </div>
-    <div style="display:flex; align-items:center; gap:10px">
+    <div style="display:flex; align-items:center; gap:10px" data-live-region="wat-hero-status">
         <span class="wat-pill {{ $statusPillClass }}">{{ $statusLabel($ticket->status) }}</span>
         @if(in_array(auth()->user()->role, ['ma', 'superadmin'], true))
             <a class="btn compact-btn" href="{{ route('ma.wa-tickets.index') }}">&larr; Kembali</a>
@@ -30,6 +31,7 @@
     </div>
 </div>
 
+<div data-live-region="wat-status">
 @if(session('status'))
     <section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>
 @endif
@@ -49,8 +51,8 @@
             <div class="wat-approval-text"><b>&#9203; Menunggu Approval</b><span>Tiket ini butuh persetujuan sebelum bisa dikerjakan.</span></div>
             @if($canApprove && !$isCreator)
                 <div class="wat-approval-actions">
-                    <form method="post" action="{{ route('wa-tickets.approve', $ticket) }}">@csrf<button class="wat-btn approve" type="submit">&#10003; Approve</button></form>
-                    <form method="post" action="{{ route('wa-tickets.reject', $ticket) }}">@csrf<button class="wat-btn reject" type="submit">&#10005; Reject</button></form>
+                    <form method="post" action="{{ route('wa-tickets.approve', $ticket) }}" data-live-form>@csrf<button class="wat-btn approve" type="submit">&#10003; Approve</button></form>
+                    <form method="post" action="{{ route('wa-tickets.reject', $ticket) }}" data-live-form>@csrf<button class="wat-btn reject" type="submit">&#10005; Reject</button></form>
                 </div>
             @elseif($canApprove && $isCreator)
                 <span class="wat-pill">Tidak bisa approve tiket buatan sendiri</span>
@@ -71,7 +73,7 @@
             <div class="wat-claim-box">
                 <div class="wat-claim-who"><div class="wat-avatar">?</div><div><b>Belum ada yang pegang</b><span>Tiket ini masih di antrean</span></div></div>
                 @unless(auth()->user()->role === 'approver')
-                    <form method="post" action="{{ route('wa-tickets.claim', $ticket) }}">
+                    <form method="post" action="{{ route('wa-tickets.claim', $ticket) }}" data-live-form>
                         @csrf
                         <button class="wat-btn primary" type="submit" @disabled($ticket->status === 'closed')>Ambil Tiket Ini</button>
                     </form>
@@ -84,7 +86,7 @@
                     <div><b>{{ $ticket->claimedBy?->name }}</b><span>Diambil {{ $ticket->claimed_at?->timezone('Asia/Jakarta')->diffForHumans() }}</span></div>
                 </div>
                 @if($ticket->status !== 'closed' && auth()->user()->role !== 'approver')
-                    <form method="post" action="{{ route('wa-tickets.transfer', $ticket) }}" class="wat-transfer-form">
+                    <form method="post" action="{{ route('wa-tickets.transfer', $ticket) }}" class="wat-transfer-form" data-live-form>
                         @csrf
                         <select name="to_user_id">
                             <option value="">&#8634; Lepas ke Antrean</option>
@@ -103,14 +105,16 @@
 @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
 <section class="wat-panel">
     <div class="wat-panel-head"><h2>Tandai Selesai</h2></div>
-    <form method="post" action="{{ route('wa-tickets.close', $ticket) }}" class="wat-close-card">
+    <form method="post" action="{{ route('wa-tickets.close', $ticket) }}" class="wat-close-card" data-live-form>
         @csrf
         <textarea name="note" rows="2" maxlength="2000" placeholder="Catatan penutup buat toko (opsional)..."></textarea>
         <div><button class="wat-btn success" type="submit">&#10003; Tandai Selesai &amp; Tutup Tiket</button></div>
     </form>
 </section>
 @endif
+</div>
 
+<div data-live-region="wat-thread">
 <section class="wat-panel">
     <div class="wat-panel-head">
         <h2>Percakapan</h2>
@@ -133,10 +137,10 @@
             @endforelse
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
-            <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer">
+            <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer" data-live-form>
                 @csrf
                 <input type="hidden" name="is_internal" value="0">
-                <textarea name="body" maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
+                <textarea name="body" data-preserve-key="wat-reply-toko" maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
                 <button class="wat-btn primary" type="submit">Kirim</button>
             </form>
         @endif
@@ -151,29 +155,41 @@
             @endforelse
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
-            <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer internal">
+            <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer internal" data-live-form>
                 @csrf
                 <input type="hidden" name="is_internal" value="1">
-                <textarea name="body" maxlength="2000" required placeholder="Diskusi internal (toko nggak lihat)..."></textarea>
+                <textarea name="body" data-preserve-key="wat-reply-internal" maxlength="2000" required placeholder="Diskusi internal (toko nggak lihat)..."></textarea>
                 <button class="wat-btn outline" type="submit">Kirim</button>
             </form>
         @endif
     </div>
 </section>
+</div>
+</div>
 @endsection
 
 @push('scripts')
 <script>
 (function () {
-    var buttons = document.querySelectorAll('[data-wa-tab]');
-    var panels = document.querySelectorAll('[data-wa-panel]');
-    buttons.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var key = btn.dataset.waTab;
-            buttons.forEach(function (b) { b.classList.toggle('active', b === btn); });
-            panels.forEach(function (p) { p.hidden = p.dataset.waPanel !== key; });
+    var root = document.querySelector('[data-live-root]');
+
+    function setupTabs() {
+        var buttons = document.querySelectorAll('[data-wa-tab]');
+        var panels = document.querySelectorAll('[data-wa-panel]');
+        var activeKey = (root && root.dataset.waActiveTab) || 'toko';
+        buttons.forEach(function (btn) {
+            btn.classList.toggle('active', btn.dataset.waTab === activeKey);
+            btn.addEventListener('click', function () {
+                if (root) root.dataset.waActiveTab = btn.dataset.waTab;
+                buttons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+                panels.forEach(function (p) { p.hidden = p.dataset.waPanel !== btn.dataset.waTab; });
+            });
         });
-    });
+        panels.forEach(function (p) { p.hidden = p.dataset.waPanel !== activeKey; });
+    }
+
+    setupTabs();
+    if (root) root.addEventListener('paygrid:refreshed', setupTabs);
 })();
 </script>
 @endpush

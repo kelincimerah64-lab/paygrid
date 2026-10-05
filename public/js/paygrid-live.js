@@ -97,6 +97,7 @@
         });
         restoreFields(root, fields);
         restoreScroll(root, scroll);
+        root.dispatchEvent(new CustomEvent('paygrid:refreshed', { bubbles: true }));
     };
 
     const setupAutoFilters = () => {
@@ -109,6 +110,32 @@
             };
             form.querySelectorAll('input[name="q"], input[type="date"], select').forEach((field) => {
                 field.addEventListener(field.name === 'q' ? 'input' : 'change', submit);
+            });
+        });
+    };
+
+    const ajaxifyForms = (root) => {
+        root.querySelectorAll('form[data-live-form]:not([data-live-form-ready])').forEach((form) => {
+            form.dataset.liveFormReady = 'true';
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const submitter = event.submitter;
+                if (submitter) submitter.disabled = true;
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        body: new FormData(form),
+                    });
+                    if (response.ok) {
+                        form.reset();
+                        await refresh(root);
+                    }
+                } catch (e) {
+                    // network hiccup - next periodic refresh will catch up
+                } finally {
+                    if (submitter) submitter.disabled = false;
+                }
             });
         });
     };
@@ -142,7 +169,9 @@
         const runRefresh = () => refresh(root).catch(() => {}).finally(() => {
             setupAutoFilters();
             setupNoteAutosave();
+            ajaxifyForms(root);
         });
+        ajaxifyForms(root);
         const refreshWhenVisible = () => {
             if (document.hidden || !canForceRefresh(root)) return;
             runRefresh();
