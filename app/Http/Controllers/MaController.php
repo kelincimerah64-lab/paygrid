@@ -310,7 +310,8 @@ class MaController extends Controller
             'pic_email' => ['nullable', 'string', 'max:255'],
             'pic_telegram' => ['nullable', 'string', 'max:255'],
             'pic_whatsapp' => ['nullable', 'string', 'max:255'],
-            'admin_email' => ['required', 'email', 'max:160', 'unique:users,email'],
+            'admin_email' => ['required', 'array', 'min:1'],
+            'admin_email.*' => ['required', 'email', 'max:160', 'distinct', 'unique:users,email'],
             'cs_email' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:80'],
             'gateway' => ['required', 'in:hilogate,artageto,alpha,kingspay'],
@@ -357,18 +358,18 @@ class MaController extends Controller
             'onboarding_payload' => $data + ['api_ip_whitelist' => $data['api_ip_whitelist'] ?: '15.232.137.74'],
             'approved_at' => now(),
         ]);
-        $admin = User::query()->create([
-            'name' => str($data['admin_email'])->before('@')->replace(['.', '_', '-'], ' ')->title()->toString(),
-            'email' => $data['admin_email'],
+        $admins = collect($data['admin_email'])->map(fn (string $email) => User::query()->create([
+            'name' => str($email)->before('@')->replace(['.', '_', '-'], ' ')->title()->toString(),
+            'email' => $email,
             'role' => 'admin',
             'merchant_id' => $merchant->id,
             'password' => Hash::make(config('paygrid.demo_password')),
             'plain_password' => config('paygrid.demo_password'),
-        ]);
+        ]));
         $audit->record('ma.merchant_created', $merchant, null, $merchant->only(['slug', 'name', 'agent_id', 'gateway', 'merchant_type']));
-        $audit->record('ma.merchant_admin_created', $admin, null, $admin->only(['email', 'role', 'merchant_id']));
+        $admins->each(fn ($admin) => $audit->record('ma.merchant_admin_created', $admin, null, $admin->only(['email', 'role', 'merchant_id'])));
 
-        return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admin->email.' / '.config('paygrid.demo_password').'.');
+        return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admins->pluck('email')->implode(', ').' / '.config('paygrid.demo_password').'.');
     }
 
     public function updateAgentFee(Request $request, Agent $agent, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse

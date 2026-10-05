@@ -1436,7 +1436,7 @@ class PayGridRoutingTest extends TestCase
             'engine_name' => 'GENESIS DIGITAL',
             'agent_id' => $agent->id,
             'pic_email' => 'pic-ma-store@paygrid.local',
-            'admin_email' => 'admin-ma-store@paygrid.local',
+            'admin_email' => ['admin-ma-store@paygrid.local'],
             'environment' => 'Production',
             'gateway' => 'hilogate',
             'merchant_type' => 'cm',
@@ -1447,6 +1447,36 @@ class PayGridRoutingTest extends TestCase
         ])->assertRedirect()->assertSessionHas('status');
         $this->assertDatabaseHas('merchants', ['slug' => 'ma-store-local', 'name' => 'MA Store Local', 'approval_status' => 'approved', 'merchant_mdr_percent' => 1.2]);
         $this->assertDatabaseHas('users', ['email' => 'admin-ma-store@paygrid.local', 'role' => 'admin']);
+    }
+
+    public function test_ma_create_store_can_create_multiple_admin_accounts(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-OTHER')->firstOrFail();
+
+        $this->actingAs($ma)->post(route('ma.create-store.store'), [
+            'name' => 'MA Store Multi Admin',
+            'agent_id' => $agent->id,
+            'admin_email' => ['admin-one@paygrid.local', 'admin-two@paygrid.local'],
+            'gateway' => 'hilogate',
+            'merchant_type' => 'cm',
+            'api_ip_whitelist' => '15.232.137.74',
+            'fee_menu_rates' => ['everyday' => '1.2'],
+        ])->assertRedirect()->assertSessionHas('status');
+
+        $merchant = Merchant::query()->where('name', 'MA Store Multi Admin')->firstOrFail();
+        $this->assertDatabaseHas('users', ['email' => 'admin-one@paygrid.local', 'role' => 'admin', 'merchant_id' => $merchant->id]);
+        $this->assertDatabaseHas('users', ['email' => 'admin-two@paygrid.local', 'role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($ma)->post(route('ma.create-store.store'), [
+            'name' => 'MA Store No Admin',
+            'agent_id' => $agent->id,
+            'admin_email' => [],
+            'gateway' => 'hilogate',
+            'merchant_type' => 'cm',
+            'fee_menu_rates' => ['everyday' => '1.2'],
+        ])->assertSessionHasErrors('admin_email');
     }
 
     public function test_ma_analytics_page_computes_gmv_take_rate_and_ticket_correlation(): void

@@ -371,7 +371,7 @@
 @endif
 
 @if($active === 'create-store')
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Toko</h2></div><form method="post" action="{{ route('ma.create-store.store') }}" class="pad" id="create-store-form">@csrf<div class="form-grid create-store-grid"><label>Nama Toko<input name="name" required></label><label>Username<input name="username"></label><label>Engine Name<input name="engine_name"></label><label>Agen<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label><label>Email PIC<div class="multi-field" data-multi-field="pic_email"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="pic@domain.com"><button type="button" class="multi-field-remove">&times;</button></div><button type="button" class="multi-field-add">+ Tambah</button></div><input type="hidden" name="pic_email"></label><label>Telegram PIC<div class="multi-field" data-multi-field="pic_telegram"><div class="multi-field-row"><input type="text" class="multi-field-input" placeholder="@usernamepic"><button type="button" class="multi-field-remove">&times;</button></div><button type="button" class="multi-field-add">+ Tambah</button></div><input type="hidden" name="pic_telegram"></label><label>WhatsApp PIC<div class="multi-field" data-multi-field="pic_whatsapp"><div class="multi-field-row"><input type="text" class="multi-field-input" placeholder="0812xxxxxxx"><button type="button" class="multi-field-remove">&times;</button></div><button type="button" class="multi-field-add">+ Tambah</button></div><input type="hidden" name="pic_whatsapp"></label><label>Email Admin<input name="admin_email" type="email" required></label><label>Email CS<div class="multi-field" data-multi-field="cs_email"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="cs@domain.com"><button type="button" class="multi-field-remove">&times;</button></div><button type="button" class="multi-field-add">+ Tambah</button></div><input type="hidden" name="cs_email"></label><label>Nomor Kontak<input name="phone"></label><label>Server<select name="gateway"><option value="hilogate">hilogate</option><option value="artageto">artageto</option></select></label><label>Merchant ID<input name="merchant_id" placeholder="Kosongkan jika belum real"></label><label>Merchant Key<input name="merchant_key" placeholder="Kosongkan jika belum real"></label><label>Callback URL<input name="transaction_callback_url" value="{{ url('/api/callbacks/hilogate/transaction') }}"></label><label>Withdrawal Callback<input name="withdrawal_callback_url" value="{{ url('/api/callbacks/hilogate/withdrawal') }}"></label><label>API IP Whitelist<div class="multi-field" data-multi-field="api_ip_whitelist"><div class="multi-field-row"><input type="text" class="multi-field-input" value="15.232.137.74" placeholder="103.10.20.30"><button type="button" class="multi-field-remove">&times;</button></div><button type="button" class="multi-field-add">+ Tambah</button></div><input type="hidden" name="api_ip_whitelist"></label>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Toko</h2></div><form method="post" action="{{ route('ma.create-store.store') }}" class="pad" id="create-store-form">@csrf<div class="form-grid create-store-grid"><label>Nama Toko<input name="name" required></label><label>Username<input name="username"></label><label>Engine Name<input name="engine_name"></label><label>Agen<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label><label>Email PIC<div class="multi-field" data-multi-field="pic_email"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="pic@domain.com"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="pic_email"></label><label>Telegram PIC<div class="multi-field" data-multi-field="pic_telegram"><div class="multi-field-row"><input type="text" class="multi-field-input" placeholder="@usernamepic"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="pic_telegram"></label><label>WhatsApp PIC<div class="multi-field" data-multi-field="pic_whatsapp"><div class="multi-field-row"><input type="text" class="multi-field-input" placeholder="0812xxxxxxx"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="pic_whatsapp"></label><label>Email Admin<div class="multi-field" data-multi-field="admin_email" data-mode="array"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="admin@domain.com" required><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div></label><label>Email CS<div class="multi-field" data-multi-field="cs_email"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="cs@domain.com"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="cs_email"></label><label>Nomor Kontak<input name="phone"></label><label>Server<select name="gateway"><option value="hilogate">hilogate</option><option value="artageto">artageto</option></select></label><label>Merchant ID<input name="merchant_id" placeholder="Kosongkan jika belum real"></label><label>Merchant Key<input name="merchant_key" placeholder="Kosongkan jika belum real"></label><label>Callback URL<input name="transaction_callback_url" value="{{ url('/api/callbacks/hilogate/transaction') }}"></label><label>Withdrawal Callback<input name="withdrawal_callback_url" value="{{ url('/api/callbacks/hilogate/withdrawal') }}"></label><label>API IP Whitelist<div class="multi-field" data-multi-field="api_ip_whitelist"><div class="multi-field-row"><input type="text" class="multi-field-input" value="15.232.137.74" placeholder="103.10.20.30"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="api_ip_whitelist"></label>
         <label>Tipe Toko<select name="merchant_type" id="create-store-type" onchange="paygridToggleEngineType(this, 'create-store-engine-type')"><option value="cm">CM</option><option value="script">Engine</option></select></label>
         <label>Engine Type<select name="engine_type" id="create-store-engine-type" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
         @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus])
@@ -485,37 +485,61 @@ function paygridToggleEngineType(select, engineTypeId) {
     engineType.style.display = isEngine ? '' : 'none';
     engineType.disabled = !isEngine;
 }
+function paygridRefreshMultiField(wrap) {
+    var rows = wrap.querySelectorAll('.multi-field-row');
+    rows.forEach(function (row, idx) {
+        var btn = row.querySelector('.multi-field-toggle');
+        var isLast = idx === rows.length - 1;
+        btn.textContent = isLast ? '+' : '×';
+        btn.classList.toggle('remove', !isLast);
+        btn.dataset.action = isLast ? 'add' : 'remove';
+    });
+}
 document.addEventListener('click', function (e) {
-    if (e.target.matches && e.target.matches('.multi-field-add')) {
+    if (e.target.matches && e.target.matches('.multi-field-toggle')) {
         var wrap = e.target.closest('.multi-field');
-        var template = wrap.querySelector('.multi-field-input');
-        var row = document.createElement('div');
-        row.className = 'multi-field-row';
-        var input = document.createElement('input');
-        input.type = template.type;
-        input.className = 'multi-field-input';
-        input.placeholder = template.placeholder;
-        var remove = document.createElement('button');
-        remove.type = 'button';
-        remove.className = 'multi-field-remove';
-        remove.innerHTML = '&times;';
-        row.appendChild(input);
-        row.appendChild(remove);
-        wrap.insertBefore(row, e.target);
-        input.focus();
-    }
-    if (e.target.matches && e.target.matches('.multi-field-remove')) {
-        var row = e.target.closest('.multi-field-row');
-        var wrap = e.target.closest('.multi-field');
-        if (wrap.querySelectorAll('.multi-field-row').length > 1) row.remove();
+        if (e.target.dataset.action === 'add') {
+            var template = wrap.querySelector('.multi-field-input');
+            var row = document.createElement('div');
+            row.className = 'multi-field-row';
+            var input = document.createElement('input');
+            input.type = template.type;
+            input.className = 'multi-field-input';
+            input.placeholder = template.placeholder;
+            var toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'multi-field-toggle';
+            row.appendChild(input);
+            row.appendChild(toggle);
+            wrap.appendChild(row);
+            paygridRefreshMultiField(wrap);
+            input.focus();
+        } else {
+            e.target.closest('.multi-field-row').remove();
+            paygridRefreshMultiField(wrap);
+        }
     }
 });
 var createStoreForm = document.getElementById('create-store-form');
 if (createStoreForm) {
     createStoreForm.addEventListener('submit', function () {
         createStoreForm.querySelectorAll('[data-multi-field]').forEach(function (wrap) {
+            var name = wrap.dataset.multiField;
+            var mode = wrap.dataset.mode || 'comma';
             var values = Array.from(wrap.querySelectorAll('.multi-field-input')).map(function (i) { return i.value.trim(); }).filter(Boolean);
-            var hidden = createStoreForm.querySelector('input[type="hidden"][name="' + wrap.dataset.multiField + '"]');
+            if (mode === 'array') {
+                wrap.querySelectorAll('input[type="hidden"][data-generated]').forEach(function (h) { h.remove(); });
+                values.forEach(function (v) {
+                    var hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = name + '[]';
+                    hidden.value = v;
+                    hidden.dataset.generated = '1';
+                    wrap.appendChild(hidden);
+                });
+                return;
+            }
+            var hidden = createStoreForm.querySelector('input[type="hidden"][name="' + name + '"]');
             if (hidden) hidden.value = values.join(',');
         });
     });
