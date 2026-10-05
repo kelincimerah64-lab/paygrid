@@ -118,7 +118,7 @@
         .bot-chart-card { display:flex; flex-direction:column; gap:10px; }
         .bot-chart-card h2 { font-size:13px; font-weight:900; letter-spacing:.02em; }
         .bot-chart-box { position:relative; height:200px; }
-        .bot-monitoring-table { min-width:1080px; }
+        .bot-monitoring-table td { white-space:normal !important; }
         .bot-monitoring-wrap { overflow-x:auto; }
         .bot-monitoring-table th:nth-child(1) { width:12%; }
         .bot-monitoring-table th:nth-child(2) { width:18%; }
