@@ -78,9 +78,9 @@
         window.scrollTo(scroll.windowX, scroll.windowY);
     };
 
-    const refresh = async (root) => {
-        if (shouldPause(root)) return;
-        if (isInteracting(root)) return;
+    const refresh = async (root, force = false) => {
+        if (!force && shouldPause(root)) return;
+        if (!force && isInteracting(root)) return;
         const fields = snapshotFields(root);
         const scroll = snapshotScroll(root);
 
@@ -129,7 +129,10 @@
                     });
                     if (response.ok) {
                         form.reset();
-                        await refresh(root);
+                        // Force past the interaction-pause guard - that guard exists to
+                        // avoid yanking content out from under a user mid-scroll/typing,
+                        // but clicking submit IS the user asking to see the result now.
+                        await refresh(root, true);
                     }
                 } catch (e) {
                     // network hiccup - next periodic refresh will catch up
