@@ -5,21 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class MerchantTicketMessage extends Model
+class MerchantTicketView extends Model
 {
     protected $fillable = [
         'merchant_ticket_id',
         'user_id',
-        'is_staff',
-        'is_internal',
-        'body',
-        'edited_at',
+        'last_viewed_at',
     ];
 
     protected $casts = [
-        'is_staff' => 'boolean',
-        'is_internal' => 'boolean',
-        'edited_at' => 'datetime',
+        'last_viewed_at' => 'datetime',
     ];
 
     public function ticket(): BelongsTo

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
+use App\Models\MerchantTicketMessage;
 use App\Services\AuditLogService;
 use App\Services\MerchantTicketService;
 use App\Services\Navigation\MenuBuilder;
@@ -72,10 +73,12 @@ class MerchantTicketController extends Controller
         return redirect()->route('merchant.tickets.show', [$merchant, $ticket])->with('status', 'Tiket berhasil dibuat: '.$ticket->ticket_no);
     }
 
-    public function show(Request $request, Merchant $merchant, MerchantTicket $ticket, MenuBuilder $menus): View
+    public function show(Request $request, Merchant $merchant, MerchantTicket $ticket, MenuBuilder $menus, MerchantTicketService $tickets): View
     {
         abort_unless($merchant->general_ticket_enabled, 404);
         abort_unless((int) $ticket->merchant_id === (int) $merchant->id, 404);
+
+        $tickets->markViewed($ticket, $request->user());
 
         return view('paygrid.merchant-ticket-show', [
             'roleLabel' => $merchant->name.' - Tickets',
@@ -83,6 +86,7 @@ class MerchantTicketController extends Controller
             'menus' => $this->menusFor($request, $merchant, $menus),
             'active' => $this->activeFor($request),
             'ticket' => $ticket->load(['messages' => fn ($query) => $query->where('is_internal', false), 'messages.user']),
+            'views' => $ticket->views()->with('user')->get()->keyBy('user_id'),
         ]);
     }
 
@@ -111,6 +115,18 @@ class MerchantTicketController extends Controller
         $tickets->addMessage($ticket, $request->user(), $data['body'], false);
 
         return back()->with('status', 'Balasan terkirim.');
+    }
+
+    public function updateMessage(Request $request, Merchant $merchant, MerchantTicket $ticket, MerchantTicketMessage $message, MerchantTicketService $tickets): RedirectResponse
+    {
+        abort_unless($merchant->general_ticket_enabled, 404);
+        abort_unless((int) $ticket->merchant_id === (int) $merchant->id, 404);
+        abort_unless($message->merchant_ticket_id === $ticket->id && ! $message->is_internal, 404);
+
+        $data = $request->validate(['body' => ['required', 'string', 'max:2000']]);
+        $tickets->editMessage($message, $request->user(), $data['body']);
+
+        return back()->with('status', 'Balasan diperbarui.');
     }
 
     public function attachment(Merchant $merchant, MerchantTicket $ticket, int $index): StreamedResponse

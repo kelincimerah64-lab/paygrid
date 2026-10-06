@@ -95,6 +95,7 @@ Route::post('/tickets/{ticket}/reject', [MaWaTicketController::class, 'reject'])
 Route::middleware(['auth', 'role:ma,cs_pusat,superadmin'])->group(function () {
 Route::post('/tickets/{ticket}/claim', [MaWaTicketController::class, 'claim'])->middleware('throttle:dashboard-writes')->name('wa-tickets.claim');
 Route::post('/tickets/{ticket}/reply', [MaWaTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('wa-tickets.reply');
+Route::patch('/tickets/{ticket}/messages/{message}', [MaWaTicketController::class, 'updateMessage'])->middleware('throttle:dashboard-writes')->name('wa-tickets.messages.update');
 Route::post('/tickets/{ticket}/transfer', [MaWaTicketController::class, 'transfer'])->middleware('throttle:dashboard-writes')->name('wa-tickets.transfer');
 Route::post('/tickets/{ticket}/close', [MaWaTicketController::class, 'close'])->middleware('throttle:dashboard-writes')->name('wa-tickets.close');
 });
@@ -187,6 +188,7 @@ Route::get('/portal/{merchant}/tickets', [MerchantTicketController::class, 'inde
 Route::post('/portal/{merchant}/tickets', [MerchantTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.store');
 Route::get('/portal/{merchant}/tickets/{ticket}', [MerchantTicketController::class, 'show'])->name('merchant.tickets.show');
 Route::post('/portal/{merchant}/tickets/{ticket}/reply', [MerchantTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.reply');
+Route::patch('/portal/{merchant}/tickets/{ticket}/messages/{message}', [MerchantTicketController::class, 'updateMessage'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.messages.update');
 Route::get('/portal/{merchant}/tickets/{ticket}/attachment/{index}', [MerchantTicketController::class, 'attachment'])->whereNumber('index')->name('merchant.tickets.attachment');
 });
 

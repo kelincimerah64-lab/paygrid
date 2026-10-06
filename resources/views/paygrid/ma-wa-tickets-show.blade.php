@@ -10,6 +10,10 @@
     $toToko = $ticket->messages->where('is_internal', false);
     $internal = $ticket->messages->where('is_internal', true);
     $initials = fn (?string $name) => $name ? strtoupper(substr(trim($name), 0, 1).substr(trim(strrchr(' '.$name, ' ')), 1, 1)) : '?';
+    $readersFor = function ($message) use ($views) {
+        return $views->filter(fn ($v) => $v->user_id !== $message->user_id && $v->last_viewed_at->gte($message->created_at))
+            ->map(fn ($v) => $v->user?->name)->filter()->values();
+    };
 @endphp
 
 @section('content')
@@ -133,11 +137,25 @@
     <div data-wa-panel="toko">
         <div class="wat-thread">
             @forelse($toToko as $message)
-                @if($message->is_staff === false)
-                    <div class="wat-msg in" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}"><span class="wat-msg-who">{{ $message->user->name ?? 'Toko' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
-                @else
-                    <div class="wat-msg out" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}"><span class="wat-msg-who">Tim {{ ucfirst($ticket->department) }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
-                @endif
+                @php $isMine = $message->user_id === auth()->id(); $readers = $readersFor($message); @endphp
+                <div class="wat-msg {{ $message->is_staff === false ? 'in' : 'out' }}" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}">
+                    <span class="wat-msg-who">{{ $message->is_staff === false ? ($message->user->name ?? 'Toko') : 'Tim '.ucfirst($ticket->department) }}</span>
+                    <span class="wat-msg-body" data-msg-body>{{ $message->body }}</span>
+                    @if($isMine)
+                        <form method="post" action="{{ route('wa-tickets.messages.update', [$ticket, $message]) }}" class="wat-msg-edit-form" data-live-form hidden>
+                            @csrf @method('PATCH')
+                            <textarea name="body" maxlength="2000" required>{{ $message->body }}</textarea>
+                            <div class="wat-msg-edit-actions">
+                                <button type="submit" class="wat-btn compact-btn primary">Simpan</button>
+                                <button type="button" class="wat-btn compact-btn wat-msg-edit-cancel">Batal</button>
+                            </div>
+                        </form>
+                    @endif
+                    <span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}@if($message->edited_at) &middot; <em>diedit</em>@endif @if($isMine) &middot; <button type="button" class="wat-msg-edit-trigger">Edit</button>@endif</span>
+                    @if($readers->isNotEmpty())
+                        <span class="wat-msg-read">&#128065; Dibaca: {{ $readers->join(', ') }}</span>
+                    @endif
+                </div>
             @empty
                 <p class="wat-empty">Belum ada pesan ke toko.</p>
             @endforelse
@@ -161,7 +179,25 @@
     <div data-wa-panel="internal" hidden>
         <div class="wat-thread">
             @forelse($internal as $message)
-                <div class="wat-msg internal {{ $message->user_id === auth()->id() ? 'mine' : '' }}" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}"><span class="wat-msg-who">{{ $message->user->name ?? 'Sistem' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
+                @php $isMine = $message->user_id === auth()->id(); $readers = $readersFor($message); @endphp
+                <div class="wat-msg internal {{ $isMine ? 'mine' : '' }}" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}">
+                    <span class="wat-msg-who">{{ $message->user->name ?? 'Sistem' }}</span>
+                    <span class="wat-msg-body" data-msg-body>{{ $message->body }}</span>
+                    @if($isMine)
+                        <form method="post" action="{{ route('wa-tickets.messages.update', [$ticket, $message]) }}" class="wat-msg-edit-form" data-live-form hidden>
+                            @csrf @method('PATCH')
+                            <textarea name="body" maxlength="2000" required>{{ $message->body }}</textarea>
+                            <div class="wat-msg-edit-actions">
+                                <button type="submit" class="wat-btn compact-btn primary">Simpan</button>
+                                <button type="button" class="wat-btn compact-btn wat-msg-edit-cancel">Batal</button>
+                            </div>
+                        </form>
+                    @endif
+                    <span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}@if($message->edited_at) &middot; <em>diedit</em>@endif @if($isMine) &middot; <button type="button" class="wat-msg-edit-trigger">Edit</button>@endif</span>
+                    @if($readers->isNotEmpty())
+                        <span class="wat-msg-read">&#128065; Dibaca: {{ $readers->join(', ') }}</span>
+                    @endif
+                </div>
             @empty
                 <p class="wat-empty">Belum ada diskusi internal. Cuma tim CS yang lihat ini, toko nggak bisa baca.</p>
             @endforelse
@@ -188,6 +224,37 @@
     var root = document.querySelector('[data-live-root]');
     var lastMsgCounts = { toko: null, internal: null };
     var audioCtx = null;
+
+    function setupMessageEdit() {
+        document.querySelectorAll('.wat-msg-edit-trigger').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var msg = btn.closest('.wat-msg');
+                if (!msg) return;
+                var body = msg.querySelector('[data-msg-body]');
+                var time = msg.querySelector('.wat-msg-time');
+                var form = msg.querySelector('.wat-msg-edit-form');
+                if (body) body.hidden = true;
+                if (time) time.hidden = true;
+                if (form) {
+                    form.hidden = false;
+                    var textarea = form.querySelector('textarea');
+                    if (textarea) textarea.focus();
+                }
+            });
+        });
+        document.querySelectorAll('.wat-msg-edit-cancel').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var msg = btn.closest('.wat-msg');
+                if (!msg) return;
+                var body = msg.querySelector('[data-msg-body]');
+                var time = msg.querySelector('.wat-msg-time');
+                var form = msg.querySelector('.wat-msg-edit-form');
+                if (form) form.hidden = true;
+                if (body) body.hidden = false;
+                if (time) time.hidden = false;
+            });
+        });
+    }
 
     function playNotifSound() {
         try {
@@ -304,10 +371,12 @@
     setupTabs();
     setupFilter();
     setupThreadNotifications();
+    setupMessageEdit();
     if (root) root.addEventListener('paygrid:refreshed', function () {
         setupTabs();
         setupFilter();
         setupThreadNotifications();
+        setupMessageEdit();
     });
 })();
 </script>

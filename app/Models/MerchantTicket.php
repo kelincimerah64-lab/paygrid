@@ -68,4 +68,9 @@ class MerchantTicket extends Model
     {
         return $this->hasMany(MerchantTicketMessage::class)->orderBy('created_at');
     }
+
+    public function views(): HasMany
+    {
+        return $this->hasMany(MerchantTicketView::class);
+    }
 }

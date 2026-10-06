@@ -229,6 +229,27 @@ class MerchantTicketTest extends TestCase
         $thread->assertSee('Update resmi buat toko.')->assertDontSee('Catatan internal rahasia, toko nggak boleh lihat.');
     }
 
+    public function test_merchant_can_edit_their_own_reply_but_not_a_staff_message(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
+        ]);
+        $staffMessage = app(\App\Services\MerchantTicketService::class)->addMessage($ticket, $ma, 'Update dari staff.', true, false);
+        $storeMessage = app(\App\Services\MerchantTicketService::class)->addMessage($ticket, $admin, 'Balasan toko.', false, false);
+
+        $this->actingAs($admin)->patch(route('merchant.tickets.messages.update', [$merchant, $ticket, $storeMessage]), ['body' => 'Balasan toko (revisi).'])
+            ->assertRedirect();
+        $this->assertSame('Balasan toko (revisi).', $storeMessage->fresh()->body);
+        $this->assertNotNull($storeMessage->fresh()->edited_at);
+
+        $this->actingAs($admin)->patch(route('merchant.tickets.messages.update', [$merchant, $ticket, $staffMessage]), ['body' => 'Coba edit punya staff.'])
+            ->assertForbidden();
+    }
+
     public function test_closed_ticket_rejects_store_reply_until_reopened(): void
     {
         $this->seed();

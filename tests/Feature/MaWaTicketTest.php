@@ -466,4 +466,47 @@ class MaWaTicketTest extends TestCase
         $this->assertSame('handling-group@g.us', $ticket->wa_active_chat_id);
         $this->assertSame(0, $ticket->wa_reminder_stage);
     }
+
+    public function test_staff_can_edit_their_own_message_but_not_a_teammates(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $other = User::factory()->create(['role' => 'cs_pusat', 'is_active' => true]);
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
+        ]);
+        $message = app(\App\Services\MerchantTicketService::class)->addMessage($ticket, $ma, 'Diskusi awal.', true, true);
+
+        $this->actingAs($ma)->patch(route('wa-tickets.messages.update', [$ticket, $message]), ['body' => 'Diskusi awal (diperbaiki).'])
+            ->assertRedirect();
+        $message->refresh();
+        $this->assertSame('Diskusi awal (diperbaiki).', $message->body);
+        $this->assertNotNull($message->edited_at);
+
+        $this->actingAs($other)->patch(route('wa-tickets.messages.update', [$ticket, $message]), ['body' => 'Coba edit punya orang lain.'])
+            ->assertForbidden();
+        $this->assertSame('Diskusi awal (diperbaiki).', $message->fresh()->body);
+    }
+
+    public function test_show_records_a_view_and_read_by_reflects_who_has_seen_each_message(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $cs = User::factory()->create(['role' => 'cs_pusat', 'name' => 'Rama CS', 'is_active' => true]);
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
+        ]);
+        app(\App\Services\MerchantTicketService::class)->addMessage($ticket, $ma, 'Pesan pertama.', true, true);
+
+        // Nobody else has viewed yet.
+        $this->actingAs($ma)->get(route('wa-tickets.show', $ticket))->assertOk()->assertDontSee('Dibaca:');
+
+        // CS opens the ticket - now the MA's own next load should show "read by Rama CS".
+        $this->actingAs($cs)->get(route('wa-tickets.show', $ticket))->assertOk();
+        $this->assertDatabaseHas('merchant_ticket_views', ['merchant_ticket_id' => $ticket->id, 'user_id' => $cs->id]);
+
+        $this->actingAs($ma)->get(route('wa-tickets.show', $ticket))->assertOk()->assertSee('Rama CS');
+    }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\NotifyWaTicketLink;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
+use App\Models\MerchantTicketMessage;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\MerchantTicketService;
@@ -121,7 +122,7 @@ class MaWaTicketController extends Controller
         return redirect()->route('wa-tickets.show', $ticket)->with('status', $status);
     }
 
-    public function show(Request $request, MerchantTicket $ticket, MenuBuilder $menus): View
+    public function show(Request $request, MerchantTicket $ticket, MenuBuilder $menus, MerchantTicketService $tickets): View
     {
         $user = $request->user();
         $this->authorizeTicket($user, $ticket);
@@ -131,6 +132,8 @@ class MaWaTicketController extends Controller
             default => ['MA', $menus->ma(), 'wa-tickets'],
         };
 
+        $tickets->markViewed($ticket, $user);
+
         return view('paygrid.ma-wa-tickets-show', [
             'roleLabel' => $roleLabel,
             'menus' => $menus,
@@ -138,6 +141,7 @@ class MaWaTicketController extends Controller
             'canApprove' => in_array($user->role, ['approver', 'superadmin'], true),
             'isCreator' => $ticket->created_by_user_id === $user->id,
             'ticket' => $ticket->load(['merchant', 'claimedBy', 'messages.user']),
+            'views' => $ticket->views()->with('user')->get()->keyBy('user_id'),
             'teammates' => $this->teammates(),
         ]);
     }
@@ -212,6 +216,17 @@ class MaWaTicketController extends Controller
         $tickets->addMessage($ticket, $request->user(), $data['body'], true, $isInternal);
 
         return back()->with('status', 'Pesan terkirim.');
+    }
+
+    public function updateMessage(Request $request, MerchantTicket $ticket, MerchantTicketMessage $message, MerchantTicketService $tickets): RedirectResponse
+    {
+        $this->authorizeTicket($request->user(), $ticket);
+        abort_unless($message->merchant_ticket_id === $ticket->id, 404);
+
+        $data = $request->validate(['body' => ['required', 'string', 'max:2000']]);
+        $tickets->editMessage($message, $request->user(), $data['body']);
+
+        return back()->with('status', 'Pesan diperbarui.');
     }
 
     public function transfer(Request $request, MerchantTicket $ticket, MerchantTicketService $tickets): RedirectResponse

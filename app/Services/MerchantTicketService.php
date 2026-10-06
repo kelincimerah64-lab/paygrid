@@ -6,6 +6,7 @@ use App\Jobs\NotifyIpWhitelistApproval;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
 use App\Models\MerchantTicketMessage;
+use App\Models\MerchantTicketView;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 
@@ -324,6 +325,24 @@ class MerchantTicketService
         $ticket->save();
 
         return $message;
+    }
+
+    /**
+     * Only the message's own author may edit it - no time limit, matching the
+     * WhatsApp-style "edited" tag UX rather than a hard edit window.
+     */
+    public function editMessage(MerchantTicketMessage $message, User $user, string $body): void
+    {
+        abort_unless($message->user_id === $user->id, 403);
+        $message->forceFill(['body' => $body, 'edited_at' => now()])->save();
+    }
+
+    public function markViewed(MerchantTicket $ticket, User $user): void
+    {
+        MerchantTicketView::query()->updateOrCreate(
+            ['merchant_ticket_id' => $ticket->id, 'user_id' => $user->id],
+            ['last_viewed_at' => now()],
+        );
     }
 
     /**

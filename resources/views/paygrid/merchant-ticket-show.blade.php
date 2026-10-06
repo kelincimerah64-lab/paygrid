@@ -12,6 +12,10 @@
     $approvalLabel = match ($ticket->approval_status) { 'waiting' => 'Menunggu Approval', 'approved' => 'Disetujui', 'rejected' => 'Ditolak', default => null };
     $approvalClass = match ($ticket->approval_status) { 'approved' => 'ok', 'rejected' => 'danger', default => 'warn' };
     $ticketsService = app(App\Services\MerchantTicketService::class);
+    $readersFor = function ($message) use ($views) {
+        return $views->filter(fn ($v) => $v->user_id !== $message->user_id && $v->last_viewed_at->gte($message->created_at))
+            ->map(fn ($v) => $v->user?->name)->filter()->values();
+    };
 @endphp
 
 @section('content')
@@ -58,9 +62,23 @@
     <div class="qris-toolbar"><h2>Percakapan</h2></div>
     <div class="ticket-thread">
         @forelse($ticket->messages as $message)
+            @php $isMine = $message->user_id === auth()->id(); $readers = $readersFor($message); @endphp
             <div class="ticket-message {{ $message->is_staff ? 'staff' : 'store' }}">
-                <div class="ticket-message-meta"><strong>{{ $message->is_staff ? $deptLabel : ($message->user->name ?? 'Toko') }}</strong><span class="muted">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</span></div>
-                <div class="ticket-message-body">{{ $message->body }}</div>
+                <div class="ticket-message-meta"><strong>{{ $message->is_staff ? $deptLabel : ($message->user->name ?? 'Toko') }}</strong><span class="muted">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}@if($message->edited_at) &middot; diedit @endif @if($isMine) &middot; <button type="button" class="ticket-message-edit-trigger" data-edit-trigger>Edit</button>@endif</span></div>
+                <div class="ticket-message-body" data-msg-body>{{ $message->body }}</div>
+                @if($isMine)
+                    <form method="post" action="{{ route('merchant.tickets.messages.update', [$merchant, $ticket, $message]) }}" class="ticket-message-edit-form" hidden>
+                        @csrf @method('PATCH')
+                        <textarea name="body" maxlength="2000" required>{{ $message->body }}</textarea>
+                        <div class="ticket-message-edit-actions">
+                            <button type="submit" class="primary">Simpan</button>
+                            <button type="button" class="cancel" data-edit-cancel>Batal</button>
+                        </div>
+                    </form>
+                @endif
+                @if($readers->isNotEmpty())
+                    <span class="ticket-message-read">&#128065; Dibaca: {{ $readers->join(', ') }}</span>
+                @endif
             </div>
         @empty
             <p class="muted">Belum ada balasan.</p>
@@ -78,3 +96,34 @@
     @endif
 </section>
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    document.querySelectorAll('[data-edit-trigger]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var msg = btn.closest('.ticket-message');
+            if (!msg) return;
+            var body = msg.querySelector('[data-msg-body]');
+            var form = msg.querySelector('.ticket-message-edit-form');
+            if (body) body.hidden = true;
+            if (form) {
+                form.hidden = false;
+                var textarea = form.querySelector('textarea');
+                if (textarea) textarea.focus();
+            }
+        });
+    });
+    document.querySelectorAll('[data-edit-cancel]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var msg = btn.closest('.ticket-message');
+            if (!msg) return;
+            var body = msg.querySelector('[data-msg-body]');
+            var form = msg.querySelector('.ticket-message-edit-form');
+            if (form) form.hidden = true;
+            if (body) body.hidden = false;
+        });
+    });
+})();
+</script>
+@endpush

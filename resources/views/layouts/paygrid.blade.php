@@ -585,6 +585,14 @@
         .ticket-message-meta { display:flex; justify-content:space-between; gap:14px; font-size:11px; color:var(--muted); margin-bottom:4px; }
         .ticket-message-meta strong { color:var(--ink); font-size:12px; }
         .ticket-message-body { font-size:13px; white-space:pre-wrap; color:var(--ink); }
+        .ticket-message-read { display:block; font-size:10.5px; color:var(--muted); margin-top:5px; }
+        .ticket-message-edit-trigger { border:none; background:transparent; padding:0; font:inherit; font-size:11px; font-weight:700; text-decoration:underline; cursor:pointer; color:var(--blue); }
+        .ticket-message-edit-form { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+        .ticket-message-edit-form textarea { width:100%; min-height:54px; border-radius:7px; border:1px solid var(--line); padding:7px 9px; font:inherit; font-size:12.5px; resize:vertical; }
+        .ticket-message-edit-actions { display:flex; gap:8px; }
+        .ticket-message-edit-actions button { border:none; border-radius:7px; padding:5px 10px; font-size:11.5px; font-weight:800; cursor:pointer; }
+        .ticket-message-edit-actions .primary { background:var(--blue); color:#fff; }
+        .ticket-message-edit-actions .cancel { background:#eef1f6; color:var(--ink); }
 
         /* ---------- WA Tiket pilot ---------- */
         .wat-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
@@ -650,6 +658,16 @@
         .wat-msg .wat-msg-who { display:block; font-size:10.5px; font-weight:800; opacity:.85; margin-bottom:3px; }
         .wat-msg.out .wat-msg-who { color:#dce8ff; }
         .wat-msg .wat-msg-time { display:block; font-size:9.5px; opacity:.65; margin-top:5px; }
+        .wat-msg-time .wat-msg-edit-trigger { border:none; background:transparent; padding:0; font:inherit; font-weight:800; text-decoration:underline; cursor:pointer; color:inherit; opacity:.9; }
+        .wat-msg-body { white-space:pre-wrap; }
+        .wat-msg-read { display:block; font-size:9.5px; opacity:.65; margin-top:3px; }
+        .wat-msg-edit-form { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+        .wat-msg-edit-form textarea { width:100%; min-height:54px; border-radius:8px; border:1px solid rgba(255,255,255,.4); padding:7px 9px; font:inherit; font-size:12.5px; resize:vertical; color:var(--ink); }
+        .wat-msg.in .wat-msg-edit-form textarea, .wat-msg.internal:not(.mine) .wat-msg-edit-form textarea { border-color:var(--line); }
+        .wat-msg-edit-actions { display:flex; gap:8px; }
+        .wat-msg-edit-actions button { border:none; border-radius:7px; padding:5px 10px; font-size:11.5px; font-weight:800; cursor:pointer; }
+        .wat-msg-edit-actions .primary { background:#fff; color:var(--blue); }
+        .wat-msg-edit-actions .wat-msg-edit-cancel { background:rgba(255,255,255,.25); color:inherit; }
         .wat-empty { text-align:center; color:var(--muted); font-size:13px; padding:30px 0; }
         .wat-new-msg-banner { position:sticky; bottom:2px; align-self:center; display:inline-flex; align-items:center; gap:6px; border:none; border-radius:999px; padding:7px 14px; background:var(--blue); color:#fff; font-size:12px; font-weight:800; cursor:pointer; box-shadow:0 4px 14px rgba(21,87,194,.35); }
         .wat-new-msg-banner[hidden] { display:none; }
