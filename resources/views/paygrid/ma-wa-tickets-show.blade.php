@@ -225,6 +225,11 @@
     var lastMsgCounts = { toko: null, internal: null };
     var audioCtx = null;
 
+    function autoGrow(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }
+
     function setupMessageEdit() {
         document.querySelectorAll('.wat-msg-edit-trigger').forEach(function (btn) {
             btn.addEventListener('click', function () {
@@ -238,7 +243,12 @@
                 if (form) {
                     form.hidden = false;
                     var textarea = form.querySelector('textarea');
-                    if (textarea) textarea.focus();
+                    if (textarea) {
+                        autoGrow(textarea);
+                        textarea.addEventListener('input', function () { autoGrow(textarea); });
+                        textarea.focus();
+                        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                    }
                 }
             });
         });

@@ -100,6 +100,11 @@
 @push('scripts')
 <script>
 (function () {
+    function autoGrow(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }
+
     document.querySelectorAll('[data-edit-trigger]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var msg = btn.closest('.ticket-message');
@@ -110,7 +115,12 @@
             if (form) {
                 form.hidden = false;
                 var textarea = form.querySelector('textarea');
-                if (textarea) textarea.focus();
+                if (textarea) {
+                    autoGrow(textarea);
+                    textarea.addEventListener('input', function () { autoGrow(textarea); });
+                    textarea.focus();
+                    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                }
             }
         });
     });
