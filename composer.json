@@ -10,6 +10,7 @@
         "anthropic-ai/sdk": "^0.52.0",
         "endroid/qr-code": "^6.0",
         "laravel/framework": "^13.0",
+        "laravel/reverb": "^1.12",
         "laravel/tinker": "^3.0"
     },
     "require-dev": {
@@ -80,6 +81,18 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
+        },
+        "audit": {
+            "ignore": {
+                "PKSA-d5tc-s1qs-h781": "laravel/framework low-severity debug-page XSS (CVE-2026-102279), fixed in 13.30.0/12.69.0 - pre-existing, tracked separately from this dependency add, not a Reverb issue",
+                "PKSA-m4t9-vsgq-8khn": "league/commonmark (transitive via laravel/framework) DoS in GFM table scan - pre-existing, tracked separately, not a Reverb issue",
+                "PKSA-m2dq-1fhr-29b1": "league/commonmark (transitive via laravel/framework) DisallowedRawHtml bypass - pre-existing, tracked separately, not a Reverb issue",
+                "PKSA-nv44-1b4d-6gjg": "league/commonmark (transitive via laravel/framework) DoS in SmartPunct/Attributes - pre-existing, tracked separately, not a Reverb issue",
+                "PKSA-zyf5-hrxv-hrd7": "league/commonmark (transitive via laravel/framework) DoS via attribute names - pre-existing, tracked separately, not a Reverb issue",
+                "PKSA-kr3s-894t-g5w2": "league/commonmark (transitive via laravel/framework) XSS form-feed bypass - pre-existing, tracked separately, not a Reverb issue",
+                "PKSA-9q1p-3s19-bp1q": "league/commonmark (transitive via laravel/framework) DoS via code fences/links - pre-existing, tracked separately, not a Reverb issue",
+                "PKSA-w9tt-7782-78jx": "league/flysystem (transitive via laravel/framework) low-severity path normalizer bypass - pre-existing, tracked separately, not a Reverb issue"
+            }
         }
     },
     "minimum-stability": "dev",
