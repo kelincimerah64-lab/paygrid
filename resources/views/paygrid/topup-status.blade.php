@@ -154,6 +154,18 @@
     startCountdown();
     if (@json($topupRequest->status) === 'success') showModal('Pembayaran Berhasil', 'Pembayaran berhasil kami terima.', false, 'success');
     if (@json($topupRequest->status) === 'expired') showModal('QRIS Expired', 'QRIS sudah kedaluwarsa. Generate ulang QR untuk melanjutkan pembayaran.', true, 'expired');
+
+    // Mobile browsers (esp. WhatsApp's in-app browser) freeze setTimeout polling
+    // while this tab is backgrounded. Without this, reopening a long-idle tab
+    // shows whatever stale status was last rendered before it was backgrounded,
+    // instead of the server's current truth - force an immediate re-check.
+    const recheckIfStillOpen = () => {
+        if (document.visibilityState === 'visible' && !finalStatuses.includes(statusNode.textContent.toLowerCase())) {
+            refreshTopupStatus();
+        }
+    };
+    document.addEventListener('visibilitychange', recheckIfStillOpen);
+    window.addEventListener('pageshow', recheckIfStillOpen);
 </script>
 </body>
 </html>
