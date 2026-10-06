@@ -27,7 +27,7 @@ class NotifyWaTicketLink implements ShouldQueue
 
     public int $tries = 3;
 
-    public int $timeout = 15;
+    public int $timeout = 45; // 'reminder' and 'approved' each make two sequential WA calls, up to 20s each
 
     public function __construct(
         public readonly int $ticketId,

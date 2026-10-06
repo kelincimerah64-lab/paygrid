@@ -29,7 +29,7 @@ class WhatsAppNotifier
         }
 
         try {
-            $response = Http::timeout(8)
+            $response = Http::timeout(20)
                 ->withHeaders(['X-Api-Key' => $apiKey])
                 ->post($apiUrl.'/api/sendText', [
                     'session' => $session,
@@ -37,7 +37,9 @@ class WhatsAppNotifier
                     'text' => $message,
                 ])->throw();
 
-            return $response->json('id');
+            // WAHA's sendText response nests the id ({"id":{"id":"...", "_serialized":"true_123@g.us_ABC"}});
+            // the edit/delete endpoints need the full "_serialized" form, not the bare inner id.
+            return $response->json('id._serialized');
         } catch (\Throwable $exception) {
             Log::warning('paygrid.whatsapp.send_failed', ['group_id' => $groupId, 'message' => $exception->getMessage()]);
 
@@ -56,7 +58,10 @@ class WhatsAppNotifier
         }
 
         try {
-            Http::timeout(8)
+            // Edit round-trips through WhatsApp's own network (not just WAHA's local
+            // state) and measured ~5s in production - an 8s timeout here intermittently
+            // failed real edits.
+            Http::timeout(20)
                 ->withHeaders(['X-Api-Key' => $apiKey])
                 ->put($apiUrl.'/api/'.$session.'/chats/'.rawurlencode($chatId).'/messages/'.rawurlencode($messageId), [
                     'text' => $text,
@@ -81,7 +86,7 @@ class WhatsAppNotifier
         }
 
         try {
-            Http::timeout(8)
+            Http::timeout(20)
                 ->withHeaders(['X-Api-Key' => $apiKey])
                 ->delete($apiUrl.'/api/'.$session.'/chats/'.rawurlencode($chatId).'/messages/'.rawurlencode($messageId))
                 ->throw();
