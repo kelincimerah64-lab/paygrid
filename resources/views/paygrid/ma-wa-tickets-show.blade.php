@@ -135,7 +135,7 @@
     </div>
 
     <div data-wa-panel="toko">
-        <div class="wat-thread" data-live-scroll>
+        <div class="wat-thread" data-live-scroll data-live-background-ok>
             @forelse($toToko as $message)
                 @php $isMine = $message->user_id === auth()->id(); $readers = $readersFor($message); @endphp
                 <div class="wat-msg {{ $message->is_staff === false ? 'in' : 'out' }}" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}">
@@ -167,7 +167,7 @@
                 <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer" data-live-form data-scroll-to-bottom>
                     @csrf
                     <input type="hidden" name="is_internal" value="0">
-                    <textarea name="body" data-preserve-key="wat-reply-toko" maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
+                    <textarea name="body" data-preserve-key="wat-reply-toko" data-live-background-ok maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
                     <button class="wat-btn primary" type="submit">Kirim</button>
                 </form>
             @else
@@ -177,7 +177,7 @@
     </div>
 
     <div data-wa-panel="internal" hidden>
-        <div class="wat-thread" data-live-scroll>
+        <div class="wat-thread" data-live-scroll data-live-background-ok>
             @forelse($internal as $message)
                 @php $isMine = $message->user_id === auth()->id(); $readers = $readersFor($message); @endphp
                 <div class="wat-msg internal {{ $isMine ? 'mine' : '' }}" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}">
@@ -208,7 +208,7 @@
             <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer internal" data-live-form data-scroll-to-bottom>
                 @csrf
                 <input type="hidden" name="is_internal" value="1">
-                <textarea name="body" data-preserve-key="wat-reply-internal" maxlength="2000" required placeholder="Diskusi internal (toko nggak lihat)..."></textarea>
+                <textarea name="body" data-preserve-key="wat-reply-internal" data-live-background-ok maxlength="2000" required placeholder="Diskusi internal (toko nggak lihat)..."></textarea>
                 <button class="wat-btn outline" type="submit">Kirim</button>
             </form>
         @endif

@@ -3,10 +3,21 @@
     const escape = (value) => window.CSS?.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\"');
     const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-    const shouldPause = (root) => document.hidden
-        || root.querySelector('[data-live-modal]:not([hidden])')
-        || root.querySelector('.table-wrap:hover')
-        || root.contains(document.activeElement) && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(document.activeElement?.tagName || '');
+    // [data-live-background-ok] opts an element (and, for pointer/focus
+    // interactions, its whole subtree) out of the pause-while-interacting
+    // guards below - for content where a background swap is safe because its
+    // state (scroll position, field values) is independently preserved, e.g.
+    // a chat thread/composer, vs. a table mid-sort or a dropdown held open.
+    const shouldPause = (root) => {
+        if (document.hidden) return true;
+        if (root.querySelector('[data-live-modal]:not([hidden])')) return true;
+        if (root.querySelector('.table-wrap:hover')) return true;
+        const active = document.activeElement;
+
+        return root.contains(active)
+            && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(active?.tagName || '')
+            && !active.hasAttribute('data-live-background-ok');
+    };
     const now = () => Date.now();
     const markInteraction = (root) => {
         root.dataset.livePauseUntil = String(now() + 10000);
@@ -208,12 +219,15 @@
             runRefresh();
         };
 
+        const markUnlessBackgroundOk = (event) => {
+            if (!event.target.closest('[data-live-background-ok]')) markInteraction(root);
+        };
         root.querySelectorAll('[data-live-region]').forEach((region) => {
-            region.addEventListener('pointerenter', () => markInteraction(root));
-            region.addEventListener('pointermove', () => markInteraction(root));
-            region.addEventListener('focusin', () => markInteraction(root));
-            region.addEventListener('wheel', () => markInteraction(root), { passive: true });
-            region.addEventListener('touchstart', () => markInteraction(root), { passive: true });
+            region.addEventListener('pointerenter', markUnlessBackgroundOk);
+            region.addEventListener('pointermove', markUnlessBackgroundOk);
+            region.addEventListener('focusin', markUnlessBackgroundOk);
+            region.addEventListener('wheel', markUnlessBackgroundOk, { passive: true });
+            region.addEventListener('touchstart', markUnlessBackgroundOk, { passive: true });
         });
         window.setInterval(runRefresh, Number(root.dataset.liveInterval || 15000));
         document.addEventListener('visibilitychange', refreshWhenVisible);
