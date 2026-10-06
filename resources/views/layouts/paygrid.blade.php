@@ -74,6 +74,15 @@
         @container (max-width: 150px) { .metric strong { font-size:15px; } }
         @container (max-width: 120px) { .metric strong { font-size:12px; } }
         .metric label, th, label, .label { font-size:12px; letter-spacing:.05em; color:#26364f; text-transform:uppercase; font-weight:900; }
+        /* A bare <label>Text<input></label> (no wrapping form class) falls
+           back to inline display - text and input squeeze onto one line,
+           clipping the input's value. Every form-wrapper class in this file
+           opts into stacking individually (search "label { display:grid"
+           below) and new ones keep missing it - default it here instead,
+           scoped to labels that actually wrap a control so plain captions
+           (.metric label, .label) and <th> are untouched. Lower-specificity
+           tie with per-form overrides below means their own gap wins where set. */
+        label:has(input, select, textarea) { display:grid; gap:8px; margin:0; }
         .metric.blue { background:linear-gradient(135deg, #1f6fe5, #1557c2); color:#fff; border-color:#1d67d7; }
         .metric.success { background:#ecfff5; border-color:#a4ebc4; }
         .metric.warn-soft { background:#fff9e9; border-color:#ffd46d; }
