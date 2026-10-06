@@ -21,6 +21,7 @@ use App\Http\Controllers\MaController;
 use App\Http\Controllers\MaAssistantController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\SuperadminController;
+use App\Http\Controllers\TelegramCsMonitorController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
@@ -113,6 +114,11 @@ Route::post('/superadmin/accounts/{user}/reset', [SuperadminController::class, '
 Route::post('/superadmin/fee-menus', [SuperadminController::class, 'storeFeeMenu'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.store');
 Route::post('/superadmin/fee-menus/settings', [SuperadminController::class, 'updateFeeMenuSettings'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.settings');
 Route::delete('/superadmin/fee-menus/{feeMenu}', [SuperadminController::class, 'destroyFeeMenu'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.destroy');
+});
+
+Route::middleware(['auth', 'role:cs_monitor,superadmin'])->group(function () {
+Route::get('/cs-monitor', [TelegramCsMonitorController::class, 'index'])->name('cs-monitor.index');
+Route::post('/cs-monitor/{telegramUser}/generate-pin', [TelegramCsMonitorController::class, 'generatePin'])->middleware('throttle:dashboard-writes')->name('cs-monitor.generate-pin');
 });
 
 Route::middleware(['auth', 'role:cs_pusat,ma,superadmin'])->group(function () {

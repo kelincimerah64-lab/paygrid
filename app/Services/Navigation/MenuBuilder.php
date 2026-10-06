@@ -59,6 +59,13 @@ class MenuBuilder
         ];
     }
 
+    public function csMonitor(): array
+    {
+        return [
+            ['key' => 'cs-monitor', 'label' => 'Monitor CS Absen', 'url' => route('cs-monitor.index')],
+        ];
+    }
+
     public function centerSupport(): array
     {
         $pendingAuto = SupportTicket::query()->whereNotNull('submitted_to_center_at')->whereNull('center_updated_at')->count();
