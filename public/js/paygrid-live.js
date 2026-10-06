@@ -115,8 +115,15 @@
             if (next && region.innerHTML !== next.innerHTML) region.innerHTML = next.innerHTML;
         });
         restoreFields(root, fields);
-        restoreScroll(root, scroll, stickToBottom);
+        // Fires before restoreScroll on purpose: a swapped-in region re-renders
+        // with the server's unconditional default visibility (e.g. a hidden
+        // inactive tab panel), and page-specific listeners on this event (like
+        // re-selecting the active tab) are what correct that. scrollTop set on
+        // a still-hidden (display:none) element is silently dropped by the
+        // browser, so restoring scroll position has to wait until after those
+        // listeners have made the right element visible again.
         root.dispatchEvent(new CustomEvent('paygrid:refreshed', { bubbles: true }));
+        restoreScroll(root, scroll, stickToBottom);
     };
 
     const setupAutoFilters = () => {
