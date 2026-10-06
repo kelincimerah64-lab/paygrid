@@ -12,12 +12,13 @@
     <div class="qris-toolbar"><h2>Belum Terverifikasi</h2><div class="muted">Masih di grup, belum selesai /activate. Perhatikan - ini calon penyusup.</div></div>
     <div class="table-wrap">
         <table class="table qris-table">
-            <thead><tr><th>Nama Telegram</th><th>Telegram ID</th><th>Masuk Grup</th><th>PIN</th><th>Aksi</th></tr></thead>
+            <thead><tr><th>Nama Telegram</th><th>Telegram ID</th><th>Tercatat</th><th>Masuk Grup</th><th>PIN</th><th>Aksi</th></tr></thead>
             <tbody>
             @forelse($suspects as $telegramUser)
                 <tr>
                     <td><strong>{{ $telegramUser->displayName() }}</strong></td>
                     <td><code>{{ $telegramUser->telegram_user_id }}</code></td>
+                    <td>{{ $telegramUser->created_at->timezone('Asia/Jakarta')->format('d/m/y H:i') }}</td>
                     <td>{{ $telegramUser->joined_group_at?->timezone('Asia/Jakarta')->format('d/m/y H:i') ?? '-' }}</td>
                     <td>
                         @if($telegramUser->pinIsActive())
@@ -38,7 +39,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="empty">Tidak ada yang mencurigakan saat ini.</td></tr>
+                <tr><td colspan="6" class="empty">Tidak ada yang mencurigakan saat ini.</td></tr>
             @endforelse
             </tbody>
         </table>
@@ -49,13 +50,14 @@
     <div class="qris-toolbar"><h2>Sudah Aktif</h2><div class="muted">Terverifikasi dan absen hari ini.</div></div>
     <div class="table-wrap">
         <table class="table qris-table">
-            <thead><tr><th>Nama</th><th>Telegram ID</th><th>Aktif Sejak</th><th>Absen Hari Ini</th><th>Aksi</th></tr></thead>
+            <thead><tr><th>Nama</th><th>Telegram ID</th><th>Tercatat</th><th>Aktif Sejak</th><th>Absen Hari Ini</th><th>Aksi</th></tr></thead>
             <tbody>
             @forelse($activated as $telegramUser)
                 @php $absence = $todaysAbsences->get($telegramUser->id); @endphp
                 <tr>
                     <td><strong>{{ $telegramUser->displayName() }}</strong></td>
                     <td><code>{{ $telegramUser->telegram_user_id }}</code></td>
+                    <td>{{ $telegramUser->created_at->timezone('Asia/Jakarta')->format('d/m/y H:i') }}</td>
                     <td>{{ $telegramUser->activated_at?->timezone('Asia/Jakarta')->format('d/m/y H:i') ?? '-' }}</td>
                     <td>
                         @if($absence)
@@ -72,7 +74,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="empty">Belum ada yang aktif.</td></tr>
+                <tr><td colspan="6" class="empty">Belum ada yang aktif.</td></tr>
             @endforelse
             </tbody>
         </table>
