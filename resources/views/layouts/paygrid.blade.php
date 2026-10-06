@@ -649,6 +649,8 @@
         .wat-msg.out .wat-msg-who { color:#dce8ff; }
         .wat-msg .wat-msg-time { display:block; font-size:9.5px; opacity:.65; margin-top:5px; }
         .wat-empty { text-align:center; color:var(--muted); font-size:13px; padding:30px 0; }
+        .wat-new-msg-banner { position:sticky; bottom:2px; align-self:center; display:inline-flex; align-items:center; gap:6px; border:none; border-radius:999px; padding:7px 14px; background:var(--blue); color:#fff; font-size:12px; font-weight:800; cursor:pointer; box-shadow:0 4px 14px rgba(21,87,194,.35); }
+        .wat-new-msg-banner[hidden] { display:none; }
 
         .wat-composer { display:flex; gap:10px; padding:16px 20px; border-top:1px solid var(--line); background:var(--soft); align-items:flex-end; }
         .wat-composer textarea { flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 14px; font:inherit; font-size:13px; resize:vertical; min-height:44px; background:#fff; }

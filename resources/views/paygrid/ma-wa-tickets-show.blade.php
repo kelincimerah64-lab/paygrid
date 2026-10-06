@@ -142,6 +142,7 @@
                 <p class="wat-empty">Belum ada pesan ke toko.</p>
             @endforelse
             <p class="wat-empty wat-filter-empty" hidden>Tidak ada pesan yang cocok dengan filter.</p>
+            <button type="button" class="wat-new-msg-banner" data-new-msg-banner hidden>&#8595; Pesan baru</button>
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
             <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer" data-live-form>
@@ -161,6 +162,7 @@
                 <p class="wat-empty">Belum ada diskusi internal. Cuma tim CS yang lihat ini, toko nggak bisa baca.</p>
             @endforelse
             <p class="wat-empty wat-filter-empty" hidden>Tidak ada pesan yang cocok dengan filter.</p>
+            <button type="button" class="wat-new-msg-banner" data-new-msg-banner hidden>&#8595; Pesan baru</button>
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
             <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer internal" data-live-form>
@@ -180,6 +182,62 @@
 <script>
 (function () {
     var root = document.querySelector('[data-live-root]');
+    var lastMsgCounts = { toko: null, internal: null };
+    var audioCtx = null;
+
+    function playNotifSound() {
+        try {
+            audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            var osc = audioCtx.createOscillator();
+            var gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 880;
+            gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+            osc.connect(gain).connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.35);
+        } catch (e) { /* autoplay blocked or unsupported - silently skip */ }
+    }
+
+    function isNearBottom(el) {
+        return el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    }
+
+    function setupThreadNotifications() {
+        ['toko', 'internal'].forEach(function (key) {
+            var panel = document.querySelector('[data-wa-panel="' + key + '"]');
+            var thread = panel && panel.querySelector('.wat-thread');
+            var banner = panel && panel.querySelector('[data-new-msg-banner]');
+            if (!thread) return;
+
+            var count = thread.querySelectorAll('.wat-msg').length;
+            var isNew = lastMsgCounts[key] !== null && count > lastMsgCounts[key];
+            lastMsgCounts[key] = count;
+
+            if (isNew) {
+                playNotifSound();
+                if (isNearBottom(thread)) {
+                    thread.scrollTop = thread.scrollHeight;
+                } else if (banner) {
+                    banner.hidden = false;
+                }
+            }
+
+            if (banner && !banner.dataset.ready) {
+                banner.dataset.ready = 'true';
+                banner.addEventListener('click', function () {
+                    thread.scrollTop = thread.scrollHeight;
+                    banner.hidden = true;
+                });
+            }
+            if (banner) {
+                thread.addEventListener('scroll', function () {
+                    if (isNearBottom(thread)) banner.hidden = true;
+                });
+            }
+        });
+    }
 
     function setupTabs() {
         var buttons = document.querySelectorAll('[data-wa-tab]');
@@ -241,9 +299,11 @@
 
     setupTabs();
     setupFilter();
+    setupThreadNotifications();
     if (root) root.addEventListener('paygrid:refreshed', function () {
         setupTabs();
         setupFilter();
+        setupThreadNotifications();
     });
 })();
 </script>
