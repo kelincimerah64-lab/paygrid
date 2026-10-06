@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\MerchantTicketMessageSent;
 use App\Jobs\NotifyWaTicketLink;
 use App\Models\Agent;
 use App\Models\Merchant;
@@ -9,6 +10,7 @@ use App\Models\MerchantTicket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -508,5 +510,69 @@ class MaWaTicketTest extends TestCase
         $this->assertDatabaseHas('merchant_ticket_views', ['merchant_ticket_id' => $ticket->id, 'user_id' => $cs->id]);
 
         $this->actingAs($ma)->get(route('wa-tickets.show', $ticket))->assertOk()->assertSee('Rama CS');
+    }
+
+    public function test_reply_broadcasts_a_realtime_ping_for_the_ticket(): void
+    {
+        Event::fake([MerchantTicketMessageSent::class]);
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
+        ]);
+
+        $this->actingAs($ma)->post(route('wa-tickets.reply', $ticket), [
+            'body' => 'Diskusi internal.',
+            'is_internal' => '1',
+        ])->assertRedirect();
+
+        Event::assertDispatched(MerchantTicketMessageSent::class, fn ($event) => $event->ticketId === $ticket->id);
+    }
+
+    public function test_ticket_channel_authorization_scopes_by_merchant_access(): void
+    {
+        // The 'null' broadcaster (the test default) doesn't run real channel
+        // authorization - swap to 'reverb' so Broadcast::auth() actually
+        // evaluates the routes/channels.php callback. This stays local PHP
+        // logic (signing the auth response); no network call to Reverb itself
+        // happens for this endpoint.
+        //
+        // Broadcast::channel() registers onto whichever driver is active at
+        // the moment it runs (Broadcast::__call forwards to the current
+        // driver()), and that already happened once at app boot while the
+        // default was still 'null' (phpunit.xml) - so after switching the
+        // default here, routes/channels.php has to be required again to
+        // register the channel onto the now-active 'reverb' driver instance.
+        // In production this isn't a concern: BROADCAST_CONNECTION=reverb is
+        // set in .env before the app ever boots, so registration always
+        // lands on the right driver the one time it runs.
+        config([
+            'broadcasting.default' => 'reverb',
+            'broadcasting.connections.reverb.key' => 'test-key',
+            'broadcasting.connections.reverb.secret' => 'test-secret',
+            'broadcasting.connections.reverb.app_id' => 'test-app',
+        ]);
+        require base_path('routes/channels.php');
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $cs = User::factory()->create(['role' => 'cs_pusat', 'is_active' => true]);
+        $otherMa = User::query()->create(['name' => 'Other MA', 'email' => 'other-ma-channel@paygrid.local', 'role' => 'ma', 'password' => Hash::make('secret123')]);
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
+        ]);
+
+        // cs_pusat has company-wide access, same as the WA ticket queue.
+        $this->actingAs($cs)->post('/broadcasting/auth', [
+            'channel_name' => 'private-ticket.'.$ticket->id,
+            'socket_id' => '1.1',
+        ])->assertOk();
+
+        // An MA whose agents don't own this merchant must be refused.
+        $this->actingAs($otherMa)->post('/broadcasting/auth', [
+            'channel_name' => 'private-ticket.'.$ticket->id,
+            'socket_id' => '1.1',
+        ])->assertForbidden();
     }
 }

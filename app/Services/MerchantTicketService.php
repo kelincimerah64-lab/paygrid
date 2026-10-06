@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\MerchantTicketMessageSent;
 use App\Jobs\NotifyIpWhitelistApproval;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
@@ -323,6 +324,8 @@ class MerchantTicketService
             $ticket->status = 'in_progress';
         }
         $ticket->save();
+
+        event(MerchantTicketMessageSent::forMessage($message));
 
         return $message;
     }
