@@ -13,7 +13,6 @@ class MerchantTicket extends Model
         'created_by_user_id',
         'claimed_by_user_id',
         'claimed_at',
-        'wa_reminder_sent_at',
         'ticket_no',
         'department',
         'category',
@@ -28,6 +27,11 @@ class MerchantTicket extends Model
         'approval_completed_at',
         'last_message_at',
         'closed_at',
+        'closed_by_user_id',
+        'wa_active_message_id',
+        'wa_active_chat_id',
+        'wa_reminder_stage',
+        'wa_reminder_stage_at',
     ];
 
     protected $casts = [
@@ -37,7 +41,7 @@ class MerchantTicket extends Model
         'closed_at' => 'datetime',
         'approval_completed_at' => 'datetime',
         'claimed_at' => 'datetime',
-        'wa_reminder_sent_at' => 'datetime',
+        'wa_reminder_stage_at' => 'datetime',
     ];
 
     public function merchant(): BelongsTo
@@ -53,6 +57,11 @@ class MerchantTicket extends Model
     public function claimedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'claimed_by_user_id');
+    }
+
+    public function closedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'closed_by_user_id');
     }
 
     public function messages(): HasMany

@@ -110,6 +110,7 @@ class MaWaTicketController extends Controller
         if ($needsApproval) {
             $ticket->forceFill(['approval_status' => 'waiting'])->save();
         }
+        $ticket->forceFill(['wa_reminder_stage_at' => now()])->save();
         $audit->record('wa_ticket.created', $ticket, null, $ticket->only(['merchant_id', 'department', 'category', 'ticket_no', 'approval_status']));
 
         $groupId = $needsApproval ? config('paygrid.whatsapp.approval_group_id') : config('paygrid.whatsapp.handling_group_id');
@@ -177,6 +178,8 @@ class MaWaTicketController extends Controller
         ])->save();
         $audit->record('wa_ticket.rejected', $ticket, $before, $ticket->only(['approval_status', 'approval_by', 'status']));
 
+        NotifyWaTicketLink::dispatch($ticket->id, 'rejected', '');
+
         return redirect()->route('wa-tickets.show', $ticket)->with('status', 'Tiket ditolak dan ditutup.');
     }
 
@@ -187,6 +190,9 @@ class MaWaTicketController extends Controller
         abort_if($ticket->approval_status === 'waiting', 422, 'Tiket ini masih menunggu approval.');
 
         $won = $tickets->claim($ticket, $request->user());
+        if ($won) {
+            NotifyWaTicketLink::dispatch($ticket->id, 'claimed', '');
+        }
 
         return back()->with('status', $won ? 'Tiket berhasil diambil.' : 'Tiket ini sudah diambil orang lain duluan.');
     }
@@ -228,6 +234,7 @@ class MaWaTicketController extends Controller
 
         $data = $request->validate(['note' => ['nullable', 'string', 'max:2000']]);
         $tickets->closeWithNote($ticket, $request->user(), $data['note'] ?? null);
+        NotifyWaTicketLink::dispatch($ticket->id, 'closed', '');
 
         return redirect()->route('wa-tickets.show', $ticket)->with('status', 'Tiket ditutup.');
     }

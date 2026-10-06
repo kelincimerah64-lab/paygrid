@@ -358,25 +358,27 @@ Artisan::command('tickets:auto-create-pending', function (
 })->purpose('Re-verify overdue pending transactions against the gateway and auto-create tickets for ones still pending.');
 
 Artisan::command('wa-tickets:remind-unclaimed', function () {
-    $minutes = (int) config('paygrid.whatsapp.reminder_minutes', 15);
-    $reminded = 0;
+    $minutes = (int) config('paygrid.whatsapp.reminder_minutes', 10);
+    $staged = 0;
 
     \App\Models\MerchantTicket::query()
         ->whereNull('claimed_by_user_id')
-        ->whereNull('wa_reminder_sent_at')
         ->where('status', 'open')
+        ->where('wa_reminder_stage', '<', 3)
+        ->whereNotNull('wa_reminder_stage_at')
         ->where(fn ($q) => $q->whereNull('approval_status')->orWhere('approval_status', 'approved'))
-        ->where('created_at', '<=', now()->subMinutes($minutes))
-        ->chunkById(100, function ($tickets) use (&$reminded) {
+        ->where('wa_reminder_stage_at', '<=', now()->subMinutes($minutes))
+        ->chunkById(100, function ($tickets) use (&$staged) {
             foreach ($tickets as $ticket) {
-                \App\Jobs\NotifyWaTicketLink::dispatch($ticket->id, 'reminder', (string) config('paygrid.whatsapp.handling_group_id'));
-                $ticket->forceFill(['wa_reminder_sent_at' => now()])->save();
-                $reminded++;
+                $nextStage = $ticket->wa_reminder_stage + 1;
+                \App\Jobs\NotifyWaTicketLink::dispatch($ticket->id, 'reminder', (string) config('paygrid.whatsapp.handling_group_id'), $nextStage);
+                $ticket->forceFill(['wa_reminder_stage' => $nextStage, 'wa_reminder_stage_at' => now()])->save();
+                $staged++;
             }
         });
 
-    $this->info("Sent {$reminded} unclaimed-ticket reminder(s).");
-})->purpose('Remind the WhatsApp group about tickets still unclaimed past the configured threshold.');
+    $this->info("Advanced {$staged} unclaimed-ticket reminder card(s).");
+})->purpose('Advance the WA group reminder card for tickets still unclaimed, every configured interval, up to 3 stages.');
 
 Artisan::command('gateway:health-hilogate {merchant}', function (\App\Services\Gateway\GatewayManager $gateways) {
     $merchant = Merchant::query()

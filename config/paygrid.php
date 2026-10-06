@@ -119,6 +119,6 @@ return [
         'session' => env('PAYGRID_WHATSAPP_SESSION', 'default'),
         'handling_group_id' => env('PAYGRID_WHATSAPP_HANDLING_GROUP_ID'),
         'approval_group_id' => env('PAYGRID_WHATSAPP_APPROVAL_GROUP_ID'),
-        'reminder_minutes' => (int) env('PAYGRID_WHATSAPP_REMINDER_MINUTES', 15),
+        'reminder_minutes' => (int) env('PAYGRID_WHATSAPP_REMINDER_MINUTES', 10),
     ],
 ];

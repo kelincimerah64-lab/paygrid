@@ -367,6 +367,6 @@ class MerchantTicketService
         if ($note) {
             $this->addMessage($ticket, $user, $note, true);
         }
-        $ticket->forceFill(['status' => 'closed', 'closed_at' => now()])->save();
+        $ticket->forceFill(['status' => 'closed', 'closed_at' => now(), 'closed_by_user_id' => $user->id])->save();
     }
 }
