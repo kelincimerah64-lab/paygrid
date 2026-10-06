@@ -17,7 +17,7 @@
 @endphp
 
 @section('content')
-<div data-live-root data-live-interval="4000">
+<div data-live-root data-live-interval="15000">
 <div class="wat-hero">
     <div>
         <p class="eyebrow">{{ $ticket->merchant?->name ?: '-' }} &middot; {{ ucfirst($ticket->department) }}</p>
@@ -219,6 +219,7 @@
 @endsection
 
 @push('scripts')
+<script src="{{ asset('js/paygrid-realtime.js') }}?v={{ filemtime(public_path('js/paygrid-realtime.js')) }}"></script>
 <script>
 (function () {
     var root = document.querySelector('[data-live-root]');
@@ -388,6 +389,18 @@
         setupThreadNotifications();
         setupMessageEdit();
     });
+
+    if (root && window.PayGridRealtime) {
+        var realtime = window.PayGridRealtime.connect({
+            key: @json(config('broadcasting.connections.reverb.key')),
+            host: @json(config('broadcasting.connections.reverb.options.host')),
+            port: @json(config('broadcasting.connections.reverb.options.port')),
+            scheme: @json(config('broadcasting.connections.reverb.options.scheme')),
+        });
+        realtime.subscribePrivate('private-ticket.{{ $ticket->id }}', 'message.sent', function () {
+            root.dispatchEvent(new CustomEvent('paygrid:request-refresh'));
+        });
+    }
 })();
 </script>
 @endpush

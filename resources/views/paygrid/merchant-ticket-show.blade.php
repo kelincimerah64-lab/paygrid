@@ -98,6 +98,7 @@
 @endsection
 
 @push('scripts')
+<script src="{{ asset('js/paygrid-realtime.js') }}?v={{ filemtime(public_path('js/paygrid-realtime.js')) }}"></script>
 <script>
 (function () {
     function autoGrow(textarea) {
@@ -134,6 +135,24 @@
             if (body) body.hidden = false;
         });
     });
+
+    // This page doesn't have the staff thread's scroll/field-preservation
+    // machinery, so a live-swap on new-message would risk losing an
+    // in-progress reply or jumping the scroll position - reload is simpler
+    // and safe here, just skipped while the reply box is actively focused.
+    if (window.PayGridRealtime) {
+        var realtime = window.PayGridRealtime.connect({
+            key: @json(config('broadcasting.connections.reverb.key')),
+            host: @json(config('broadcasting.connections.reverb.options.host')),
+            port: @json(config('broadcasting.connections.reverb.options.port')),
+            scheme: @json(config('broadcasting.connections.reverb.options.scheme')),
+        });
+        realtime.subscribePrivate('private-ticket.{{ $ticket->id }}', 'message.sent', function () {
+            var replyBox = document.querySelector('.ticket-reply-form textarea');
+            if (document.activeElement === replyBox) return;
+            window.location.reload();
+        });
+    }
 })();
 </script>
 @endpush

@@ -259,6 +259,12 @@
         document.addEventListener('visibilitychange', refreshWhenVisible);
         window.addEventListener('focus', refreshWhenVisible);
         window.addEventListener('pageshow', refreshWhenVisible);
+        // External signal (e.g. a WebSocket push from paygrid-realtime.js) asking
+        // for a refresh now rather than waiting for the next interval tick. Not
+        // force=true: this wasn't triggered by the user's own action, so it
+        // should still back off while they're mid-interaction, same as a normal
+        // poll would.
+        root.addEventListener('paygrid:request-refresh', runRefresh);
     });
     setupAutoFilters();
     setupNoteAutosave();
