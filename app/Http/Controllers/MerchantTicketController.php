@@ -82,7 +82,7 @@ class MerchantTicketController extends Controller
             'merchant' => $merchant,
             'menus' => $this->menusFor($request, $merchant, $menus),
             'active' => $this->activeFor($request),
-            'ticket' => $ticket->load('messages.user'),
+            'ticket' => $ticket->load(['messages' => fn ($query) => $query->where('is_internal', false), 'messages.user']),
         ]);
     }
 

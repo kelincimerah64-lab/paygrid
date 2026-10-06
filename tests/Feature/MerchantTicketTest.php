@@ -213,6 +213,22 @@ class MerchantTicketTest extends TestCase
         $thread->assertSee('Sedang kami cek ya.')->assertSee('Terima kasih, ditunggu.');
     }
 
+    public function test_internal_staff_discussion_never_shows_on_the_merchant_portal(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
+        ]);
+        app(\App\Services\MerchantTicketService::class)->addMessage($ticket, $ma, 'Catatan internal rahasia, toko nggak boleh lihat.', true, true);
+        app(\App\Services\MerchantTicketService::class)->addMessage($ticket, $ma, 'Update resmi buat toko.', true, false);
+
+        $thread = $this->actingAs($admin)->get(route('merchant.tickets.show', [$merchant, $ticket]));
+        $thread->assertSee('Update resmi buat toko.')->assertDontSee('Catatan internal rahasia, toko nggak boleh lihat.');
+    }
+
     public function test_closed_ticket_rejects_store_reply_until_reopened(): void
     {
         $this->seed();
