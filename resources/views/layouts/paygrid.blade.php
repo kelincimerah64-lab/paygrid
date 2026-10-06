@@ -562,6 +562,12 @@
         .approval-modal-card { width:min(880px, 96vw); max-height:88vh; overflow:auto; border:1px solid #dbe5f2; border-radius:14px; background:#fff; box-shadow:0 24px 70px rgba(0,0,0,.22); }
         .approval-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:14px; }
         .truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+        /* A detail view's whole point is showing the full value - stack label
+           above value (instead of squeezing both onto one row) and let long
+           values (UUIDs, callback URLs) wrap instead of ellipsis-clipping. */
+        .approval-detail-grid .fee-pill { grid-template-columns:1fr; align-items:start; gap:3px; min-height:0; }
+        .approval-detail-grid .fee-pill span { font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; }
+        .approval-detail-grid .fee-pill strong.truncate { overflow:visible; text-overflow:clip; white-space:normal; word-break:break-word; max-width:100%; font-size:13px; }
         .form-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
         .form-grid label { font-weight:900; color:#10233f; }
         .form-grid input, .form-grid select, .form-grid textarea { width:100%; margin-top:8px; }
