@@ -86,6 +86,7 @@ class MaWaTicketTest extends TestCase
         $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
             'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
         ]);
+        app(\App\Services\MerchantTicketService::class)->claim($ticket, $ma);
 
         $this->actingAs($ma)->post(route('wa-tickets.reply', $ticket), [
             'body' => 'Update buat toko.',
@@ -102,6 +103,29 @@ class MaWaTicketTest extends TestCase
 
         $show = $this->actingAs($ma)->get(route('wa-tickets.show', $ticket));
         $show->assertSee('Update buat toko.')->assertSee('Diskusi internal doang.');
+    }
+
+    public function test_reply_to_toko_is_blocked_until_the_ticket_is_claimed(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
+        ]);
+
+        $this->actingAs($ma)->post(route('wa-tickets.reply', $ticket), [
+            'body' => 'Belum diambil tapi coba kirim ke toko.',
+            'is_internal' => '0',
+        ])->assertStatus(422);
+        $this->assertDatabaseMissing('merchant_ticket_messages', ['body' => 'Belum diambil tapi coba kirim ke toko.']);
+
+        // Internal discussion is fine either way - no claim required.
+        $this->actingAs($ma)->post(route('wa-tickets.reply', $ticket), [
+            'body' => 'Diskusi internal sebelum diambil.',
+            'is_internal' => '1',
+        ])->assertRedirect();
+        $this->assertDatabaseHas('merchant_ticket_messages', ['body' => 'Diskusi internal sebelum diambil.']);
     }
 
     public function test_transfer_reassigns_claim_and_dispatches_notify_job(): void

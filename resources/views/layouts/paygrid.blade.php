@@ -644,6 +644,8 @@
         .wat-msg.out { align-self:flex-end; background:var(--blue); color:#fff; border-bottom-right-radius:3px; }
         .wat-msg.in { align-self:flex-start; background:var(--soft); color:var(--ink); border-bottom-left-radius:3px; }
         .wat-msg.internal { align-self:flex-start; background:#fffaf0; border:1px dashed #f0d4a8; color:var(--ink); border-radius:12px; }
+        .wat-msg.internal.mine { align-self:flex-end; background:var(--blue); border:none; color:#fff; border-bottom-right-radius:3px; }
+        .wat-msg.internal.mine .wat-msg-who { color:#dce8ff; }
         .wat-msg.sys { align-self:center; background:transparent; color:var(--muted); font-size:11.5px; font-style:italic; }
         .wat-msg .wat-msg-who { display:block; font-size:10.5px; font-weight:800; opacity:.85; margin-bottom:3px; }
         .wat-msg.out .wat-msg-who { color:#dce8ff; }

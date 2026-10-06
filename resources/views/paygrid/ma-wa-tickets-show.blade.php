@@ -145,19 +145,23 @@
             <button type="button" class="wat-new-msg-banner" data-new-msg-banner hidden>&#8595; Pesan baru</button>
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
-            <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer" data-live-form>
-                @csrf
-                <input type="hidden" name="is_internal" value="0">
-                <textarea name="body" data-preserve-key="wat-reply-toko" maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
-                <button class="wat-btn primary" type="submit">Kirim</button>
-            </form>
+            @if($ticket->claimed_by_user_id)
+                <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer" data-live-form>
+                    @csrf
+                    <input type="hidden" name="is_internal" value="0">
+                    <textarea name="body" data-preserve-key="wat-reply-toko" maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
+                    <button class="wat-btn primary" type="submit">Kirim</button>
+                </form>
+            @else
+                <p class="wat-empty" style="padding:14px 20px">Ambil tiket ini dulu sebelum kirim pesan ke toko.</p>
+            @endif
         @endif
     </div>
 
     <div data-wa-panel="internal" hidden>
         <div class="wat-thread">
             @forelse($internal as $message)
-                <div class="wat-msg internal" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}"><span class="wat-msg-who">{{ $message->user->name ?? 'Sistem' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
+                <div class="wat-msg internal {{ $message->user_id === auth()->id() ? 'mine' : '' }}" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}"><span class="wat-msg-who">{{ $message->user->name ?? 'Sistem' }}</span>{{ $message->body }}<span class="wat-msg-time">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M, H:i') }}</span></div>
             @empty
                 <p class="wat-empty">Belum ada diskusi internal. Cuma tim CS yang lihat ini, toko nggak bisa baca.</p>
             @endforelse

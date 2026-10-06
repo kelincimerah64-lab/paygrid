@@ -207,7 +207,9 @@ class MaWaTicketController extends Controller
             'body' => ['required', 'string', 'max:2000'],
             'is_internal' => ['nullable', 'boolean'],
         ]);
-        $tickets->addMessage($ticket, $request->user(), $data['body'], true, (bool) ($data['is_internal'] ?? false));
+        $isInternal = (bool) ($data['is_internal'] ?? false);
+        abort_if(! $isInternal && ! $ticket->claimed_by_user_id, 422, 'Ambil tiket ini dulu sebelum kirim pesan ke toko.');
+        $tickets->addMessage($ticket, $request->user(), $data['body'], true, $isInternal);
 
         return back()->with('status', 'Pesan terkirim.');
     }
