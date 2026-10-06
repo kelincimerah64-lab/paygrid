@@ -55,30 +55,49 @@
         });
     };
 
+    // .table-wrap is the scroll container on data-table pages; [data-live-scroll]
+    // marks any other scrollable region (e.g. a chat thread) that wants the same
+    // scroll-position preservation across a region swap.
+    const scrollTargetSelector = '.table-wrap, [data-live-scroll]';
+    const isNearBottom = (el) => el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+
+    // A region can contain more than one scrollable target (e.g. two chat tabs
+    // in the same live-region) - snapshot/restore every match by its position
+    // within the region, not just the first one.
     const snapshotScroll = (root) => {
         const regions = new Map();
         root.querySelectorAll('[data-live-region]').forEach((region) => {
             const key = region.dataset.liveRegion;
-            const wrap = region.querySelector('.table-wrap');
-            if (key && wrap) {
-                regions.set(key, { top: wrap.scrollTop, left: wrap.scrollLeft });
-            }
+            if (!key) return;
+            const wraps = region.querySelectorAll(scrollTargetSelector);
+            if (!wraps.length) return;
+            regions.set(key, Array.from(wraps).map((wrap) => (
+                { top: wrap.scrollTop, left: wrap.scrollLeft, atBottom: isNearBottom(wrap) }
+            )));
         });
 
         return { windowX: window.scrollX, windowY: window.scrollY, regions };
     };
 
-    const restoreScroll = (root, scroll) => {
-        scroll.regions.forEach((state, key) => {
-            const wrap = root.querySelector(`[data-live-region="${escape(key)}"] .table-wrap`);
-            if (!wrap) return;
-            wrap.scrollTop = state.top;
-            wrap.scrollLeft = state.left;
+    const restoreScroll = (root, scroll, stickToBottom) => {
+        scroll.regions.forEach((states, key) => {
+            const region = root.querySelector(`[data-live-region="${escape(key)}"]`);
+            if (!region) return;
+            region.querySelectorAll(scrollTargetSelector).forEach((wrap, i) => {
+                const state = states[i];
+                if (!state) return;
+                if (stickToBottom || state.atBottom) {
+                    wrap.scrollTop = wrap.scrollHeight;
+                } else {
+                    wrap.scrollTop = state.top;
+                    wrap.scrollLeft = state.left;
+                }
+            });
         });
         window.scrollTo(scroll.windowX, scroll.windowY);
     };
 
-    const refresh = async (root, force = false) => {
+    const refresh = async (root, force = false, stickToBottom = false) => {
         if (!force && shouldPause(root)) return;
         if (!force && isInteracting(root)) return;
         const fields = snapshotFields(root);
@@ -96,7 +115,7 @@
             if (next && region.innerHTML !== next.innerHTML) region.innerHTML = next.innerHTML;
         });
         restoreFields(root, fields);
-        restoreScroll(root, scroll);
+        restoreScroll(root, scroll, stickToBottom);
         root.dispatchEvent(new CustomEvent('paygrid:refreshed', { bubbles: true }));
     };
 
@@ -132,7 +151,9 @@
                         // Force past the interaction-pause guard - that guard exists to
                         // avoid yanking content out from under a user mid-scroll/typing,
                         // but clicking submit IS the user asking to see the result now.
-                        await refresh(root, true);
+                        // data-scroll-to-bottom (composer forms only) also jumps the
+                        // thread to the newly-sent message regardless of prior scroll.
+                        await refresh(root, true, form.hasAttribute('data-scroll-to-bottom'));
                     }
                 } catch (e) {
                     // network hiccup - next periodic refresh will catch up

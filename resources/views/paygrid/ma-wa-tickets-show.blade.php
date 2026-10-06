@@ -135,7 +135,7 @@
     </div>
 
     <div data-wa-panel="toko">
-        <div class="wat-thread">
+        <div class="wat-thread" data-live-scroll>
             @forelse($toToko as $message)
                 @php $isMine = $message->user_id === auth()->id(); $readers = $readersFor($message); @endphp
                 <div class="wat-msg {{ $message->is_staff === false ? 'in' : 'out' }}" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}">
@@ -164,7 +164,7 @@
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
             @if($ticket->claimed_by_user_id)
-                <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer" data-live-form>
+                <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer" data-live-form data-scroll-to-bottom>
                     @csrf
                     <input type="hidden" name="is_internal" value="0">
                     <textarea name="body" data-preserve-key="wat-reply-toko" maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
@@ -177,7 +177,7 @@
     </div>
 
     <div data-wa-panel="internal" hidden>
-        <div class="wat-thread">
+        <div class="wat-thread" data-live-scroll>
             @forelse($internal as $message)
                 @php $isMine = $message->user_id === auth()->id(); $readers = $readersFor($message); @endphp
                 <div class="wat-msg internal {{ $isMine ? 'mine' : '' }}" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}">
@@ -205,7 +205,7 @@
             <button type="button" class="wat-new-msg-banner" data-new-msg-banner hidden>&#8595; Pesan baru</button>
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
-            <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer internal" data-live-form>
+            <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer internal" data-live-form data-scroll-to-bottom>
                 @csrf
                 <input type="hidden" name="is_internal" value="1">
                 <textarea name="body" data-preserve-key="wat-reply-internal" maxlength="2000" required placeholder="Diskusi internal (toko nggak lihat)..."></textarea>
