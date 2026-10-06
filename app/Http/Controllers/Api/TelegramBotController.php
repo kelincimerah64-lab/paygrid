@@ -7,7 +7,6 @@ use App\Models\TelegramAbsence;
 use App\Models\TelegramBotUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
 class TelegramBotController extends Controller
@@ -58,15 +57,22 @@ class TelegramBotController extends Controller
         ]);
 
         $telegramUser = TelegramBotUser::query()->firstOrNew(['telegram_user_id' => $data['telegram_user_id']]);
+        $isNew = ! $telegramUser->exists;
         $telegramUser->fill([
             'username' => $data['username'] ?? null,
             'first_name' => $data['first_name'] ?? '',
             'dm_chat_id' => $data['chat_id'],
         ]);
-        if (! $telegramUser->exists) {
+        if ($isNew) {
             $telegramUser->status = 'pending';
         }
         $telegramUser->save();
+
+        // Auto-issue a PIN the moment someone first sends /activate - the admin only has
+        // to manually hit "Generate PIN" later if this one expires unused, per the request.
+        if ($isNew) {
+            $telegramUser->generatePin();
+        }
 
         return response()->json([
             'status' => $telegramUser->isActivated() ? 'already_activated' : 'pending_pin',
@@ -85,9 +91,8 @@ class TelegramBotController extends Controller
         $telegramUser = TelegramBotUser::query()->where('telegram_user_id', $data['telegram_user_id'])->first();
 
         $valid = $telegramUser
-            && $telegramUser->pin_hash
-            && $telegramUser->pin_expires_at?->isFuture()
-            && Hash::check($data['pin'], $telegramUser->pin_hash);
+            && $telegramUser->pinIsActive()
+            && $telegramUser->readablePin() === $data['pin'];
 
         if (! $valid) {
             return response()->json(['status' => 'invalid_or_expired', 'name' => null]);
@@ -96,7 +101,7 @@ class TelegramBotController extends Controller
         $telegramUser->forceFill([
             'status' => 'activated',
             'activated_at' => now(),
-            'pin_hash' => null,
+            'pin_encrypted' => null,
             'pin_expires_at' => null,
         ])->save();
 

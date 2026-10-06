@@ -8,47 +8,33 @@
     </div>
 </div>
 
-@if($generatedPin)
-    <section class="card pad section" style="border:2px solid var(--primary, #2563eb)">
-        <div class="eyebrow">PIN Aktivasi Baru</div>
-        <p>Untuk <strong>{{ $generatedPin['name'] }}</strong> - berikan PIN ini secara langsung (jangan dikirim di grup):</p>
-        <div style="font-size:32px;font-weight:800;letter-spacing:.1em;margin:8px 0">{{ $generatedPin['pin'] }}</div>
-        <p class="muted">Berlaku sampai {{ \Illuminate\Support\Carbon::parse($generatedPin['expires_at'])->timezone('Asia/Jakarta')->format('H:i') }} WIB (30 menit).</p>
-    </section>
-@endif
-
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Belum Terverifikasi</h2><div class="muted">Masih di grup, belum selesai /activate. Perhatikan - ini calon penyusup.</div></div>
     <div class="table-wrap">
         <table class="table qris-table">
-            <thead><tr><th>Nama Telegram</th><th>Telegram ID</th><th>Masuk Grup</th><th>Status PIN</th><th>Aksi</th></tr></thead>
+            <thead><tr><th>Nama Telegram</th><th>Telegram ID</th><th>Masuk Grup</th><th>PIN</th><th>Aksi</th></tr></thead>
             <tbody>
             @forelse($suspects as $telegramUser)
                 <tr>
-                    <td><strong>{{ $telegramUser->displayName() }}</strong>@if($telegramUser->username)<br><span class="muted">@{{ $telegramUser->username }}</span>@endif</td>
+                    <td><strong>{{ $telegramUser->displayName() }}</strong></td>
                     <td><code>{{ $telegramUser->telegram_user_id }}</code></td>
                     <td>{{ $telegramUser->joined_group_at?->timezone('Asia/Jakarta')->format('d/m/y H:i') ?? '-' }}</td>
                     <td>
-                        <span class="badge danger">Suspect</span>
-                        @if($telegramUser->pin_expires_at?->isFuture())
-                            <br><span class="muted">PIN aktif s/d {{ $telegramUser->pin_expires_at->timezone('Asia/Jakarta')->format('H:i') }}</span>
+                        @if($telegramUser->pinIsActive())
+                            <div style="font-size:20px;font-weight:800;letter-spacing:.08em">{{ $telegramUser->readablePin() }}</div>
+                            <span class="muted">Dibuat {{ $telegramUser->pin_expires_at->copy()->subMinutes(30)->timezone('Asia/Jakarta')->format('d/m/y H:i') }} &middot; s/d {{ $telegramUser->pin_expires_at->timezone('Asia/Jakarta')->format('H:i') }}</span>
+                        @else
+                            <span class="badge danger">Suspect</span>
+                            <br><span class="muted">Belum ada PIN aktif</span>
                         @endif
                     </td>
                     <td>
-                        <form method="post" action="{{ route('cs-monitor.generate-pin', $telegramUser) }}" class="compact-actions">
-                            @csrf
-                            @if(! $telegramUser->user_id)
-                                <select name="user_id" required>
-                                    <option value="">Pilih staff...</option>
-                                    @foreach($users as $candidate)
-                                        <option value="{{ $candidate->id }}">{{ $candidate->name }} ({{ $candidate->role }})</option>
-                                    @endforeach
-                                </select>
-                            @else
-                                <span class="muted">{{ $telegramUser->user->name ?? '-' }}</span>
-                            @endif
-                            <button class="btn primary compact-btn" type="submit">Generate PIN</button>
-                        </form>
+                        @unless($telegramUser->pinIsActive())
+                            <form method="post" action="{{ route('cs-monitor.generate-pin', $telegramUser) }}" class="compact-actions">
+                                @csrf
+                                <button class="btn primary compact-btn" type="submit">Generate PIN</button>
+                            </form>
+                        @endunless
                     </td>
                 </tr>
             @empty
@@ -63,17 +49,17 @@
     <div class="qris-toolbar"><h2>Sudah Aktif</h2><div class="muted">Terverifikasi dan absen hari ini.</div></div>
     <div class="table-wrap">
         <table class="table qris-table">
-            <thead><tr><th>Nama</th><th>Username Telegram</th><th>Aktif Sejak</th><th>Absen Hari Ini</th><th>Aksi</th></tr></thead>
+            <thead><tr><th>Nama</th><th>Telegram ID</th><th>Aktif Sejak</th><th>Absen Hari Ini</th><th>Aksi</th></tr></thead>
             <tbody>
             @forelse($activated as $telegramUser)
                 @php $absence = $todaysAbsences->get($telegramUser->id); @endphp
                 <tr>
                     <td><strong>{{ $telegramUser->displayName() }}</strong></td>
-                    <td class="muted">@{{ $telegramUser->username ?? '-' }}</td>
+                    <td><code>{{ $telegramUser->telegram_user_id }}</code></td>
                     <td>{{ $telegramUser->activated_at?->timezone('Asia/Jakarta')->format('d/m/y H:i') ?? '-' }}</td>
                     <td>
                         @if($absence)
-                            <span class="badge ok">Hadir {{ $absence->absen_at->timezone('Asia/Jakarta')->format('H:i') }}</span>
+                            <span class="badge ok">Hadir {{ $absence->absen_at->timezone('Asia/Jakarta')->format('d/m/y H:i') }}</span>
                         @else
                             <span class="badge warn">Belum Absen</span>
                         @endif

@@ -6,7 +6,6 @@ use App\Models\TelegramAbsence;
 use App\Models\TelegramBotUser;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class TelegramBotTest extends TestCase
@@ -70,7 +69,7 @@ class TelegramBotTest extends TestCase
         $this->assertFalse($telegramUser->fresh()->isSuspect());
     }
 
-    public function test_activation_request_reports_pending_then_already_activated(): void
+    public function test_activation_request_auto_generates_a_pin_for_a_brand_new_pending_user(): void
     {
         $this->useTelegramBotToken()->withHeader('Authorization', 'Bearer bot-secret')
             ->postJson('/api/telegram/activation-requests', [
@@ -78,41 +77,46 @@ class TelegramBotTest extends TestCase
             ])
             ->assertOk()->assertJson(['status' => 'pending_pin']);
 
-        TelegramBotUser::query()->where('telegram_user_id', 777)->update(['status' => 'activated']);
+        $telegramUser = TelegramBotUser::query()->where('telegram_user_id', 777)->firstOrFail();
+        $this->assertTrue($telegramUser->pinIsActive());
+        $this->assertMatchesRegularExpression('/^\d{6}$/', $telegramUser->readablePin());
+    }
 
-        $this->withHeader('Authorization', 'Bearer bot-secret')
+    public function test_activation_request_reports_already_activated_and_does_not_touch_pin(): void
+    {
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 777, 'status' => 'activated']);
+
+        $this->useTelegramBotToken()->withHeader('Authorization', 'Bearer bot-secret')
             ->postJson('/api/telegram/activation-requests', [
                 'telegram_user_id' => 777, 'username' => 'budi', 'first_name' => 'Budi', 'chat_id' => 777,
             ])
             ->assertOk()->assertJson(['status' => 'already_activated']);
+
+        $this->assertFalse($telegramUser->fresh()->pinIsActive());
     }
 
     public function test_activate_accepts_a_valid_unexpired_pin(): void
     {
-        $staff = $this->monitor();
-        $telegramUser = TelegramBotUser::query()->create([
-            'telegram_user_id' => 888, 'status' => 'pending', 'user_id' => $staff->id,
-            'pin_hash' => Hash::make('123456'), 'pin_expires_at' => now()->addMinutes(30),
-        ]);
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 888, 'status' => 'pending', 'first_name' => 'Budi']);
+        $telegramUser->generatePin();
 
         $this->useTelegramBotToken()->withHeader('Authorization', 'Bearer bot-secret')
-            ->postJson('/api/telegram/activate', ['telegram_user_id' => 888, 'pin' => '123456'])
-            ->assertOk()->assertJson(['status' => 'activated', 'name' => $staff->name]);
+            ->postJson('/api/telegram/activate', ['telegram_user_id' => 888, 'pin' => $telegramUser->readablePin()])
+            ->assertOk()->assertJson(['status' => 'activated', 'name' => 'Budi']);
 
         $telegramUser->refresh();
         $this->assertSame('activated', $telegramUser->status);
-        $this->assertNull($telegramUser->pin_hash);
+        $this->assertNull($telegramUser->pin_encrypted);
     }
 
     public function test_activate_rejects_wrong_or_expired_pin(): void
     {
-        TelegramBotUser::query()->create([
-            'telegram_user_id' => 999, 'status' => 'pending',
-            'pin_hash' => Hash::make('123456'), 'pin_expires_at' => now()->subMinute(),
-        ]);
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 999, 'status' => 'pending']);
+        $telegramUser->generatePin();
+        $telegramUser->forceFill(['pin_expires_at' => now()->subMinute()])->save();
 
         $this->useTelegramBotToken()->withHeader('Authorization', 'Bearer bot-secret')
-            ->postJson('/api/telegram/activate', ['telegram_user_id' => 999, 'pin' => '123456'])
+            ->postJson('/api/telegram/activate', ['telegram_user_id' => 999, 'pin' => $telegramUser->readablePin()])
             ->assertOk()->assertJson(['status' => 'invalid_or_expired']);
 
         $this->assertSame('pending', TelegramBotUser::query()->where('telegram_user_id', 999)->first()->status);
@@ -169,25 +173,31 @@ class TelegramBotTest extends TestCase
         $this->actingAs($ma)->get(route('cs-monitor.index'))->assertStatus(403);
     }
 
-    public function test_generating_a_pin_links_the_staff_and_sets_a_thirty_minute_expiry(): void
+    public function test_generating_a_pin_needs_no_staff_selection_and_sets_a_thirty_minute_expiry(): void
     {
         $monitor = $this->monitor();
-        $staff = User::factory()->create(['role' => 'cs_pusat', 'is_active' => true]);
         $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 333, 'status' => 'pending']);
 
-        $response = $this->actingAs($monitor)->post(route('cs-monitor.generate-pin', $telegramUser), [
-            'user_id' => $staff->id,
-        ]);
+        $response = $this->actingAs($monitor)->post(route('cs-monitor.generate-pin', $telegramUser), []);
 
         $response->assertRedirect();
         $telegramUser->refresh();
-        $this->assertSame($staff->id, $telegramUser->user_id);
-        $this->assertNotNull($telegramUser->pin_hash);
+        $this->assertSame($monitor->id, $telegramUser->pin_generated_by);
+        $this->assertTrue($telegramUser->pinIsActive());
         $this->assertTrue($telegramUser->pin_expires_at->diffInMinutes(now()) <= 30);
+        $this->assertMatchesRegularExpression('/^\d{6}$/', $telegramUser->readablePin());
+    }
 
-        $pin = session('generated_pin')['pin'] ?? null;
-        $this->assertNotNull($pin);
-        $this->assertMatchesRegularExpression('/^\d{6}$/', $pin);
-        $this->assertTrue(Hash::check($pin, $telegramUser->pin_hash));
+    public function test_regenerating_a_pin_replaces_the_previous_one(): void
+    {
+        $monitor = $this->monitor();
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 444, 'status' => 'pending']);
+        $telegramUser->generatePin();
+        $firstPin = $telegramUser->readablePin();
+
+        $this->actingAs($monitor)->post(route('cs-monitor.generate-pin', $telegramUser), []);
+
+        $telegramUser->refresh();
+        $this->assertNotSame($firstPin, $telegramUser->readablePin());
     }
 }
