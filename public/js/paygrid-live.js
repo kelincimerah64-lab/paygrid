@@ -207,6 +207,32 @@
         });
     };
 
+    // .approval-modal uses position:fixed to cover the full viewport, but a
+    // table-row ancestor (.table-wrap has transform:translateZ(0), added for
+    // the sticky-header fix) becomes its containing block instead - the modal
+    // then renders squashed inside the table rather than as a real overlay.
+    // Moving it to <body> on open sidesteps that regardless of what transform/
+    // filter/contain properties any ancestor ends up with later.
+    const setupApprovalModals = () => {
+        document.querySelectorAll('[data-approval-detail]:not([data-approval-detail-ready])').forEach((button) => {
+            button.dataset.approvalDetailReady = 'true';
+            button.addEventListener('click', () => {
+                const target = document.getElementById(button.dataset.approvalDetail);
+                if (!target) return;
+                if (target.parentElement !== document.body) document.body.appendChild(target);
+                target.hidden = false;
+            });
+        });
+        document.querySelectorAll('.approval-detail-close:not([data-approval-detail-ready]), .approval-modal:not([data-approval-detail-ready])').forEach((item) => {
+            item.dataset.approvalDetailReady = 'true';
+            item.addEventListener('click', (event) => {
+                if (event.target.closest('.approval-modal-card') && !event.target.classList.contains('approval-detail-close')) return;
+                const modal = item.closest('.approval-modal');
+                if (modal) modal.hidden = true;
+            });
+        });
+    };
+
     document.querySelectorAll('[data-live-root]').forEach((root) => {
         const runRefresh = () => refresh(root).catch(() => {}).finally(() => {
             setupAutoFilters();
@@ -236,4 +262,5 @@
     });
     setupAutoFilters();
     setupNoteAutosave();
+    setupApprovalModals();
 })();

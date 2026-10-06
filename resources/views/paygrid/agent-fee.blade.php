@@ -64,21 +64,3 @@
 </section>
 @endsection
 
-@push('scripts')
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[data-approval-detail]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const target = document.getElementById(button.dataset.approvalDetail);
-            if (target) target.hidden = false;
-        });
-    });
-    document.querySelectorAll('.approval-detail-close, .approval-modal').forEach((item) => {
-        item.addEventListener('click', (event) => {
-            if (event.target.closest('.approval-modal-card') && !event.target.classList.contains('approval-detail-close')) return;
-            item.closest('.approval-modal').hidden = true;
-        });
-    });
-});
-</script>
-@endpush

@@ -285,18 +285,6 @@
             paygridWarnBelowFloor(e.target);
         }
     });
-    document.querySelectorAll('[data-approval-detail]').forEach(function (button) {
-        button.addEventListener('click', function () {
-            var target = document.getElementById(button.dataset.approvalDetail);
-            if (target) target.hidden = false;
-        });
-    });
-    document.querySelectorAll('.approval-detail-close, .approval-modal').forEach(function (item) {
-        item.addEventListener('click', function (event) {
-            if (event.target.closest('.approval-modal-card') && !event.target.classList.contains('approval-detail-close')) return;
-            item.closest('.approval-modal').hidden = true;
-        });
-    });
 </script>
 @endpush
 @endif
