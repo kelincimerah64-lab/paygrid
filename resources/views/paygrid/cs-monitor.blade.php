@@ -1,4 +1,4 @@
-@extends('layouts.paygrid')
+@extends((request()->boolean('partial') || request()->header('X-PayGrid-Partial') === '1') ? 'layouts.partial' : 'layouts.paygrid')
 
 @section('content')
 <div class="qris-hero">
@@ -8,6 +8,8 @@
     </div>
 </div>
 
+<div data-live-root data-live-interval="5000">
+
 <section class="card pad section">
     <form method="get" class="merchant-workspace-filter" data-auto-filter>
         <label><span>Tanggal</span><input type="date" name="date" value="{{ $selectedDate }}"></label>
@@ -15,6 +17,7 @@
     </form>
 </section>
 
+<div data-live-region="cs-monitor-kpi">
 <section class="grid qris-metrics section">
     <div class="card pad qris-metric"><span>Semua CS</span><strong>{{ $kpi['semua'] }}</strong></div>
     <div class="card pad qris-metric primary"><span>Total Aktif</span><strong>{{ $kpi['total'] }}</strong></div>
@@ -22,7 +25,9 @@
     <div class="card pad qris-metric pending"><span>Belum Absen</span><strong>{{ $kpi['belum'] }}</strong></div>
     <div class="card pad qris-metric expired"><span>Member Grup Telegram</span><strong>{{ $kpi['grup'] ?? '-' }}</strong><small>Dibanding Semua CS: beda berarti ada yang belum kedetect</small></div>
 </section>
+</div>
 
+<div data-live-region="cs-monitor-suspects">
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Belum Terverifikasi</h2><div class="muted">Masih di grup, belum selesai /activate. Perhatikan - ini calon penyusup.</div></div>
     <div class="table-wrap">
@@ -67,7 +72,9 @@
         </table>
     </div>
 </section>
+</div>
 
+<div data-live-region="cs-monitor-activated">
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Sudah Aktif</h2><div class="muted">Terverifikasi - status absen sesuai tanggal terpilih.</div></div>
     <div class="table-wrap">
@@ -95,7 +102,9 @@
         </table>
     </div>
 </section>
+</div>
 
+<div data-live-region="cs-monitor-left">
 @if($left->isNotEmpty())
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Sudah Keluar Grup</h2></div>
@@ -115,4 +124,7 @@
     </div>
 </section>
 @endif
+</div>
+
+</div>
 @endsection

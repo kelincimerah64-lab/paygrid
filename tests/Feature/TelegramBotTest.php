@@ -236,7 +236,7 @@ class TelegramBotTest extends TestCase
 
         $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
 
-        $response->assertViewHas('kpi', fn ($kpi) => $kpi['grup'] === 10);
+        $response->assertViewHas('kpi', fn ($kpi) => $kpi['grup'] === 8);
     }
 
     public function test_only_cs_monitor_and_superadmin_can_view_the_dashboard(): void
