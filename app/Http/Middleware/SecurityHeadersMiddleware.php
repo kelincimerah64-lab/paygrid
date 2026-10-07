@@ -26,7 +26,20 @@ class SecurityHeadersMiddleware
             $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
             $response->headers->set('Pragma', 'no-cache');
         }
-        $csp = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+        // The realtime dashboards (ma-wa-tickets-show, cs-monitor) open a WebSocket
+        // straight to Reverb, which lives on a different host than the app itself
+        // (the mobile VPS) - connect-src has to explicitly allow that origin or the
+        // browser silently drops the connection with no visible error on the page,
+        // only a CSP violation in devtools.
+        $connectSrc = "'self'";
+        $reverbHost = config('broadcasting.connections.reverb.options.host');
+        if ($reverbHost) {
+            $reverbPort = config('broadcasting.connections.reverb.options.port');
+            $reverbScheme = config('broadcasting.connections.reverb.options.scheme') === 'https' ? 'wss' : 'ws';
+            $connectSrc .= " {$reverbScheme}://{$reverbHost}:{$reverbPort}";
+        }
+
+        $csp = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src {$connectSrc}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
         if ($request->isSecure()) {
             $csp .= '; upgrade-insecure-requests';

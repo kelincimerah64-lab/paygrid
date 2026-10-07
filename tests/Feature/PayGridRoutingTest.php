@@ -52,6 +52,25 @@ class PayGridRoutingTest extends TestCase
             ->assertHeader('Content-Security-Policy');
     }
 
+    /**
+     * Regression guard: connect-src defaulting to 'self' only silently blocks the
+     * realtime dashboards' WebSocket connection to Reverb (a different host) - no
+     * error on the page, just a CSP violation in devtools nobody's looking at.
+     */
+    public function test_csp_allows_websocket_connections_to_the_configured_reverb_host(): void
+    {
+        config([
+            'broadcasting.connections.reverb.options.host' => 'reverb.example.test',
+            'broadcasting.connections.reverb.options.port' => 443,
+            'broadcasting.connections.reverb.options.scheme' => 'https',
+        ]);
+
+        $response = $this->get('/login');
+
+        $response->assertHeader('Content-Security-Policy');
+        $this->assertStringContainsString("connect-src 'self' wss://reverb.example.test:443", $response->headers->get('Content-Security-Policy'));
+    }
+
     public function test_script_merchant_only_gets_history_menu(): void
     {
         $this->seed();
