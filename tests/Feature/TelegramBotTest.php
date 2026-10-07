@@ -187,7 +187,7 @@ class TelegramBotTest extends TestCase
 
         $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
 
-        $response->assertViewHas('kpi', ['total' => 2, 'hadir' => 1, 'belum' => 1]);
+        $response->assertViewHas('kpi', ['semua' => 3, 'total' => 2, 'hadir' => 1, 'belum' => 1]);
     }
 
     public function test_dashboard_respects_a_past_date_filter(): void
@@ -199,10 +199,10 @@ class TelegramBotTest extends TestCase
         ]);
 
         $todayResponse = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
-        $todayResponse->assertViewHas('kpi', ['total' => 1, 'hadir' => 0, 'belum' => 1]);
+        $todayResponse->assertViewHas('kpi', ['semua' => 1, 'total' => 1, 'hadir' => 0, 'belum' => 1]);
 
         $pastResponse = $this->actingAs($this->monitor())->get(route('cs-monitor.index', ['date' => $yesterday]));
-        $pastResponse->assertViewHas('kpi', ['total' => 1, 'hadir' => 1, 'belum' => 0]);
+        $pastResponse->assertViewHas('kpi', ['semua' => 1, 'total' => 1, 'hadir' => 1, 'belum' => 0]);
     }
 
     public function test_only_cs_monitor_and_superadmin_can_view_the_dashboard(): void

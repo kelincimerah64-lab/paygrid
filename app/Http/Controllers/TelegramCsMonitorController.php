@@ -22,18 +22,20 @@ class TelegramCsMonitorController extends Controller
             ->keyBy('telegram_bot_user_id');
 
         $activated = $telegramUsers->filter(fn (TelegramBotUser $u) => $u->isActivated())->values();
+        $suspects = $telegramUsers->filter(fn (TelegramBotUser $u) => $u->isSuspect())->values();
         $hadirCount = $activated->filter(fn (TelegramBotUser $u) => $absencesForDate->has($u->id))->count();
 
         return view('paygrid.cs-monitor', [
             'roleLabel' => 'CS Monitor',
             'menus' => app(MenuBuilder::class)->csMonitor(),
             'active' => 'cs-monitor',
-            'suspects' => $telegramUsers->filter(fn (TelegramBotUser $u) => $u->isSuspect())->values(),
+            'suspects' => $suspects,
             'activated' => $activated,
             'left' => $telegramUsers->filter(fn (TelegramBotUser $u) => ! $u->isActivated() && $u->left_group_at !== null)->values(),
             'absencesForDate' => $absencesForDate,
             'selectedDate' => $selectedDate,
             'kpi' => [
+                'semua' => $activated->count() + $suspects->count(),
                 'total' => $activated->count(),
                 'hadir' => $hadirCount,
                 'belum' => $activated->count() - $hadirCount,

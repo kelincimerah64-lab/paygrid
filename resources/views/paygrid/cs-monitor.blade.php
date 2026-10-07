@@ -16,6 +16,7 @@
 </section>
 
 <section class="grid qris-metrics section">
+    <div class="card pad qris-metric"><span>Semua CS</span><strong>{{ $kpi['semua'] }}</strong></div>
     <div class="card pad qris-metric primary"><span>Total Aktif</span><strong>{{ $kpi['total'] }}</strong></div>
     <div class="card pad qris-metric success"><span>Sudah Absen</span><strong>{{ $kpi['hadir'] }}</strong></div>
     <div class="card pad qris-metric pending"><span>Belum Absen</span><strong>{{ $kpi['belum'] }}</strong></div>
