@@ -99,6 +99,40 @@ class TelegramBotTest extends TestCase
         $this->assertMatchesRegularExpression('/^\d{6}$/', $telegramUser->readablePin());
     }
 
+    /**
+     * Reproduces the real bug: passive group detection (group_seen) can create this row
+     * before /activate ever runs - the old "only on a brand-new row" check meant /activate
+     * silently did nothing in that case, leaving no PIN for the admin or the user to see.
+     */
+    public function test_activation_request_generates_a_pin_even_when_the_row_already_existed(): void
+    {
+        TelegramBotUser::query()->create(['telegram_user_id' => 888, 'status' => 'pending', 'first_name' => 'Drayy']);
+
+        $this->useTelegramBotToken()->withHeader('Authorization', 'Bearer bot-secret')
+            ->postJson('/api/telegram/activation-requests', [
+                'telegram_user_id' => 888, 'username' => 'drayy', 'first_name' => 'Drayy', 'chat_id' => 888,
+            ])
+            ->assertOk()->assertJson(['status' => 'pending_pin']);
+
+        $telegramUser = TelegramBotUser::query()->where('telegram_user_id', 888)->firstOrFail();
+        $this->assertTrue($telegramUser->pinIsActive());
+    }
+
+    public function test_activation_request_does_not_replace_a_still_valid_pin(): void
+    {
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 889, 'status' => 'pending']);
+        $telegramUser->generatePin();
+        $firstPin = $telegramUser->readablePin();
+
+        $this->useTelegramBotToken()->withHeader('Authorization', 'Bearer bot-secret')
+            ->postJson('/api/telegram/activation-requests', [
+                'telegram_user_id' => 889, 'chat_id' => 889,
+            ])
+            ->assertOk();
+
+        $this->assertSame($firstPin, $telegramUser->fresh()->readablePin());
+    }
+
     public function test_activation_request_reports_already_activated_and_does_not_touch_pin(): void
     {
         $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 777, 'status' => 'activated']);

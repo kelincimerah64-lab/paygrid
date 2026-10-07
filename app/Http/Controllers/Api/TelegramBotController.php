@@ -71,9 +71,11 @@ class TelegramBotController extends Controller
         }
         $telegramUser->save();
 
-        // Auto-issue a PIN the moment someone first sends /activate - the admin only has
-        // to manually hit "Generate PIN" later if this one expires unused, per the request.
-        if ($isNew) {
+        // Auto-issue a PIN on /activate whenever there isn't already a live one - not just
+        // for a brand-new row. Passive group detection (see groupEvent 'seen') can create
+        // this row before /activate ever runs, so "isNew" alone used to miss that case and
+        // leave the admin to generate a PIN manually even on a first /activate.
+        if (! $telegramUser->isActivated() && ! $telegramUser->pinIsActive()) {
             $telegramUser->generatePin();
         }
 
