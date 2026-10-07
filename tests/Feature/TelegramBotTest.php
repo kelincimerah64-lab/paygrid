@@ -256,7 +256,7 @@ class TelegramBotTest extends TestCase
 
         $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
 
-        $response->assertViewHas('kpi', fn ($kpi) => $kpi['grup'] === 8);
+        $response->assertViewHas('kpi', fn ($kpi) => $kpi['grup'] === 10);
     }
 
     public function test_dashboard_excludes_users_flagged_as_not_cs(): void

@@ -155,9 +155,7 @@ class TelegramCsMonitorController extends Controller
             });
 
             if ($count !== null) {
-                // The bot itself is always a member of every group it has a record for -
-                // exclude it so this counts real CS people, not the bot account.
-                $total += max(0, $count - 1);
+                $total += $count;
                 $any = true;
             }
         }
