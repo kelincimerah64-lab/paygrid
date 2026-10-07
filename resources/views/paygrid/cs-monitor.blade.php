@@ -15,7 +15,7 @@
     </form>
 </section>
 
-<section class="grid qris-metrics section">
+<section class="grid qris-metrics cs-monitor-metrics section">
     <div class="card pad qris-metric primary"><span>Total Aktif</span><strong>{{ $kpi['total'] }}</strong></div>
     <div class="card pad qris-metric success"><span>Sudah Absen</span><strong>{{ $kpi['hadir'] }}</strong></div>
     <div class="card pad qris-metric pending"><span>Belum Absen</span><strong>{{ $kpi['belum'] }}</strong></div>
@@ -24,7 +24,7 @@
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Belum Terverifikasi</h2><div class="muted">Masih di grup, belum selesai /activate. Perhatikan - ini calon penyusup.</div></div>
     <div class="table-wrap">
-        <table class="table qris-table">
+        <table class="table qris-table cs-monitor-table">
             <thead><tr><th>Nama Telegram</th><th>Telegram ID</th><th>Absen</th><th>Masuk Grup</th><th>PIN</th><th>Aksi</th></tr></thead>
             <tbody>
             @forelse($suspects as $telegramUser)
@@ -69,7 +69,7 @@
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Sudah Aktif</h2><div class="muted">Terverifikasi - status absen sesuai tanggal terpilih.</div></div>
     <div class="table-wrap">
-        <table class="table qris-table">
+        <table class="table qris-table cs-monitor-table">
             <thead><tr><th>Nama</th><th>Telegram ID</th><th>Absen</th><th>Aksi</th></tr></thead>
             <tbody>
             @forelse($activated as $telegramUser)
@@ -103,7 +103,7 @@
 <section class="card qris-panel section">
     <div class="qris-toolbar"><h2>Sudah Keluar Grup</h2></div>
     <div class="table-wrap">
-        <table class="table qris-table">
+        <table class="table qris-table cs-monitor-table">
             <thead><tr><th>Nama Telegram</th><th>Telegram ID</th><th>Keluar Pada</th></tr></thead>
             <tbody>
             @foreach($left as $telegramUser)
