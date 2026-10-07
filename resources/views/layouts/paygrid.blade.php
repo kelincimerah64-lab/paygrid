@@ -110,7 +110,6 @@
         .qris-metrics { grid-template-columns:repeat(4, minmax(0, 1fr)); margin-bottom:12px; gap:12px; }
         .qris-metrics.history-metrics { grid-template-columns:repeat(5, minmax(0, 1fr)); }
         .qris-metrics.ticket-metrics { grid-template-columns:1.4fr 1fr 1fr; }
-        .qris-metrics.cs-monitor-metrics { grid-template-columns:repeat(3, minmax(0, 1fr)); }
         .qris-metric { min-height:102px; border-radius:10px; position:relative; overflow:hidden; container-type:inline-size; }
         .qris-metric::after { content:""; position:absolute; width:64px; height:64px; right:-24px; top:-24px; border-radius:999px; background:rgba(255,255,255,.35); }
         .qris-metric span { display:block; font-size:10px; letter-spacing:.09em; text-transform:uppercase; font-weight:950; color:#42526b; }
@@ -163,7 +162,6 @@
         .ma-mapping-table th:nth-child(2), .ma-mapping-table th:nth-child(3) { width:27%; }
         .ma-mapping-table th:nth-child(4) { width:18%; }
         .qris-table.ma-mapping-table td { height:auto; padding:8px 10px; }
-        .qris-table.cs-monitor-table { width:auto; max-width:100%; }
         .ma-mapping-table select { width:100%; height:32px; min-height:32px; padding:5px 9px; font-weight:900; }
         .current-agent-box { max-width:260px; border:1px solid #dbe5f2; border-radius:8px; background:#fbfdff; padding:8px 10px; }
         .current-agent-box span { display:block; color:#52637a; font-size:10px; font-weight:950; text-transform:uppercase; letter-spacing:.08em; }
