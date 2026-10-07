@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Events\TelegramCsMonitorUpdated;
 use App\Models\TelegramAbsence;
 use App\Models\TelegramBotUser;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -381,5 +383,59 @@ class TelegramBotTest extends TestCase
 
         $telegramUser->refresh();
         $this->assertNotSame($firstPin, $telegramUser->readablePin());
+    }
+
+    public function test_absen_and_activate_broadcast_a_dashboard_update_ping(): void
+    {
+        Event::fake([TelegramCsMonitorUpdated::class]);
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 901, 'status' => 'pending']);
+        $telegramUser->generatePin();
+        $pin = $telegramUser->readablePin();
+
+        $this->useTelegramBotToken()->withHeader('Authorization', 'Bearer bot-secret')
+            ->postJson('/api/telegram/absen', ['telegram_user_id' => 901, 'chat_id' => 901]);
+        $this->withHeader('Authorization', 'Bearer bot-secret')
+            ->postJson('/api/telegram/activate', ['telegram_user_id' => 901, 'pin' => $pin]);
+
+        Event::assertDispatchedTimes(TelegramCsMonitorUpdated::class, 2);
+    }
+
+    public function test_generate_pin_broadcasts_a_dashboard_update_ping(): void
+    {
+        Event::fake([TelegramCsMonitorUpdated::class]);
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 902, 'status' => 'pending']);
+
+        $this->actingAs($this->monitor())->post(route('cs-monitor.generate-pin', $telegramUser), []);
+
+        Event::assertDispatched(TelegramCsMonitorUpdated::class);
+    }
+
+    /**
+     * Same pattern as MaWaTicketTest::test_ticket_channel_authorization_scopes_by_merchant_access -
+     * swap to the 'reverb' driver so Broadcast::auth() actually runs the
+     * routes/channels.php callback, re-requiring that file so the channel
+     * registers onto the now-active driver instance.
+     */
+    public function test_cs_monitor_channel_authorization_is_restricted_to_the_right_roles(): void
+    {
+        config([
+            'broadcasting.default' => 'reverb',
+            'broadcasting.connections.reverb.key' => 'test-key',
+            'broadcasting.connections.reverb.secret' => 'test-secret',
+            'broadcasting.connections.reverb.app_id' => 'test-app',
+        ]);
+        require base_path('routes/channels.php');
+        $this->seed();
+        $ma = User::query()->where('role', 'ma')->firstOrFail();
+
+        $this->actingAs($this->monitor())->post('/broadcasting/auth', [
+            'channel_name' => 'private-cs-monitor',
+            'socket_id' => '1.1',
+        ])->assertOk();
+
+        $this->actingAs($ma)->post('/broadcasting/auth', [
+            'channel_name' => 'private-cs-monitor',
+            'socket_id' => '1.1',
+        ])->assertForbidden();
     }
 }

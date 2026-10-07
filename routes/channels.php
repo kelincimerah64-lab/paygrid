@@ -31,3 +31,7 @@ Broadcast::channel('ticket.{ticketId}', function (User $user, int $ticketId) {
 
     return (int) $user->merchant_id === (int) $ticket->merchant_id;
 });
+
+Broadcast::channel('cs-monitor', function (User $user) {
+    return in_array($user->role, ['cs_monitor', 'superadmin'], true);
+});

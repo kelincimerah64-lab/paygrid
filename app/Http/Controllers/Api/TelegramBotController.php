@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\TelegramCsMonitorUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\TelegramAbsence;
 use App\Models\TelegramBotUser;
@@ -44,6 +45,7 @@ class TelegramBotController extends Controller
         }
 
         $telegramUser->save();
+        event(new TelegramCsMonitorUpdated());
 
         return response()->json(['ok' => true]);
     }
@@ -78,6 +80,7 @@ class TelegramBotController extends Controller
         if (! $telegramUser->isActivated() && ! $telegramUser->pinIsActive()) {
             $telegramUser->generatePin();
         }
+        event(new TelegramCsMonitorUpdated());
 
         return response()->json([
             'status' => $telegramUser->isActivated() ? 'already_activated' : 'pending_pin',
@@ -109,6 +112,7 @@ class TelegramBotController extends Controller
             'pin_encrypted' => null,
             'pin_expires_at' => null,
         ])->save();
+        event(new TelegramCsMonitorUpdated());
 
         return response()->json(['status' => 'activated', 'name' => $telegramUser->displayName()]);
     }
@@ -149,6 +153,8 @@ class TelegramBotController extends Controller
                 'is_verified' => $telegramUser->isActivated(),
             ]);
         }
+
+        event(new TelegramCsMonitorUpdated());
 
         return response()->json([
             'status' => $alreadyRecorded ? 'already_recorded' : 'recorded',

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\TelegramCsMonitorUpdated;
 use App\Models\TelegramAbsence;
 use App\Models\TelegramBotUser;
 use App\Services\Navigation\MenuBuilder;
@@ -58,6 +59,7 @@ class TelegramCsMonitorController extends Controller
     public function generatePin(Request $request, TelegramBotUser $telegramUser): RedirectResponse
     {
         $telegramUser->generatePin($request->user()->id);
+        event(new TelegramCsMonitorUpdated());
 
         return back();
     }
@@ -78,6 +80,7 @@ class TelegramCsMonitorController extends Controller
     {
         $data = $request->validate(['is_cs' => ['required', 'in:0,1']]);
         $telegramUser->update(['is_cs' => (bool) $data['is_cs']]);
+        event(new TelegramCsMonitorUpdated());
 
         return back();
     }
