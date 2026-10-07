@@ -26,7 +26,11 @@ class TelegramCsMonitorController extends Controller
 
         $activated = $telegramUsers->filter(fn (TelegramBotUser $u) => $u->isActivated())->values();
         $suspects = $telegramUsers->filter(fn (TelegramBotUser $u) => $u->isSuspect())->values();
-        $hadirCount = $activated->filter(fn (TelegramBotUser $u) => $absencesForDate->has($u->id))->count();
+        // Absen counts every known CS (activated or still-suspect) - a suspect can
+        // already /absen silently (see TelegramBotController::absen), so that attendance
+        // should count here too, not just once they're verified.
+        $semuaCs = $activated->concat($suspects);
+        $hadirCount = $semuaCs->filter(fn (TelegramBotUser $u) => $absencesForDate->has($u->id))->count();
         $groupChatIds = $telegramUsers->pluck('group_chat_id')->filter()->unique()->values()->all();
 
         return view('paygrid.cs-monitor', [
@@ -39,10 +43,10 @@ class TelegramCsMonitorController extends Controller
             'absencesForDate' => $absencesForDate,
             'selectedDate' => $selectedDate,
             'kpi' => [
-                'semua' => $activated->count() + $suspects->count(),
+                'semua' => $semuaCs->count(),
                 'total' => $activated->count(),
                 'hadir' => $hadirCount,
-                'belum' => $activated->count() - $hadirCount,
+                'belum' => $semuaCs->count() - $hadirCount,
                 'grup' => $this->telegramGroupMemberCount($groupChatIds),
             ],
         ]);

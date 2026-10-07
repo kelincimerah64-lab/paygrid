@@ -192,7 +192,7 @@ class TelegramBotTest extends TestCase
         $response->assertViewHas('selectedDate', now('Asia/Jakarta')->toDateString());
     }
 
-    public function test_dashboard_kpi_counts_only_activated_users_for_the_selected_date(): void
+    public function test_dashboard_kpi_total_counts_only_activated_but_hadir_belum_cover_everyone(): void
     {
         $present = TelegramBotUser::query()->create(['telegram_user_id' => 201, 'status' => 'activated']);
         TelegramBotUser::query()->create(['telegram_user_id' => 202, 'status' => 'activated']);
@@ -204,7 +204,26 @@ class TelegramBotTest extends TestCase
 
         $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
 
-        $response->assertViewHas('kpi', ['semua' => 3, 'total' => 2, 'hadir' => 1, 'belum' => 1, 'grup' => null]);
+        $response->assertViewHas('kpi', ['semua' => 3, 'total' => 2, 'hadir' => 1, 'belum' => 2, 'grup' => null]);
+    }
+
+    /**
+     * Per feedback: a suspect (never completed /activate) who already /absen'd should
+     * still count toward "Sudah Absen" - that silent absen-tracking already happens
+     * server-side (see absen_succeeds_silently_for_an_unverified_user), the dashboard
+     * KPI just needs to reflect it instead of only looking at activated users.
+     */
+    public function test_dashboard_hadir_count_includes_a_suspect_who_already_absened(): void
+    {
+        $suspect = TelegramBotUser::query()->create(['telegram_user_id' => 211, 'status' => 'pending']);
+        TelegramAbsence::query()->create([
+            'telegram_bot_user_id' => $suspect->id, 'absen_date' => now('Asia/Jakarta')->toDateString(),
+            'absen_at' => now(), 'is_verified' => false,
+        ]);
+
+        $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
+
+        $response->assertViewHas('kpi', ['semua' => 1, 'total' => 0, 'hadir' => 1, 'belum' => 0, 'grup' => null]);
     }
 
     public function test_dashboard_respects_a_past_date_filter(): void
