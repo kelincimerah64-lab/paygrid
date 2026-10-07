@@ -124,7 +124,9 @@ class MaController extends Controller
                 'fee' => $this->summary($dataFilters),
                 default => [],
             },
-            'reportAgents' => $page === 'report' ? $this->reportAgents($dataFilters) : collect(),
+            'reportAgents' => $page === 'report'
+                ? ($filters['report_view'] === 'withdrawal' ? $this->reportAgentsWithdrawal($dataFilters) : $this->reportAgents($dataFilters))
+                : collect(),
             'topMerchants' => $overviewTopMerchants,
             'topPaymentSources' => $page === 'overview'
                 ? collect($this->cachedAnalytics('overview-top-payment-sources', $this->todayFilters(), fn () => $this->topPaymentSources($overviewMerchants->pluck('id'))))
@@ -762,6 +764,42 @@ class MaController extends Controller
             ->selectRaw("merchants.agent_id, COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as volume")
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as pending")
             ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as settled")
+            ->whereNotNull('merchants.agent_id')
+            ->groupBy('merchants.agent_id')
+            ->get()
+            ->keyBy('agent_id');
+
+        return $this->agents($this->blankFilters())
+            ->withCount('merchants')
+            ->get()
+            ->map(function (Agent $agent) use ($metrics) {
+                $row = $metrics->get($agent->id);
+
+                return [
+                    'id' => $agent->id,
+                    'name' => $agent->name,
+                    'stores' => (int) $agent->merchants_count,
+                    'volume' => (int) ($row?->volume ?? 0),
+                    'pending' => (int) ($row?->pending ?? 0),
+                    'settled' => (int) ($row?->settled ?? 0),
+                ];
+            })
+            ->sortByDesc('volume')
+            ->when($filters['agents_view'] !== 'all', fn ($items) => $items->take(5))
+            ->values();
+    }
+
+    private function reportAgentsWithdrawal(array $filters)
+    {
+        $metrics = MerchantWithdrawal::query()
+            ->join('merchants', 'merchants.id', '=', 'merchant_withdrawals.merchant_id')
+            ->join('agents', 'agents.id', '=', 'merchants.agent_id')
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->where('agents.ma_user_id', $maId))
+            ->when($filters['from'], fn ($query) => $query->where('merchant_withdrawals.gateway_created_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('merchant_withdrawals.gateway_created_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw("merchants.agent_id, COALESCE(SUM(CASE WHEN merchant_withdrawals.status = 'COMPLETED' THEN merchant_withdrawals.amount ELSE 0 END), 0) as volume")
+            ->selectRaw("SUM(CASE WHEN merchant_withdrawals.status = 'PENDING' THEN 1 ELSE 0 END) as pending")
+            ->selectRaw("SUM(CASE WHEN merchant_withdrawals.status = 'COMPLETED' THEN 1 ELSE 0 END) as settled")
             ->whereNotNull('merchants.agent_id')
             ->groupBy('merchants.agent_id')
             ->get()

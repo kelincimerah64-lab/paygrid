@@ -255,6 +255,8 @@
         .ma-report-table th:nth-child(13) { width:5%; }
         .ma-report-table td:nth-child(9) { white-space:nowrap; }
         .ma-report-table td:nth-child(6), .ma-report-table td:nth-child(8), .ma-report-table td:nth-child(10), .ma-report-table td:nth-child(13) { overflow-wrap:anywhere; word-break:break-word; }
+        .ma-wd-table { table-layout:auto; min-width:0; }
+        .ma-wd-table td:nth-child(6), .ma-wd-table td:nth-child(7) { white-space:normal; overflow-wrap:anywhere; word-break:break-word; max-width:140px; }
         .topup-cards { grid-template-columns:repeat(6, minmax(0, 1fr)); gap:12px; margin-bottom:12px; }
         .checklist-cards { grid-template-columns:repeat(5, minmax(0, 1fr)); gap:14px; margin-bottom:12px; }
         .topup-card { min-height:128px; border-radius:10px; text-decoration:none; color:inherit; overflow:hidden; }
@@ -1023,6 +1025,18 @@
             .ma-report-table td:nth-child(11)::before { content:'Net'; }
             .ma-report-table td:nth-child(12)::before { content:'Settlement'; }
             .ma-report-table td:nth-child(13)::before { content:'Sumber TRX'; }
+            .ma-wd-table { min-width:0; }
+            .ma-wd-table td:nth-child(1)::before { content:'Waktu'; }
+            .ma-wd-table td:nth-child(2)::before { content:'Selesai'; }
+            .ma-wd-table td:nth-child(3)::before { content:'Toko'; }
+            .ma-wd-table td:nth-child(4)::before { content:'Agen'; }
+            .ma-wd-table td:nth-child(5)::before { content:'Bank'; }
+            .ma-wd-table td:nth-child(6)::before { content:'Nama Akun'; }
+            .ma-wd-table td:nth-child(7)::before { content:'No Rekening'; }
+            .ma-wd-table td:nth-child(8)::before { content:'Status'; }
+            .ma-wd-table td:nth-child(9)::before { content:'Amount'; }
+            .ma-wd-table td:nth-child(10)::before { content:'Net'; }
+            .ma-wd-table td:nth-child(11)::before { content:'Fee'; }
             .fee-menu-settings-table { min-width:0; }
             .fee-menu-settings-table td:nth-child(1)::before { content:'Menu'; }
             .fee-menu-settings-table td:nth-child(2)::before { content:'MA Aktif'; }
