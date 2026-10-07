@@ -9,7 +9,7 @@
     // state (scroll position, field values) is independently preserved, e.g.
     // a chat thread/composer, vs. a table mid-sort or a dropdown held open.
     const shouldPause = (root) => {
-        if (document.hidden) return true;
+        if (document.hidden && !root.hasAttribute('data-live-ignore-visibility')) return true;
         if (root.querySelector('[data-live-modal]:not([hidden])')) return true;
         if (root.querySelector('.table-wrap:hover')) return true;
         const active = document.activeElement;

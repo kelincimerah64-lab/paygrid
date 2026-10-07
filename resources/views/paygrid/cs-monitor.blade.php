@@ -8,7 +8,7 @@
     </div>
 </div>
 
-<div data-live-root data-live-interval="5000">
+<div data-live-root data-live-interval="5000" data-live-ignore-visibility>
 
 <section class="card pad section">
     <form method="get" class="merchant-workspace-filter" data-auto-filter>
