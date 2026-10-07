@@ -70,15 +70,13 @@
     <div class="qris-toolbar"><h2>Sudah Aktif</h2><div class="muted">Terverifikasi - status absen sesuai tanggal terpilih.</div></div>
     <div class="table-wrap">
         <table class="table qris-table">
-            <thead><tr><th>Nama</th><th>Telegram ID</th><th>Tercatat</th><th>Aktif Sejak</th><th>Absen</th><th>Aksi</th></tr></thead>
+            <thead><tr><th>Nama</th><th>Telegram ID</th><th>Absen</th><th>Aksi</th></tr></thead>
             <tbody>
             @forelse($activated as $telegramUser)
                 @php($absence = $absencesForDate->get($telegramUser->id))
                 <tr>
                     <td><strong>{{ $telegramUser->displayName() }}</strong></td>
                     <td><code>{{ $telegramUser->telegram_user_id }}</code></td>
-                    <td>{{ $telegramUser->created_at->timezone('Asia/Jakarta')->format('d/m/y H:i') }}</td>
-                    <td>{{ $telegramUser->activated_at?->timezone('Asia/Jakarta')->format('d/m/y H:i') ?? '-' }}</td>
                     <td>
                         @if($absence)
                             <span class="badge ok">Hadir {{ $absence->absen_at->timezone('Asia/Jakarta')->format('d/m/y H:i') }}</span>
@@ -94,7 +92,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="empty">Belum ada yang aktif.</td></tr>
+                <tr><td colspan="4" class="empty">Belum ada yang aktif.</td></tr>
             @endforelse
             </tbody>
         </table>
