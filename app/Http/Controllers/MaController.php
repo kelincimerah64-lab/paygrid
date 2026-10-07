@@ -679,25 +679,48 @@ class MaController extends Controller
         }
 
         $stores = $this->merchants(array_merge($filters, ['store_id' => 'all']))->get();
-        $totals = TopupRequest::query()
-            ->whereIn('merchant_id', $stores->pluck('id'))
-            ->where('status', 'success')
-            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw('merchant_id, COUNT(*) as trx_total')
-            ->selectRaw('COALESCE(SUM(amount), 0) as volume_success')
-            ->groupBy('merchant_id')
-            ->get()
-            ->keyBy('merchant_id');
-        // All-time, not status/period filtered - a store's "last active" shouldn't
-        // disappear just because its only recent attempt failed or fell outside
-        // the report's selected date range.
-        $lastActivity = TopupRequest::query()
-            ->whereIn('merchant_id', $stores->pluck('id'))
-            ->selectRaw('merchant_id, MAX(submitted_at) as last_transaction_at')
-            ->groupBy('merchant_id')
-            ->get()
-            ->keyBy('merchant_id');
+
+        if ($filters['report_view'] === 'withdrawal') {
+            $totals = MerchantWithdrawal::query()
+                ->whereIn('merchant_id', $stores->pluck('id'))
+                ->where('status', 'COMPLETED')
+                ->when($filters['from'], fn ($query) => $query->where('gateway_created_at', '>=', $this->rangeStart($filters['from'])))
+                ->when($filters['to'], fn ($query) => $query->where('gateway_created_at', '<=', $this->rangeEnd($filters['to'])))
+                ->selectRaw('merchant_id, COUNT(*) as trx_total')
+                ->selectRaw('COALESCE(SUM(amount), 0) as volume_success')
+                ->groupBy('merchant_id')
+                ->get()
+                ->keyBy('merchant_id');
+            // All-time, not status/period filtered - a store's "last active" shouldn't
+            // disappear just because its only recent attempt failed or fell outside
+            // the report's selected date range.
+            $lastActivity = MerchantWithdrawal::query()
+                ->whereIn('merchant_id', $stores->pluck('id'))
+                ->selectRaw('merchant_id, MAX(gateway_created_at) as last_transaction_at')
+                ->groupBy('merchant_id')
+                ->get()
+                ->keyBy('merchant_id');
+        } else {
+            $totals = TopupRequest::query()
+                ->whereIn('merchant_id', $stores->pluck('id'))
+                ->where('status', 'success')
+                ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
+                ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
+                ->selectRaw('merchant_id, COUNT(*) as trx_total')
+                ->selectRaw('COALESCE(SUM(amount), 0) as volume_success')
+                ->groupBy('merchant_id')
+                ->get()
+                ->keyBy('merchant_id');
+            // All-time, not status/period filtered - a store's "last active" shouldn't
+            // disappear just because its only recent attempt failed or fell outside
+            // the report's selected date range.
+            $lastActivity = TopupRequest::query()
+                ->whereIn('merchant_id', $stores->pluck('id'))
+                ->selectRaw('merchant_id, MAX(submitted_at) as last_transaction_at')
+                ->groupBy('merchant_id')
+                ->get()
+                ->keyBy('merchant_id');
+        }
 
         return $stores
             ->each(function (Merchant $store) use ($totals, $lastActivity): void {
