@@ -63,6 +63,7 @@ class MenuBuilder
     {
         return [
             ['key' => 'cs-monitor', 'label' => 'Monitor CS Absen', 'url' => route('cs-monitor.index')],
+            ['key' => 'cs-monitor-users', 'label' => 'List User', 'url' => route('cs-monitor.users')],
         ];
     }
 

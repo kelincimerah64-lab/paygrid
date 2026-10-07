@@ -18,7 +18,7 @@ class TelegramCsMonitorController extends Controller
     {
         $selectedDate = $this->resolveDate($request->query('date'));
 
-        $telegramUsers = TelegramBotUser::query()->orderByDesc('created_at')->get();
+        $telegramUsers = TelegramBotUser::query()->where('is_cs', true)->orderByDesc('created_at')->get();
         $absencesForDate = TelegramAbsence::query()
             ->whereDate('absen_date', $selectedDate)
             ->get()
@@ -31,7 +31,9 @@ class TelegramCsMonitorController extends Controller
         // should count here too, not just once they're verified.
         $semuaCs = $activated->concat($suspects);
         $hadirCount = $semuaCs->filter(fn (TelegramBotUser $u) => $absencesForDate->has($u->id))->count();
-        $groupChatIds = $telegramUsers->pluck('group_chat_id')->filter()->unique()->values()->all();
+        // Unfiltered - a group's existence shouldn't depend on whether the person who
+        // tipped us off to it happens to be flagged as CS.
+        $groupChatIds = TelegramBotUser::query()->whereNotNull('group_chat_id')->distinct()->pluck('group_chat_id')->all();
 
         return view('paygrid.cs-monitor', [
             'roleLabel' => 'CS Monitor',
@@ -55,6 +57,24 @@ class TelegramCsMonitorController extends Controller
     public function generatePin(Request $request, TelegramBotUser $telegramUser): RedirectResponse
     {
         $telegramUser->generatePin($request->user()->id);
+
+        return back();
+    }
+
+    public function users(): View
+    {
+        return view('paygrid.cs-monitor-users', [
+            'roleLabel' => 'CS Monitor',
+            'menus' => app(MenuBuilder::class)->csMonitor(),
+            'active' => 'cs-monitor-users',
+            'telegramUsers' => TelegramBotUser::query()->orderByDesc('created_at')->get(),
+        ]);
+    }
+
+    public function updateCsFlag(Request $request, TelegramBotUser $telegramUser): RedirectResponse
+    {
+        $data = $request->validate(['is_cs' => ['required', 'in:0,1']]);
+        $telegramUser->update(['is_cs' => (bool) $data['is_cs']]);
 
         return back();
     }

@@ -258,6 +258,39 @@ class TelegramBotTest extends TestCase
         $response->assertViewHas('kpi', fn ($kpi) => $kpi['grup'] === 8);
     }
 
+    public function test_dashboard_excludes_users_flagged_as_not_cs(): void
+    {
+        TelegramBotUser::query()->create(['telegram_user_id' => 501, 'status' => 'activated', 'is_cs' => true]);
+        TelegramBotUser::query()->create(['telegram_user_id' => 502, 'status' => 'activated', 'is_cs' => false]);
+        TelegramBotUser::query()->create(['telegram_user_id' => 503, 'status' => 'pending', 'is_cs' => false]);
+
+        $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
+
+        $response->assertViewHas('kpi', fn ($kpi) => $kpi['semua'] === 1 && $kpi['total'] === 1);
+    }
+
+    public function test_users_page_lists_everyone_including_those_flagged_not_cs(): void
+    {
+        TelegramBotUser::query()->create(['telegram_user_id' => 601, 'first_name' => 'Rama', 'is_cs' => true]);
+        TelegramBotUser::query()->create(['telegram_user_id' => 602, 'first_name' => 'Tamu', 'is_cs' => false]);
+
+        $response = $this->actingAs($this->monitor())->get(route('cs-monitor.users'));
+
+        $response->assertOk()->assertSee('Rama')->assertSee('Tamu');
+    }
+
+    public function test_updating_the_cs_flag_removes_a_user_from_the_dashboard(): void
+    {
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 701, 'status' => 'activated', 'is_cs' => true]);
+
+        $this->actingAs($this->monitor())->post(route('cs-monitor.users.cs-flag', $telegramUser), ['is_cs' => '0'])
+            ->assertRedirect();
+
+        $this->assertFalse($telegramUser->fresh()->is_cs);
+        $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
+        $response->assertViewHas('kpi', fn ($kpi) => $kpi['semua'] === 0);
+    }
+
     public function test_only_cs_monitor_and_superadmin_can_view_the_dashboard(): void
     {
         $this->seed();

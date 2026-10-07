@@ -119,6 +119,8 @@ Route::delete('/superadmin/fee-menus/{feeMenu}', [SuperadminController::class, '
 Route::middleware(['auth', 'role:cs_monitor,superadmin'])->group(function () {
 Route::get('/cs-monitor', [TelegramCsMonitorController::class, 'index'])->name('cs-monitor.index');
 Route::post('/cs-monitor/{telegramUser}/generate-pin', [TelegramCsMonitorController::class, 'generatePin'])->middleware('throttle:dashboard-writes')->name('cs-monitor.generate-pin');
+Route::get('/cs-monitor/users', [TelegramCsMonitorController::class, 'users'])->name('cs-monitor.users');
+Route::post('/cs-monitor/users/{telegramUser}/cs-flag', [TelegramCsMonitorController::class, 'updateCsFlag'])->middleware('throttle:dashboard-writes')->name('cs-monitor.users.cs-flag');
 });
 
 Route::middleware(['auth', 'role:cs_pusat,ma,superadmin'])->group(function () {

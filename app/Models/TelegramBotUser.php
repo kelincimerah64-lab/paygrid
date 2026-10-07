@@ -9,13 +9,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['telegram_user_id', 'username', 'first_name', 'dm_chat_id', 'group_chat_id', 'status', 'user_id', 'pin_encrypted', 'pin_expires_at', 'pin_generated_by', 'activated_at', 'joined_group_at', 'left_group_at'])]
+#[Fillable(['telegram_user_id', 'username', 'first_name', 'dm_chat_id', 'group_chat_id', 'status', 'is_cs', 'user_id', 'pin_encrypted', 'pin_expires_at', 'pin_generated_by', 'activated_at', 'joined_group_at', 'left_group_at'])]
 #[Hidden(['pin_encrypted'])]
 class TelegramBotUser extends Model
 {
     protected function casts(): array
     {
         return [
+            'is_cs' => 'boolean',
             'pin_encrypted' => 'encrypted',
             'pin_expires_at' => 'datetime',
             'activated_at' => 'datetime',
