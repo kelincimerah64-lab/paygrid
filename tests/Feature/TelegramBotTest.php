@@ -248,7 +248,8 @@ class TelegramBotTest extends TestCase
         TelegramBotUser::query()->create(['telegram_user_id' => 402, 'status' => 'pending', 'group_chat_id' => -222]);
 
         Http::fake([
-            'api.telegram.org/*' => Http::sequence()
+            'api.telegram.org/*getMe*' => Http::response(['ok' => false]),
+            'api.telegram.org/*getChatMemberCount*' => Http::sequence()
                 ->push(['ok' => true, 'result' => 6])
                 ->push(['ok' => true, 'result' => 4]),
         ]);
@@ -277,6 +278,23 @@ class TelegramBotTest extends TestCase
         $response = $this->actingAs($this->monitor())->get(route('cs-monitor.users'));
 
         $response->assertOk()->assertSee('Rama')->assertSee('Tamu');
+    }
+
+    public function test_bot_account_auto_registers_in_list_user_but_not_counted_as_cs(): void
+    {
+        config(['services.telegram_bot.bot_token' => 'fake-bot-token']);
+        Http::fake([
+            'api.telegram.org/*getMe*' => Http::response(['ok' => true, 'result' => ['id' => 999888, 'username' => 'paygridbot', 'first_name' => 'PayGrid']]),
+        ]);
+
+        $usersResponse = $this->actingAs($this->monitor())->get(route('cs-monitor.users'));
+        $usersResponse->assertOk()->assertSee('PayGrid (Bot)');
+
+        $telegramUser = TelegramBotUser::query()->where('telegram_user_id', 999888)->firstOrFail();
+        $this->assertFalse($telegramUser->is_cs);
+
+        $dashboardResponse = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
+        $dashboardResponse->assertViewHas('kpi', fn ($kpi) => $kpi['semua'] === 0);
     }
 
     public function test_updating_the_cs_flag_removes_a_user_from_the_dashboard(): void

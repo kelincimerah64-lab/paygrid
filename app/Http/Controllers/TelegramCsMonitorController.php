@@ -16,6 +16,7 @@ class TelegramCsMonitorController extends Controller
 {
     public function index(Request $request): View
     {
+        $this->ensureBotRegistered();
         $selectedDate = $this->resolveDate($request->query('date'));
 
         $telegramUsers = TelegramBotUser::query()->where('is_cs', true)->orderByDesc('created_at')->get();
@@ -63,6 +64,8 @@ class TelegramCsMonitorController extends Controller
 
     public function users(): View
     {
+        $this->ensureBotRegistered();
+
         return view('paygrid.cs-monitor-users', [
             'roleLabel' => 'CS Monitor',
             'menus' => app(MenuBuilder::class)->csMonitor(),
@@ -86,6 +89,41 @@ class TelegramCsMonitorController extends Controller
         }
 
         return now('Asia/Jakarta')->toDateString();
+    }
+
+    /**
+     * The bot's own account never comes through the normal detection paths - Telegram
+     * doesn't deliver a bot's own outgoing messages back to it as an update - so without
+     * this it would never appear in List User even though it's genuinely a member of
+     * every group it's in. Registered once via getMe(), flagged is_cs=false so it never
+     * pollutes the CS counts, but stays visible (and editable, if ever needed) in the
+     * unfiltered list. firstOrCreate so a manual override is never clobbered on repeat calls.
+     */
+    private function ensureBotRegistered(): void
+    {
+        $token = (string) config('services.telegram_bot.bot_token');
+        if ($token === '') {
+            return;
+        }
+
+        $bot = Cache::remember('telegram-bot-identity', 3600, function () use ($token) {
+            try {
+                $response = Http::timeout(5)->get("https://api.telegram.org/bot{$token}/getMe");
+
+                return $response->successful() && $response->json('ok') ? $response->json('result') : null;
+            } catch (Throwable) {
+                return null;
+            }
+        });
+
+        if (! $bot) {
+            return;
+        }
+
+        TelegramBotUser::query()->firstOrCreate(
+            ['telegram_user_id' => $bot['id']],
+            ['username' => $bot['username'] ?? null, 'first_name' => ($bot['first_name'] ?? 'Bot').' (Bot)', 'status' => 'bot', 'is_cs' => false]
+        );
     }
 
     /**
