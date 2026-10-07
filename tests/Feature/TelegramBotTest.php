@@ -6,6 +6,7 @@ use App\Models\TelegramAbsence;
 use App\Models\TelegramBotUser;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class TelegramBotTest extends TestCase
@@ -67,6 +68,22 @@ class TelegramBotTest extends TestCase
             ->assertOk();
 
         $this->assertFalse($telegramUser->fresh()->isSuspect());
+    }
+
+    public function test_seen_event_registers_an_unknown_sender_without_touching_join_leave_timing(): void
+    {
+        $this->useTelegramBotToken()->withHeader('Authorization', 'Bearer bot-secret')
+            ->postJson('/api/telegram/group-events', [
+                'event' => 'seen', 'chat_id' => -100456, 'telegram_user_id' => 666,
+                'username' => 'passive', 'first_name' => 'Passive',
+            ])
+            ->assertOk()->assertJson(['ok' => true]);
+
+        $telegramUser = TelegramBotUser::query()->where('telegram_user_id', 666)->firstOrFail();
+        $this->assertSame('pending', $telegramUser->status);
+        $this->assertNull($telegramUser->joined_group_at);
+        $this->assertSame(-100456, $telegramUser->group_chat_id);
+        $this->assertTrue($telegramUser->isSuspect());
     }
 
     public function test_activation_request_auto_generates_a_pin_for_a_brand_new_pending_user(): void
@@ -187,7 +204,7 @@ class TelegramBotTest extends TestCase
 
         $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
 
-        $response->assertViewHas('kpi', ['semua' => 3, 'total' => 2, 'hadir' => 1, 'belum' => 1]);
+        $response->assertViewHas('kpi', ['semua' => 3, 'total' => 2, 'hadir' => 1, 'belum' => 1, 'grup' => null]);
     }
 
     public function test_dashboard_respects_a_past_date_filter(): void
@@ -199,10 +216,27 @@ class TelegramBotTest extends TestCase
         ]);
 
         $todayResponse = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
-        $todayResponse->assertViewHas('kpi', ['semua' => 1, 'total' => 1, 'hadir' => 0, 'belum' => 1]);
+        $todayResponse->assertViewHas('kpi', ['semua' => 1, 'total' => 1, 'hadir' => 0, 'belum' => 1, 'grup' => null]);
 
         $pastResponse = $this->actingAs($this->monitor())->get(route('cs-monitor.index', ['date' => $yesterday]));
-        $pastResponse->assertViewHas('kpi', ['semua' => 1, 'total' => 1, 'hadir' => 1, 'belum' => 0]);
+        $pastResponse->assertViewHas('kpi', ['semua' => 1, 'total' => 1, 'hadir' => 1, 'belum' => 0, 'grup' => null]);
+    }
+
+    public function test_dashboard_sums_real_telegram_member_counts_across_known_groups(): void
+    {
+        config(['services.telegram_bot.bot_token' => 'fake-bot-token']);
+        TelegramBotUser::query()->create(['telegram_user_id' => 401, 'status' => 'activated', 'group_chat_id' => -111]);
+        TelegramBotUser::query()->create(['telegram_user_id' => 402, 'status' => 'pending', 'group_chat_id' => -222]);
+
+        Http::fake([
+            'api.telegram.org/*' => Http::sequence()
+                ->push(['ok' => true, 'result' => 6])
+                ->push(['ok' => true, 'result' => 4]),
+        ]);
+
+        $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
+
+        $response->assertViewHas('kpi', fn ($kpi) => $kpi['grup'] === 10);
     }
 
     public function test_only_cs_monitor_and_superadmin_can_view_the_dashboard(): void

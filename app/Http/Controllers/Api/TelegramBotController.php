@@ -16,7 +16,7 @@ class TelegramBotController extends Controller
         $this->authorizeCallback($request);
 
         $data = $request->validate([
-            'event' => ['required', Rule::in(['joined', 'left'])],
+            'event' => ['required', Rule::in(['joined', 'left', 'seen'])],
             'chat_id' => ['required', 'integer'],
             'telegram_user_id' => ['required', 'integer'],
             'username' => ['nullable', 'string', 'max:255'],
@@ -33,10 +33,13 @@ class TelegramBotController extends Controller
             $telegramUser->status = 'pending';
         }
 
+        // 'seen' is passive detection (any group message from a sender we haven't met
+        // yet) - it only needs to register the identity, not touch join/leave timing
+        // since we genuinely don't know when they actually joined.
         if ($data['event'] === 'joined') {
             $telegramUser->joined_group_at = now();
             $telegramUser->left_group_at = null;
-        } else {
+        } elseif ($data['event'] === 'left') {
             $telegramUser->left_group_at = now();
         }
 

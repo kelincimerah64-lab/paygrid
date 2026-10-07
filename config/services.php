@@ -42,6 +42,7 @@ return [
 
     'telegram_bot' => [
         'callback_token' => env('TELEGRAM_BOT_CALLBACK_TOKEN'),
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
     ],
 
 ];

@@ -20,6 +20,7 @@
     <div class="card pad qris-metric primary"><span>Total Aktif</span><strong>{{ $kpi['total'] }}</strong></div>
     <div class="card pad qris-metric success"><span>Sudah Absen</span><strong>{{ $kpi['hadir'] }}</strong></div>
     <div class="card pad qris-metric pending"><span>Belum Absen</span><strong>{{ $kpi['belum'] }}</strong></div>
+    <div class="card pad qris-metric expired"><span>Member Grup Telegram</span><strong>{{ $kpi['grup'] ?? '-' }}</strong><small>Dibanding Semua CS: beda berarti ada yang belum kedetect</small></div>
 </section>
 
 <section class="card qris-panel section">
