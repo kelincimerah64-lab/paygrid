@@ -115,8 +115,10 @@ class MaController extends Controller
             'selectedAgentStores' => $selectedAgent ? $this->selectedAgentStores($dataFilters) : collect(),
             'merchants' => $merchants,
             'registrations' => $page === 'approval' ? $this->registrations($filters)->get() : collect(),
-            'transactions' => $page === 'report' ? $this->transactions($dataFilters)->simplePaginate(25)->withQueryString() : null,
-            'selectedStoreStats' => $page === 'report' ? $this->selectedStoreStats($dataFilters) : null,
+            'transactions' => $page === 'report' && $filters['report_view'] !== 'withdrawal' ? $this->transactions($dataFilters)->simplePaginate(25)->withQueryString() : null,
+            'selectedStoreStats' => $page === 'report' && $filters['report_view'] !== 'withdrawal' ? $this->selectedStoreStats($dataFilters) : null,
+            'withdrawals' => $page === 'report' && $filters['report_view'] === 'withdrawal' ? $this->withdrawals($dataFilters)->simplePaginate(25)->withQueryString() : null,
+            'selectedStoreWithdrawalStats' => $page === 'report' && $filters['report_view'] === 'withdrawal' ? $this->selectedStoreWithdrawalStats($dataFilters) : null,
             'summary' => match ($page) {
                 'overview' => $this->cachedAnalytics('overview-summary', $dataFilters, fn () => $this->summary($dataFilters)),
                 'fee' => $this->summary($dataFilters),
@@ -189,7 +191,34 @@ class MaController extends Controller
 
     public function export(Request $request): Response
     {
-        $rows = $this->transactions($this->periodFilters($this->filters()))->limit(5000)->get();
+        $filters = $this->periodFilters($this->filters());
+
+        if ($filters['report_view'] === 'withdrawal') {
+            $rows = $this->withdrawals($filters)->limit(5000)->get();
+            $csv = "Waktu,Selesai,Toko,Agen,Bank,Nama Akun,No Rekening,Status,Amount,Net,Fee\n";
+            foreach ($rows as $row) {
+                $csv .= implode(',', array_map(fn ($value) => '"'.str_replace('"', '""', (string) $value).'"', [
+                    $row->gateway_created_at?->timezone('Asia/Jakarta')->format('Y-m-d H:i:s'),
+                    $row->gateway_completed_at?->timezone('Asia/Jakarta')->format('Y-m-d H:i:s'),
+                    $row->merchant?->name,
+                    $row->merchant?->agent?->name,
+                    $row->bank_name,
+                    $row->account_name,
+                    $row->account_number,
+                    $row->status,
+                    $row->amount,
+                    $row->net_amount,
+                    $row->fee,
+                ]))."\n";
+            }
+
+            return response($csv, 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="ma-report-withdrawal.csv"',
+            ]);
+        }
+
+        $rows = $this->transactions($filters)->limit(5000)->get();
         $csv = "Masuk,Sukses,Durasi,Toko,Agen,Status,Amount,Reference,RRN,Payment ID,Net,Settlement\n";
         foreach ($rows as $row) {
             $csv .= implode(',', array_map(fn ($value) => '"'.str_replace('"', '""', (string) $value).'"', [
@@ -420,6 +449,7 @@ class MaController extends Controller
             'agents_view' => (string) request('agents_view', 'top'),
             'period' => (string) request('period', 'this_month'),
             'type' => (string) request('type', 'all'),
+            'report_view' => (string) request('report_view', 'transaksi'),
             'from' => request('from'),
             'to' => request('to'),
         ];
@@ -439,7 +469,7 @@ class MaController extends Controller
 
     private function blankFilters(): array
     {
-        return ['q' => '', 'status' => 'all', 'agent_id' => 'all', 'store_id' => 'all', 'agents_view' => 'top', 'period' => 'this_month', 'type' => 'all', 'from' => null, 'to' => null];
+        return ['q' => '', 'status' => 'all', 'agent_id' => 'all', 'store_id' => 'all', 'agents_view' => 'top', 'period' => 'this_month', 'type' => 'all', 'report_view' => 'transaksi', 'from' => null, 'to' => null];
     }
 
     private function todayFilters(): array
@@ -562,6 +592,60 @@ class MaController extends Controller
             ->select('topup_requests.*')
             ->with(['merchant.agent', 'feeSnapshot'])
             ->latest('topup_requests.submitted_at');
+    }
+
+    /**
+     * Mirrors transactionsQuery() - same MA/agent/store scoping, same period
+     * filter - just against merchant_withdrawals (synced from the gateway)
+     * instead of topup_requests. 'status' here reuses the request's own
+     * status filter but against withdrawal's COMPLETED/PENDING/FAILED values
+     * rather than topup's success/pending/expired/etc, so it only applies
+     * when the request is actually scoped to the withdrawal report view.
+     */
+    private function withdrawalsQuery(array $filters)
+    {
+        $maId = $this->currentMaId();
+
+        $scopedMerchantIds = ($maId || $filters['agent_id'] !== 'all')
+            ? Merchant::query()
+                ->when($maId, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $maId))
+                ->when($filters['agent_id'] !== 'all', fn ($query) => $query->where('agent_id', $filters['agent_id']))
+                ->pluck('id')
+            : null;
+
+        return MerchantWithdrawal::query()
+            ->when($scopedMerchantIds !== null, fn ($query) => $query->whereIn('merchant_withdrawals.merchant_id', $scopedMerchantIds))
+            ->when($filters['from'], fn ($query) => $query->where('merchant_withdrawals.gateway_created_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('merchant_withdrawals.gateway_created_at', '<=', $this->rangeEnd($filters['to'])))
+            ->when($filters['store_id'] !== 'all', fn ($query) => $query->where('merchant_withdrawals.merchant_id', $filters['store_id']))
+            ->when($filters['report_view'] === 'withdrawal' && in_array($filters['status'], ['COMPLETED', 'PENDING', 'FAILED'], true), fn ($query) => $query->where('merchant_withdrawals.status', $filters['status']));
+    }
+
+    private function withdrawals(array $filters)
+    {
+        return $this->withdrawalsQuery($filters)
+            ->select('merchant_withdrawals.*')
+            ->with('merchant.agent')
+            ->latest('merchant_withdrawals.gateway_created_at');
+    }
+
+    private function selectedStoreWithdrawalStats(array $filters): array
+    {
+        $row = (clone $this->withdrawalsQuery($filters))
+            ->selectRaw("COUNT(*) as trx_total")
+            ->selectRaw("SUM(CASE WHEN merchant_withdrawals.status = 'COMPLETED' THEN 1 ELSE 0 END) as trx_completed")
+            ->selectRaw("SUM(CASE WHEN merchant_withdrawals.status = 'PENDING' THEN 1 ELSE 0 END) as trx_pending")
+            ->selectRaw("COALESCE(SUM(CASE WHEN merchant_withdrawals.status = 'COMPLETED' THEN merchant_withdrawals.amount ELSE 0 END), 0) as amount_completed")
+            ->selectRaw("COALESCE(SUM(CASE WHEN merchant_withdrawals.status = 'PENDING' THEN merchant_withdrawals.amount ELSE 0 END), 0) as amount_pending")
+            ->first();
+
+        return [
+            'trx_total' => (int) ($row->trx_total ?? 0),
+            'trx_completed' => (int) ($row->trx_completed ?? 0),
+            'trx_pending' => (int) ($row->trx_pending ?? 0),
+            'amount_completed' => (int) ($row->amount_completed ?? 0),
+            'amount_pending' => (int) ($row->amount_pending ?? 0),
+        ];
     }
 
     private function selectedAgent(array $filters): ?Agent
