@@ -161,6 +161,50 @@ class TelegramBotTest extends TestCase
         $this->assertFalse($absence->is_verified);
     }
 
+    public function test_dashboard_shows_absen_status_for_suspects_too_and_defaults_to_today(): void
+    {
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 123, 'status' => 'pending', 'first_name' => 'Intruder']);
+        TelegramAbsence::query()->create([
+            'telegram_bot_user_id' => $telegramUser->id, 'absen_date' => now('Asia/Jakarta')->toDateString(),
+            'absen_at' => now(), 'is_verified' => false,
+        ]);
+
+        $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
+
+        $response->assertOk()->assertSee('Hadir');
+        $response->assertViewHas('selectedDate', now('Asia/Jakarta')->toDateString());
+    }
+
+    public function test_dashboard_kpi_counts_only_activated_users_for_the_selected_date(): void
+    {
+        $present = TelegramBotUser::query()->create(['telegram_user_id' => 201, 'status' => 'activated']);
+        TelegramBotUser::query()->create(['telegram_user_id' => 202, 'status' => 'activated']);
+        TelegramBotUser::query()->create(['telegram_user_id' => 203, 'status' => 'pending']);
+        TelegramAbsence::query()->create([
+            'telegram_bot_user_id' => $present->id, 'absen_date' => now('Asia/Jakarta')->toDateString(),
+            'absen_at' => now(), 'is_verified' => true,
+        ]);
+
+        $response = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
+
+        $response->assertViewHas('kpi', ['total' => 2, 'hadir' => 1, 'belum' => 1]);
+    }
+
+    public function test_dashboard_respects_a_past_date_filter(): void
+    {
+        $telegramUser = TelegramBotUser::query()->create(['telegram_user_id' => 301, 'status' => 'activated']);
+        $yesterday = now('Asia/Jakarta')->subDay()->toDateString();
+        TelegramAbsence::query()->create([
+            'telegram_bot_user_id' => $telegramUser->id, 'absen_date' => $yesterday, 'absen_at' => now()->subDay(), 'is_verified' => true,
+        ]);
+
+        $todayResponse = $this->actingAs($this->monitor())->get(route('cs-monitor.index'));
+        $todayResponse->assertViewHas('kpi', ['total' => 1, 'hadir' => 0, 'belum' => 1]);
+
+        $pastResponse = $this->actingAs($this->monitor())->get(route('cs-monitor.index', ['date' => $yesterday]));
+        $pastResponse->assertViewHas('kpi', ['total' => 1, 'hadir' => 1, 'belum' => 0]);
+    }
+
     public function test_only_cs_monitor_and_superadmin_can_view_the_dashboard(): void
     {
         $this->seed();
