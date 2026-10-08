@@ -108,14 +108,15 @@ class MaWaTicketController extends Controller
             'description' => $data['description'],
             'metadata' => $tickets->metadataFrom($category, $data),
         ]);
-        if ($needsApproval) {
-            $ticket->forceFill(['approval_status' => 'waiting'])->save();
-        }
         $ticket->forceFill(['wa_reminder_stage_at' => now()])->save();
         $audit->record('wa_ticket.created', $ticket, null, $ticket->only(['merchant_id', 'department', 'category', 'ticket_no', 'approval_status']));
 
-        $groupId = $needsApproval ? config('paygrid.whatsapp.approval_group_id') : config('paygrid.whatsapp.handling_group_id');
-        NotifyWaTicketLink::dispatch($ticket->id, 'created', (string) $groupId);
+        // create() already notified the approval group when needed - only the
+        // non-approval case still needs a push here, straight to the handling
+        // group.
+        if (! $needsApproval) {
+            NotifyWaTicketLink::dispatch($ticket->id, 'created', (string) config('paygrid.whatsapp.handling_group_id'));
+        }
 
         $status = $needsApproval ? 'Tiket dibuat: '.$ticket->ticket_no.'. Menunggu approval, notifikasi dikirim ke grup approval.' : 'Tiket dibuat: '.$ticket->ticket_no.'. Notifikasi WA dikirim.';
 

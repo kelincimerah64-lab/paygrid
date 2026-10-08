@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Events\MerchantTicketMessageSent;
-use App\Jobs\NotifyIpWhitelistApproval;
+use App\Jobs\NotifyWaTicketLink;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
 use App\Models\MerchantTicketMessage;
@@ -40,9 +40,9 @@ class MerchantTicketService
 
     /**
      * Categories that need approval before they're worked on, keyed by
-     * department. Used by the WA Tiket pilot (MaWaTicketController) only -
-     * the original ticket wizard's approval gate in create() below still
-     * covers tech/ip_whitelist specifically, unchanged.
+     * department. Drives the approval gate in create() below, so it applies
+     * no matter which controller called create() - the toko ticket portal
+     * and the MA WA-ticket dashboard both end up here.
      */
     public const PILOT_APPROVAL_CATEGORIES = [
         'tech' => ['ip_whitelist'],
@@ -272,7 +272,7 @@ class MerchantTicketService
 
     public function create(Merchant $merchant, User $user, array $data, array $attachments = []): MerchantTicket
     {
-        $needsApproval = $data['department'] === 'tech' && $data['category'] === 'ip_whitelist';
+        $needsApproval = $this->needsPilotApproval($data['department'], $data['category']);
 
         $ticket = MerchantTicket::query()->create([
             'merchant_id' => $merchant->id,
@@ -290,8 +290,15 @@ class MerchantTicketService
 
         $ticket->forceFill(['ticket_no' => 'TK-'.str_pad((string) $ticket->id, 5, '0', STR_PAD_LEFT)])->save();
 
+        // Every approval-gated category notifies the same WhatsApp approval
+        // group regardless of who created the ticket (toko via the portal,
+        // or staff via the MA WA-ticket dashboard) - this used to split
+        // between this job (n8n-routed, a different WA group) for ip_whitelist
+        // specifically and NotifyWaTicketLink (MaWaTicketController only) for
+        // everything else, so a toko-created ip_whitelist ticket never
+        // reached the group staff actually watch for approvals.
         if ($needsApproval) {
-            NotifyIpWhitelistApproval::dispatch($ticket->id);
+            NotifyWaTicketLink::dispatch($ticket->id, 'created', (string) config('paygrid.whatsapp.approval_group_id'));
         }
 
         return $ticket;
