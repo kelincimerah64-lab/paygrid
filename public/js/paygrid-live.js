@@ -172,9 +172,15 @@
                         // data-scroll-to-bottom (composer forms only) also jumps the
                         // thread to the newly-sent message regardless of prior scroll.
                         await refresh(root, true, form.hasAttribute('data-scroll-to-bottom'));
+                    } else if (response.status === 419) {
+                        alert('Sesi login sudah lama tidak aktif, halaman akan dimuat ulang.');
+                        window.location.reload();
+                    } else {
+                        const payload = await response.json().catch(() => null);
+                        alert(payload?.message || 'Gagal mengirim, coba lagi.');
                     }
                 } catch (e) {
-                    // network hiccup - next periodic refresh will catch up
+                    alert('Gagal mengirim - cek koneksi internet, lalu coba lagi.');
                 } finally {
                     if (submitter) submitter.disabled = false;
                 }
