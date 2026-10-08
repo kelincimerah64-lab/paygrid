@@ -129,6 +129,9 @@ class NotifyWaTicketLink implements ShouldQueue
     {
         $link = route('wa-tickets.show', $ticket);
         $store = $ticket->merchant?->name ?? '-';
-        $wa->send($this->groupId, "\u{1F501} Tiket {$ticket->ticket_no} dialihkan.\nToko: {$store}\n{$link}");
+        $to = $ticket->claimed_by_user_id
+            ? "\u{1F4CC} Dipindah ke {$ticket->claimedBy?->name}."
+            : "\u{1F501} Dilepas ke antrean.";
+        $wa->send($this->groupId, "\u{1F501} Tiket {$ticket->ticket_no} dialihkan.\nToko: {$store}\n{$to}\n{$link}");
     }
 }

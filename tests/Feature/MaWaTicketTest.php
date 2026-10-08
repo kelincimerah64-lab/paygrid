@@ -80,6 +80,52 @@ class MaWaTicketTest extends TestCase
         Bus::assertDispatchedTimes(NotifyWaTicketLink::class, 1, fn ($job) => $job->ticketId === $ticket->id && $job->event === 'claimed');
     }
 
+    public function test_only_the_claimer_can_reply_to_toko_transfer_or_close_a_claimed_ticket(): void
+    {
+        Bus::fake();
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = $this->ma();
+        $other = User::factory()->create(['role' => 'cs_pusat', 'is_active' => true]);
+        $superadmin = User::factory()->create(['role' => 'superadmin']);
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $ma, [
+            'department' => 'cs', 'category' => 'others', 'description' => 'Test.',
+        ]);
+        app(\App\Services\MerchantTicketService::class)->claim($ticket, $ma);
+
+        // A non-claimer cannot reply to toko...
+        $this->actingAs($other)->post(route('wa-tickets.reply', $ticket), [
+            'body' => 'Nyelonong balas ke toko.',
+            'is_internal' => '0',
+        ])->assertStatus(403);
+        $this->assertDatabaseMissing('merchant_ticket_messages', ['body' => 'Nyelonong balas ke toko.']);
+
+        // ...but internal discussion stays open to any staff with access.
+        $this->actingAs($other)->post(route('wa-tickets.reply', $ticket), [
+            'body' => 'Rama, ini masih kamu pegang?',
+            'is_internal' => '1',
+        ])->assertRedirect();
+        $this->assertDatabaseHas('merchant_ticket_messages', ['body' => 'Rama, ini masih kamu pegang?', 'is_internal' => true]);
+
+        // A non-claimer cannot transfer or close it either.
+        $this->actingAs($other)->post(route('wa-tickets.transfer', $ticket), ['to_user_id' => $other->id])->assertStatus(403);
+        $this->assertSame($ma->id, $ticket->fresh()->claimed_by_user_id);
+
+        $this->actingAs($other)->post(route('wa-tickets.close', $ticket), [])->assertStatus(403);
+        $this->assertNotSame('closed', $ticket->fresh()->status);
+
+        // Superadmin bypasses the lock.
+        $this->actingAs($superadmin)->post(route('wa-tickets.reply', $ticket), [
+            'body' => 'Superadmin override balas toko.',
+            'is_internal' => '0',
+        ])->assertRedirect();
+        $this->assertDatabaseHas('merchant_ticket_messages', ['body' => 'Superadmin override balas toko.', 'is_internal' => false]);
+
+        // The claimer themself can still act normally.
+        $this->actingAs($ma)->post(route('wa-tickets.transfer', $ticket), ['to_user_id' => $other->id])->assertRedirect();
+        $this->assertSame($other->id, $ticket->fresh()->claimed_by_user_id);
+    }
+
     public function test_reply_respects_the_internal_flag(): void
     {
         $this->seed();

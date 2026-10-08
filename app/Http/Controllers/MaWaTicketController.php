@@ -213,6 +213,13 @@ class MaWaTicketController extends Controller
             'is_internal' => ['nullable', 'boolean'],
         ]);
         $isInternal = (bool) ($data['is_internal'] ?? false);
+        // Internal discussion stays open to any staff with access, even if
+        // someone else holds the claim - it's the coordination channel (e.g.
+        // "can you take this?"). The toko-facing side is the one that
+        // actually needs exclusivity, so only that branch checks ownership.
+        if (! $isInternal) {
+            $this->abortIfClaimedByAnother($request->user(), $ticket);
+        }
         abort_if(! $isInternal && ! $ticket->claimed_by_user_id, 422, 'Ambil tiket ini dulu sebelum kirim pesan ke toko.');
         $tickets->addMessage($ticket, $request->user(), $data['body'], true, $isInternal);
 
@@ -233,6 +240,7 @@ class MaWaTicketController extends Controller
     public function transfer(Request $request, MerchantTicket $ticket, MerchantTicketService $tickets): RedirectResponse
     {
         $this->authorizeTicket($request->user(), $ticket);
+        $this->abortIfClaimedByAnother($request->user(), $ticket);
         abort_if($ticket->status === 'closed', 422, 'Tiket sudah ditutup.');
         abort_if($ticket->approval_status === 'waiting', 422, 'Tiket ini masih menunggu approval.');
 
@@ -248,6 +256,7 @@ class MaWaTicketController extends Controller
     public function close(Request $request, MerchantTicket $ticket, MerchantTicketService $tickets): RedirectResponse
     {
         $this->authorizeTicket($request->user(), $ticket);
+        $this->abortIfClaimedByAnother($request->user(), $ticket);
         abort_if($ticket->status === 'closed', 422, 'Tiket sudah ditutup.');
 
         $data = $request->validate(['note' => ['nullable', 'string', 'max:2000']]);
@@ -270,6 +279,24 @@ class MaWaTicketController extends Controller
         }
 
         return Merchant::query()->whereRelation('agent', 'ma_user_id', $user->id)->pluck('id');
+    }
+
+    /**
+     * Once a ticket is claimed, only that claimer may act on it (reply,
+     * transfer, close) - otherwise two staff clicking the same WA link could
+     * both work the same ticket at once. Superadmin bypasses for support/
+     * override cases. Claim itself doesn't use this: it's already race-safe
+     * via claim()'s atomic WHERE claimed_by_user_id IS NULL.
+     */
+    private function abortIfClaimedByAnother(User $user, MerchantTicket $ticket): void
+    {
+        if (! $ticket->claimed_by_user_id || (int) $ticket->claimed_by_user_id === (int) $user->id) {
+            return;
+        }
+        if ($user->role === 'superadmin') {
+            return;
+        }
+        abort(403, 'Tiket ini sudah diambil oleh '.($ticket->claimedBy?->name ?? 'orang lain').'.');
     }
 
     private function authorizeTicket(User $user, MerchantTicket $ticket): void

@@ -9,6 +9,7 @@
     };
     $toToko = $ticket->messages->where('is_internal', false);
     $internal = $ticket->messages->where('is_internal', true);
+    $isClaimOwner = ! $ticket->claimed_by_user_id || (int) $ticket->claimed_by_user_id === (int) auth()->id() || auth()->user()->role === 'superadmin';
     $initials = fn (?string $name) => $name ? strtoupper(substr(trim($name), 0, 1).substr(trim(strrchr(' '.$name, ' ')), 1, 1)) : '?';
     $readersFor = function ($message) use ($views) {
         return $views->filter(fn ($v) => $v->user_id !== $message->user_id && $v->last_viewed_at->gte($message->created_at))
@@ -89,7 +90,7 @@
                     <div class="wat-avatar">{{ $initials($ticket->claimedBy?->name) }}</div>
                     <div><b>{{ $ticket->claimedBy?->name }}</b><span>Diambil {{ $ticket->claimed_at?->timezone('Asia/Jakarta')->diffForHumans() }}</span></div>
                 </div>
-                @if($ticket->status !== 'closed' && auth()->user()->role !== 'approver')
+                @if($ticket->status !== 'closed' && auth()->user()->role !== 'approver' && $isClaimOwner)
                     <form method="post" action="{{ route('wa-tickets.transfer', $ticket) }}" class="wat-transfer-form" data-live-form>
                         @csrf
                         <select name="to_user_id">
@@ -100,13 +101,15 @@
                         </select>
                         <button class="wat-btn outline" type="submit">&#8646; Lempar Tiket</button>
                     </form>
+                @elseif($ticket->status !== 'closed' && auth()->user()->role !== 'approver')
+                    <span class="wat-pill">Cuma {{ $ticket->claimedBy?->name }} yang bisa proses tiket ini</span>
                 @endif
             </div>
         @endif
     @endif
 </section>
 
-@if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
+@if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver' && $isClaimOwner)
 <section class="wat-panel">
     <div class="wat-panel-head"><h2>Tandai Selesai</h2></div>
     <form method="post" action="{{ route('wa-tickets.close', $ticket) }}" class="wat-close-card" data-live-form>
@@ -163,15 +166,17 @@
             <button type="button" class="wat-new-msg-banner" data-new-msg-banner hidden>&#8595; Pesan baru</button>
         </div>
         @if($ticket->status !== 'closed' && $ticket->approval_status !== 'waiting' && auth()->user()->role !== 'approver')
-            @if($ticket->claimed_by_user_id)
+            @if(! $ticket->claimed_by_user_id)
+                <p class="wat-empty" style="padding:14px 20px">Ambil tiket ini dulu sebelum kirim pesan ke toko.</p>
+            @elseif(! $isClaimOwner)
+                <p class="wat-empty" style="padding:14px 20px">Tiket ini sudah diambil oleh {{ $ticket->claimedBy?->name }} - cuma dia yang bisa kirim pesan ke toko.</p>
+            @else
                 <form method="post" action="{{ route('wa-tickets.reply', $ticket) }}" class="wat-composer" data-live-form data-scroll-to-bottom>
                     @csrf
                     <input type="hidden" name="is_internal" value="0">
                     <textarea name="body" data-preserve-key="wat-reply-toko" data-live-background-ok maxlength="2000" required placeholder="Tulis update buat toko..."></textarea>
                     <button class="wat-btn primary" type="submit">Kirim</button>
                 </form>
-            @else
-                <p class="wat-empty" style="padding:14px 20px">Ambil tiket ini dulu sebelum kirim pesan ke toko.</p>
             @endif
         @endif
     </div>
