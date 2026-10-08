@@ -158,6 +158,18 @@
                 event.preventDefault();
                 const submitter = event.submitter;
                 if (submitter) submitter.disabled = true;
+                // Defense-in-depth for the WA ticket Ke-Toko/Internal composers:
+                // force this form's is_internal value to match which panel it's
+                // actually sitting in right now, rather than trusting whatever
+                // static value the hidden input happened to carry into this
+                // submit - a message landing in the wrong channel is bad enough
+                // (toko-visible leaking internal notes, or vice versa) to guard
+                // against even without a confirmed root cause for how it drifts.
+                const waPanel = form.closest('[data-wa-panel]');
+                const isInternalField = form.querySelector('[name="is_internal"]');
+                if (waPanel && isInternalField) {
+                    isInternalField.value = waPanel.dataset.waPanel === 'internal' ? '1' : '0';
+                }
                 try {
                     const response = await fetch(form.action, {
                         method: 'POST',
@@ -172,6 +184,12 @@
                         // data-scroll-to-bottom (composer forms only) also jumps the
                         // thread to the newly-sent message regardless of prior scroll.
                         await refresh(root, true, form.hasAttribute('data-scroll-to-bottom'));
+                        // refresh() swaps in fresh DOM nodes for every [data-live-region]
+                        // (including this very form), which carry none of the
+                        // data-live-form-ready/listener state - without re-running this,
+                        // the next submit on this composer falls through to a real
+                        // (non-AJAX) browser form post instead of being intercepted here.
+                        ajaxifyForms(root);
                     } else if (response.status === 419) {
                         alert('Sesi login sudah lama tidak aktif, halaman akan dimuat ulang.');
                         window.location.reload();
