@@ -505,6 +505,11 @@
         .admin-minimum-form { display:grid; grid-template-columns:auto auto auto; gap:10px; align-items:end; }
         .admin-minimum-form label { display:grid; gap:8px; margin:0; }
         .admin-minimum-form input { height:32px; min-height:32px; padding:5px 9px; width:160px; }
+        .dept-status-update { margin-top:16px; padding-top:16px; border-top:1px solid #e7edf6; }
+        .dept-status-update h3 { margin:0 0 10px; font-size:12px; letter-spacing:.07em; text-transform:uppercase; font-weight:950; color:#52637a; }
+        .dept-status-form { display:flex; gap:10px; align-items:end; }
+        .dept-status-form label { display:grid; gap:8px; margin:0; }
+        .dept-status-form select { height:32px; min-height:32px; padding:5px 9px; width:180px; }
         .center-ticket-table th:nth-child(1) { width:17%; }
         .center-ticket-table th:nth-child(2) { width:9%; }
         .center-ticket-table th:nth-child(3) { width:22%; }
@@ -849,6 +854,8 @@
             .ticket-create-form { max-width:100%; }
             .bot-chart-box { height:170px; }
             .admin-create-form, .admin-minimum-form { grid-template-columns:1fr; }
+            .dept-status-form { flex-direction:column; align-items:stretch; }
+            .dept-status-form select { width:100%; }
             .page-head, .filters, .qris-hero, .qris-toolbar { flex-direction:column; align-items:stretch; }
             .agent-filter-grid label { flex-basis:100%; }
             .agent-filter-actions, .agent-bulk-bar { align-items:stretch; justify-content:flex-start; }

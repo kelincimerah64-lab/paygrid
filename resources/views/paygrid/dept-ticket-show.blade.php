@@ -45,15 +45,20 @@
         <a class="btn compact-btn" style="margin-right:6px" href="{{ route('merchant.tickets.attachment', [$ticket->merchant, $ticket, $index]) }}">Lampiran {{ $index + 1 }}</a>
     @endforeach
 
-    <form method="post" action="{{ route('dept-tickets.status', $ticket) }}" style="margin-top:12px; display:flex; gap:8px; align-items:center">
-        @csrf
-        <select name="status">
-            <option value="open" @selected($ticket->status === 'open')>Open</option>
-            <option value="in_progress" @selected($ticket->status === 'in_progress')>In Progress</option>
-            <option value="closed" @selected($ticket->status === 'closed')>Closed</option>
-        </select>
-        <button class="btn compact-btn" type="submit">Update Status</button>
-    </form>
+    <div class="dept-status-update">
+        <h3>Update Status</h3>
+        <form method="post" action="{{ route('dept-tickets.status', $ticket) }}" class="dept-status-form">
+            @csrf
+            <label>Status
+                <select name="status">
+                    <option value="open" @selected($ticket->status === 'open')>Open</option>
+                    <option value="in_progress" @selected($ticket->status === 'in_progress')>In Progress</option>
+                    <option value="closed" @selected($ticket->status === 'closed')>Closed</option>
+                </select>
+            </label>
+            <button class="btn primary compact-btn" type="submit">Update Status</button>
+        </form>
+    </div>
 </section>
 
 <section class="card qris-panel section">
@@ -61,7 +66,7 @@
     <div class="ticket-thread">
         @forelse($ticket->messages as $message)
             <div class="ticket-message {{ $message->is_staff ? 'staff' : 'store' }}">
-                <div class="ticket-message-meta"><strong>{{ $message->is_staff ? $deptLabel : ($message->user->name ?? 'Toko') }}</strong><span class="muted">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</span></div>
+                <div class="ticket-message-meta"><strong>{{ $message->is_staff ? ($message->user->name ?? $deptLabel) : ($message->user->name ?? 'Toko') }}</strong><span class="muted">{{ $message->created_at->timezone('Asia/Jakarta')->format('d M Y H:i') }}</span></div>
                 <div class="ticket-message-body">{{ $message->body }}</div>
             </div>
         @empty
