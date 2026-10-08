@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\NotifyWaTicketLink;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -278,6 +280,39 @@ class MerchantTicketTest extends TestCase
 
         $this->actingAs($admin)->post(route('merchant.tickets.reply', [$merchant, $ticket]), ['body' => 'sekarang bisa'])
             ->assertRedirect();
+    }
+
+    public function test_dept_status_update_notifies_wa_card_and_records_who_closed_it(): void
+    {
+        Bus::fake();
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+        $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
+
+        $ticket = MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => $admin->id,
+            'ticket_no' => 'TK-00099',
+            'department' => 'cs',
+            'category' => 'others',
+            'description' => 'Test status update from Manual Tickets.',
+            'status' => 'open',
+            'last_message_at' => now(),
+        ]);
+
+        $this->actingAs($csPusat)->post(route('dept-tickets.status', $ticket), ['status' => 'closed'])->assertRedirect();
+        $ticket->refresh();
+        $this->assertSame('closed', $ticket->status);
+        $this->assertSame($csPusat->id, $ticket->closed_by_user_id);
+        $this->assertNotNull($ticket->closed_at);
+        Bus::assertDispatched(NotifyWaTicketLink::class, fn ($job) => $job->ticketId === $ticket->id && $job->event === 'closed');
+
+        $this->actingAs($csPusat)->post(route('dept-tickets.status', $ticket), ['status' => 'open'])->assertRedirect();
+        $ticket->refresh();
+        $this->assertSame('open', $ticket->status);
+        $this->assertNull($ticket->closed_by_user_id);
+        $this->assertNull($ticket->closed_at);
     }
 
     public function test_ma_sees_pilot_merchant_and_can_create_ticket_for_it(): void

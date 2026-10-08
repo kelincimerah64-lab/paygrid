@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\NotifyWaTicketLink;
 use App\Models\MerchantTicket;
 use App\Services\AuditLogService;
 use App\Services\MerchantTicketService;
@@ -71,12 +72,18 @@ class DepartmentTicketController extends Controller
         abort_unless(in_array($ticket->department, $this->departmentsFor($request), true), 403);
 
         $data = $request->validate(['status' => ['required', Rule::in(['open', 'in_progress', 'closed'])]]);
-        $before = $ticket->only(['status', 'closed_at']);
+        $before = $ticket->only(['status', 'closed_at', 'closed_by_user_id']);
         $ticket->forceFill([
             'status' => $data['status'],
             'closed_at' => $data['status'] === 'closed' ? now() : null,
+            'closed_by_user_id' => $data['status'] === 'closed' ? $request->user()->id : null,
         ])->save();
-        $audit->record('merchant_ticket.status_updated', $ticket, $before, $ticket->only(['status', 'closed_at']));
+        $audit->record('merchant_ticket.status_updated', $ticket, $before, $ticket->only(['status', 'closed_at', 'closed_by_user_id']));
+
+        // Keep the WA Tiket dashboard's live card in sync even when status is
+        // changed from here instead - editActiveCard() no-ops if this ticket
+        // never had a WA card (not every ticket does), so this is safe either way.
+        NotifyWaTicketLink::dispatch($ticket->id, 'closed', '');
 
         return back()->with('status', 'Status tiket berhasil diubah.');
     }
