@@ -139,7 +139,7 @@
             @forelse($toToko as $message)
                 @php $isMine = $message->user_id === auth()->id(); $readers = $readersFor($message); @endphp
                 <div class="wat-msg {{ $message->is_staff === false ? 'in' : 'out' }}" data-date="{{ $message->created_at->timezone('Asia/Jakarta')->format('Y-m-d') }}">
-                    <span class="wat-msg-who">{{ $message->is_staff === false ? ($message->user->name ?? 'Toko') : 'Tim '.ucfirst($ticket->department) }}</span>
+                    <span class="wat-msg-who">{{ $message->is_staff === false ? ($message->user->name ?? 'Toko') : ($message->user->name ?? 'Tim '.ucfirst($ticket->department)) }}</span>
                     <span class="wat-msg-body" data-msg-body>{{ $message->body }}</span>
                     @if($isMine)
                         <form method="post" action="{{ route('wa-tickets.messages.update', [$ticket, $message]) }}" class="wat-msg-edit-form" data-live-form hidden>
