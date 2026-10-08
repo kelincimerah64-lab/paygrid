@@ -422,19 +422,22 @@ class MaController extends Controller
     public function updateStoreFee(Request $request, Merchant $merchant, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse
     {
         abort_unless($this->canUseMerchant($merchant), 403);
-        $this->normalizePercentInputs($request, ['payin_fee_percent']);
+        $this->normalizePercentInputs($request, ['payin_fee_percent', 'cashback_agent_percent']);
         $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
         $agent = $merchant->agent()->with('ma')->firstOrFail();
         $agentRates = (array) ($agent->fee_menu_rates ?? []);
         $data = $request->validate([
             'payin_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'cashback_agent_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'cashback_trx_toko_amount' => ['required', 'integer', 'min:0'],
+            'cashback_trx_agent_amount' => ['required', 'integer', 'min:0'],
             'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled(), new FeeMenuRatesAboveReference('merchant', $agentRates, 'Based Fee Agent')],
         ]);
         $data['fee_menu'] = array_key_first(array_filter($rates));
         $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
         $data = array_merge($data, $feeSync->snapshotFor($agent, $data['fee_menu'], $rates[$data['fee_menu']]));
-        $before = $merchant->only(['merchant_mdr_percent', 'payin_fee_percent', 'fee_menu', 'fee_menu_rates', 'settlement_method']);
+        $before = $merchant->only(['merchant_mdr_percent', 'payin_fee_percent', 'cashback_agent_percent', 'cashback_trx_toko_amount', 'cashback_trx_agent_amount', 'fee_menu', 'fee_menu_rates', 'settlement_method']);
         $merchant->forceFill($data)->save();
         $audit->record('ma.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($before)));
 

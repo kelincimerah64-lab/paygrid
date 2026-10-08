@@ -61,7 +61,7 @@
                     <div class="fee-pill"><span>Base MDR</span><strong>{{ $pct($merchant?->base_mdr_percent ?? ($item->payload['base_mdr_percent'] ?? 0)) }}</strong></div>
                     <div class="fee-pill"><span>MA</span><strong>{{ $pct($merchant?->ma_fee_percent ?? ($item->payload['ma_fee_percent'] ?? 0)) }}</strong></div>
                     <div class="fee-pill"><span>Agen</span><strong>{{ $pct($merchant?->agent_fee_percent ?? ($item->payload['agent_fee_percent'] ?? 0)) }}</strong></div>
-                    <div class="fee-pill"><span>Pay In</span><strong>{{ $pct($merchant?->payin_fee_percent ?? ($item->payload['payin_fee_percent'] ?? 0)) }}</strong></div>
+                    <div class="fee-pill"><span>CB Toko</span><strong>{{ $pct($merchant?->payin_fee_percent ?? ($item->payload['payin_fee_percent'] ?? 0)) }}</strong></div>
                 </div>
                 <button class="btn" style="width:100%; margin-top:12px">View Details</button>
             </div>
@@ -74,6 +74,9 @@
                         <input type="hidden" name="merchant_mdr_percent" value="{{ $item->payload['merchant_mdr_percent'] ?? 0 }}">
                         <input type="hidden" name="base_mdr_percent" value="{{ $item->payload['base_mdr_percent'] ?? 0 }}">
                         <input type="hidden" name="payin_fee_percent" value="{{ $item->payload['payin_fee_percent'] ?? 0 }}">
+                        <input type="hidden" name="cashback_agent_percent" value="{{ $item->payload['cashback_agent_percent'] ?? 0 }}">
+                        <input type="hidden" name="cashback_trx_toko_amount" value="{{ $item->payload['cashback_trx_toko_amount'] ?? 0 }}">
+                        <input type="hidden" name="cashback_trx_agent_amount" value="{{ $item->payload['cashback_trx_agent_amount'] ?? 0 }}">
                         <input type="hidden" name="ma_fee_percent" value="{{ $item->payload['ma_fee_percent'] ?? 0 }}">
                         <input type="hidden" name="agent_fee_percent" value="{{ $item->payload['agent_fee_percent'] ?? 0 }}">
                         <button class="btn primary" style="width:100%; margin-bottom:10px">Approve</button>
@@ -153,12 +156,15 @@
 @elseif($active === 'fee')
     <section class="card pad">
         <h2>Skema Fee</h2>
-        <p class="muted">Merchant MDR = Base MDR + MA + Agent Fee. Pay In Fee dan Disbursement Fee adalah cashback/marketing fee dari gateway.</p>
+        <p class="muted">Merchant MDR = Base MDR + MA + Agent Fee. Cash Back dan Disbursement Fee adalah cashback/marketing fee dari gateway.</p>
         <div class="grid cards">
             <div class="card pad metric blue"><label>Total Fee MA</label><strong>{{ $money($merchants->sum(fn($m) => ($m->metric_volume_success ?? 0) * ((float) $m->ma_fee_percent / 100))) }}</strong></div>
             <div class="card pad metric"><label>Total Fee Agen</label><strong>{{ $money($merchants->sum(fn($m) => ($m->metric_volume_success ?? 0) * ((float) $m->agent_fee_percent / 100))) }}</strong></div>
             <div class="card pad metric"><label>Total Fee Merchant</label><strong>{{ $money($merchants->sum(fn($m) => ($m->metric_volume_success ?? 0) * ((float) $m->merchant_mdr_percent / 100))) }}</strong></div>
-            <div class="card pad metric"><label>Pay In Cashback</label><strong>{{ $money($merchants->sum(fn($m) => ($m->metric_volume_success ?? 0) * ((float) $m->payin_fee_percent / 100))) }}</strong></div>
+            <div class="card pad metric"><label>Cash Back Toko</label><strong>{{ $money($merchants->sum(fn($m) => ($m->metric_volume_success ?? 0) * ((float) $m->payin_fee_percent / 100))) }}</strong></div>
+            <div class="card pad metric"><label>Cash Back Agen</label><strong>{{ $money($merchants->sum(fn($m) => ($m->metric_volume_success ?? 0) * ((float) $m->cashback_agent_percent / 100))) }}</strong></div>
+            <div class="card pad metric"><label>Cash Back Trx Toko</label><strong>{{ $money($merchants->sum(fn($m) => ($m->metric_trx_total ?? 0) * (int) $m->cashback_trx_toko_amount)) }}</strong></div>
+            <div class="card pad metric"><label>Cash Back Trx Agen</label><strong>{{ $money($merchants->sum(fn($m) => ($m->metric_trx_total ?? 0) * (int) $m->cashback_trx_agent_amount)) }}</strong></div>
         </div>
     </section>
 @elseif($active === 'status-request')
@@ -205,7 +211,10 @@
                     'Base MDR' => $pct($regPayload['base_mdr_percent'] ?? 0),
                     'MA Fee' => $pct($regPayload['ma_fee_percent'] ?? 0),
                     'Agent Fee' => $pct($regPayload['agent_fee_percent'] ?? 0),
-                    'Pay In Fee' => $pct($regPayload['payin_fee_percent'] ?? 0),
+                    'Cash Back Toko' => $pct($regPayload['payin_fee_percent'] ?? 0),
+                    'Cash Back Agen' => $pct($regPayload['cashback_agent_percent'] ?? 0),
+                    'Cash Back Trx Toko' => $money($regPayload['cashback_trx_toko_amount'] ?? 0),
+                    'Cash Back Trx Agen' => $money($regPayload['cashback_trx_agent_amount'] ?? 0),
                     'Disbursement Fee' => $regPayload['disbursement_fee_fixed'] ?? '-',
                 ])
                 <tr><td>@if($canResubmit($registration))<input type="checkbox" name="registration_ids[]" value="{{ $registration->id }}">@endif {{ $registration->store_name }}</td><td><span class="truncate" style="display:block; max-width:190px">{{ $registration->merchant?->merchant_id ?: 'Pending MA' }}</span></td><td>{{ $registration->created_at->timezone('Asia/Jakarta')->format('d M y') }}</td><td>FIN-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['finance_email'] ?? 'Menunggu approval' }}</span></td><td>CS-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['cs_email'] ?? 'Menunggu approval' }}</span></td><td><span class="badge {{ $statusClass($registration->status) }}">{{ ucfirst(str_replace('_', ' ', $registration->status)) }}</span>@if($registration->status === 'rejected')<br><span class="muted">Revisi {{ $registration->revision_count }}/{{ \App\Http\Controllers\MerchantRegistrationWorkflowController::MAX_REVISIONS }}</span>@endif</td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-reg-detail-{{ $registration->id }}">Detail</button>

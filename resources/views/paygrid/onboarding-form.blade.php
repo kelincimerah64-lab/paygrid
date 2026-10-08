@@ -96,7 +96,10 @@
     <div class="form-grid">
         <label>Transaction Gateway ID<input name="transaction_gateway_ids" placeholder="default Hilogate jika kosong"></label>
         <label>Withdrawal Gateway ID<input name="withdrawal_gateway_ids" placeholder="default Hilogate jika kosong"></label>
-        <label>Pay In Fee (%)<input name="payin_fee_percent" inputmode="decimal" placeholder="cashback/marketing fee"></label>
+        <label>Cash Back Toko %<input name="payin_fee_percent" inputmode="decimal" placeholder="cashback toko dari volume sukses"></label>
+        <label>Cash Back Agen %<input name="cashback_agent_percent" inputmode="decimal" placeholder="cashback agen dari volume sukses"></label>
+        <label>Cash Back Trx Toko (IDR)<input name="cashback_trx_toko_amount" inputmode="numeric" placeholder="IDR x jumlah trx sukses, ke toko"></label>
+        <label>Cash Back Trx Agen (IDR)<input name="cashback_trx_agent_amount" inputmode="numeric" placeholder="IDR x jumlah trx sukses, ke agen"></label>
         <label>Disbursement Fee Fixed<input name="disbursement_fee_fixed" inputmode="numeric" placeholder="fee x jumlah disbursement"></label>
     </div>
 

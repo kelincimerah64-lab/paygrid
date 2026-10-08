@@ -67,6 +67,9 @@ class MerchantRegistrationWorkflowController extends Controller
             'admin_email' => ['required', 'email', 'max:160'],
             'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled(), new FeeMenuRatesAboveReference('merchant', $agentRates, 'Based Fee Agent')],
             'payin_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'cashback_agent_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'cashback_trx_toko_amount' => ['nullable', 'integer', 'min:0'],
+            'cashback_trx_agent_amount' => ['nullable', 'integer', 'min:0'],
         ]);
         $activeMenu = array_key_first(array_filter($rates));
 
@@ -81,6 +84,9 @@ class MerchantRegistrationWorkflowController extends Controller
         $payload = (array) ($registration->payload ?? []);
         $merchantMdr = (float) $rates[$activeMenu];
         $payin = (float) ($data['payin_fee_percent'] ?? $payload['payin_fee_percent'] ?? 0);
+        $cashbackAgent = (float) ($data['cashback_agent_percent'] ?? $payload['cashback_agent_percent'] ?? 0);
+        $cashbackTrxToko = (int) ($data['cashback_trx_toko_amount'] ?? $payload['cashback_trx_toko_amount'] ?? 0);
+        $cashbackTrxAgent = (int) ($data['cashback_trx_agent_amount'] ?? $payload['cashback_trx_agent_amount'] ?? 0);
         $settlementMethod = $feeMenus->settlementMethod($activeMenu);
 
         $slug = Str::slug($registration->store_name);
@@ -123,6 +129,9 @@ class MerchantRegistrationWorkflowController extends Controller
             'fee_menu_rates' => $data['fee_menu_rates'],
             'settlement_method' => $settlementMethod,
             'payin_fee_percent' => $payin,
+            'cashback_agent_percent' => $cashbackAgent,
+            'cashback_trx_toko_amount' => $cashbackTrxToko,
+            'cashback_trx_agent_amount' => $cashbackTrxAgent,
             ...$feeSnapshot,
             'disbursement_fee_fixed' => (int) ($payload['disbursement_fee_fixed'] ?? $payload['withdrawal_fee'] ?? 0),
             'onboarding_payload' => $payload,

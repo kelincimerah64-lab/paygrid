@@ -229,6 +229,9 @@
             $adminPassword = $payload['admin_password'] ?? $payload['password'] ?? config('paygrid.demo_password');
             $merchantMdr = $merchant?->merchant_mdr_percent ?? ($payload['merchant_mdr_percent'] ?? 0);
             $payinFee = $merchant?->payin_fee_percent ?? ($payload['payin_fee_percent'] ?? $payload['engine_service_fee_percent'] ?? 0);
+            $cashbackAgentFee = $merchant?->cashback_agent_percent ?? ($payload['cashback_agent_percent'] ?? 0);
+            $cashbackTrxToko = $merchant?->cashback_trx_toko_amount ?? ($payload['cashback_trx_toko_amount'] ?? 0);
+            $cashbackTrxAgent = $merchant?->cashback_trx_agent_amount ?? ($payload['cashback_trx_agent_amount'] ?? 0);
             $requestMenuOptions = $feeMenus->optionsFor('merchant');
             $requestFeeMenu = $merchant?->fee_menu ?? $payload['fee_menu'] ?? null;
             $requestRates = $merchant?->fee_menu_rates ?? ($payload['fee_menu_rates'] ?? []);
@@ -254,7 +257,10 @@
                 'API IP Whitelist' => $payload['api_ip_whitelist'] ?? '15.232.137.74',
                 'Link Topup' => $payload['topup_url'] ?? $merchant?->topup_url ?? '-',
                 'Whitelist' => ($payload['is_whitelisted'] ?? false) ? 'Ya' : 'Tidak',
-                'Pay In Fee' => $pct($payinFee),
+                'Cash Back Toko' => $pct($payinFee),
+                'Cash Back Agen' => $pct($cashbackAgentFee),
+                'Cash Back Trx Toko' => $money($cashbackTrxToko),
+                'Cash Back Trx Agen' => $money($cashbackTrxAgent),
                 'Second TRX Fee' => $pct($payload['second_transaction_fee_percentage'] ?? 0),
                 'Third TRX Fee' => $pct($payload['third_transaction_fee_percentage'] ?? 0),
                 'Disbursement Fee' => $payload['disbursement_fee_fixed'] ?? $payload['withdrawal_fee'] ?? '-',
@@ -281,6 +287,9 @@
                         @endif
                         @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $requestRates])
                         <input type="hidden" name="payin_fee_percent" value="{{ $payinFee }}">
+                        <input type="hidden" name="cashback_agent_percent" value="{{ $cashbackAgentFee }}">
+                        <input type="hidden" name="cashback_trx_toko_amount" value="{{ $cashbackTrxToko }}">
+                        <input type="hidden" name="cashback_trx_agent_amount" value="{{ $cashbackTrxAgent }}">
                         <button class="btn primary compact-btn" style="width:100%; margin:8px 0">Approve</button>
                     </form>
                     <form method="post" action="{{ route('api.merchant-registration.reject', $r) }}">
@@ -340,7 +349,11 @@
             <div class="approval-modal" id="store-detail-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Toko</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><div class="approval-detail-grid">@foreach($detailRows as $label => $value)<div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>@endforeach</div></div></div>
             <div class="approval-modal" id="store-fee-{{ $m->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Edit Fee</h2><p class="muted" style="margin:4px 0 0">{{ $m->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><form method="post" action="{{ route('ma.stores.fee.update', $m) }}" class="form-grid pad">@csrf
                 @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $m->fee_menu_rates ?? []])
-                <label>Pay In Fee %<input name="payin_fee_percent" value="{{ $pctInput($m->payin_fee_percent) }}" required></label><div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
+                <label>Cash Back Toko %<input name="payin_fee_percent" value="{{ $pctInput($m->payin_fee_percent) }}" required></label>
+                <label>Cash Back Agen %<input name="cashback_agent_percent" value="{{ $pctInput($m->cashback_agent_percent) }}" required></label>
+                <label>Cash Back Trx Toko (IDR)<input name="cashback_trx_toko_amount" value="{{ (int) $m->cashback_trx_toko_amount }}" required></label>
+                <label>Cash Back Trx Agen (IDR)<input name="cashback_trx_agent_amount" value="{{ (int) $m->cashback_trx_agent_amount }}" required></label>
+                <div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
         @empty
             <tr><td colspan="8" class="empty">Belum ada toko.</td></tr>
         @endforelse
