@@ -11,6 +11,7 @@ use App\Services\AuditLogService;
 use App\Services\FeeSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -202,5 +203,81 @@ class OpsAssistantController extends Controller
             'merchant_count' => Merchant::query()->where('approval_status', 'approved')->count(),
             'agent_count' => Agent::query()->where('is_active', true)->count(),
         ]);
+    }
+
+    /**
+     * Read-only SQL escape hatch so the ops assistant can answer any
+     * question (tickets, approvals, IP-whitelist history, etc.) without a
+     * bespoke endpoint for every table. Deliberately restricted to a single
+     * SELECT with no wildcard columns and no sensitive-credential columns,
+     * so it can never be used to write data or exfiltrate secrets even if
+     * the assistant is tricked into trying.
+     */
+    public function query(Request $request): JsonResponse
+    {
+        $this->authorize_($request);
+
+        $data = $request->validate([
+            'sql' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $sql = trim($data['sql']);
+        if (str_ends_with($sql, ';')) {
+            $sql = rtrim(substr($sql, 0, -1));
+        }
+
+        $reason = $this->rejectUnsafeSelect($sql);
+        if ($reason) {
+            return response()->json(['error' => $reason], 422);
+        }
+
+        if (DB::connection()->getDriverName() === 'mysql') {
+            try {
+                DB::statement('SET SESSION MAX_EXECUTION_TIME=5000');
+            } catch (\Throwable $e) {
+                // Best-effort timeout guard only - MariaDB doesn't support this variable.
+            }
+        }
+
+        try {
+            $rows = DB::select($sql);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Query failed: '.$e->getMessage()], 422);
+        }
+
+        $truncated = count($rows) > 200;
+        $rows = array_slice($rows, 0, 200);
+
+        return response()->json(['rows' => $rows, 'row_count' => count($rows), 'truncated' => $truncated]);
+    }
+
+    private function rejectUnsafeSelect(string $sql): ?string
+    {
+        if (str_contains($sql, ';')) {
+            return 'Only a single statement is allowed (no semicolons).';
+        }
+
+        if (! preg_match('/^SELECT\s/i', $sql)) {
+            return 'Only SELECT statements are allowed.';
+        }
+
+        if (preg_match('/select\s+(distinct\s+)?\*/i', $sql) || preg_match('/\w+\.\*/', $sql)) {
+            return 'Wildcard columns (SELECT *) are not allowed - list the columns you need explicitly.';
+        }
+
+        $forbidden = [
+            'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'GRANT', 'REVOKE',
+            'CREATE', 'REPLACE', 'CALL', 'EXEC', 'EXECUTE', 'LOCK', 'UNLOCK', 'SET', 'LOAD',
+            'OUTFILE', 'DUMPFILE', 'BENCHMARK', 'SLEEP',
+            'password', 'plain_password', 'secondary_password', 'hilogate_onboarding_password',
+            'remember_token', 'merchant_key',
+        ];
+        foreach ($forbidden as $keyword) {
+            if (preg_match('/\b'.preg_quote($keyword, '/').'\b/i', $sql)) {
+                return "Query references a disallowed keyword or column: {$keyword}.";
+            }
+        }
+
+        return null;
     }
 }

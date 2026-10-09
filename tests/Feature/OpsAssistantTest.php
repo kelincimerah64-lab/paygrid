@@ -137,4 +137,69 @@ class OpsAssistantTest extends TestCase
             ->assertOk()
             ->assertJsonFragment(['name' => 'Toko Ringkasan']);
     }
+
+    public function test_query_endpoint_runs_an_arbitrary_select(): void
+    {
+        $this->setOpsToken();
+        $agent = $this->makeAgent(['name' => 'Agen Query']);
+        Merchant::query()->create([
+            'slug' => 'toko-query',
+            'name' => 'Toko Query',
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'agent_id' => $agent->id,
+            'approval_status' => 'approved',
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer ops-secret')
+            ->postJson('/api/ops/query', ['sql' => "SELECT name, approval_status FROM merchants WHERE name = 'Toko Query'"])
+            ->assertOk()
+            ->assertJsonPath('row_count', 1)
+            ->assertJsonFragment(['name' => 'Toko Query', 'approval_status' => 'approved']);
+    }
+
+    public function test_query_endpoint_requires_a_valid_token(): void
+    {
+        $this->setOpsToken();
+
+        $this->postJson('/api/ops/query', ['sql' => 'SELECT id FROM merchants'])->assertStatus(401);
+    }
+
+    public function test_query_endpoint_rejects_wildcard_columns(): void
+    {
+        $this->setOpsToken();
+
+        $this->withHeader('Authorization', 'Bearer ops-secret')
+            ->postJson('/api/ops/query', ['sql' => 'SELECT * FROM merchants'])
+            ->assertStatus(422);
+    }
+
+    public function test_query_endpoint_rejects_non_select_statements(): void
+    {
+        $this->setOpsToken();
+        $agent = $this->makeAgent();
+
+        foreach ([
+            "UPDATE merchants SET name = 'x' WHERE id = 1",
+            "DELETE FROM merchants WHERE id = 1",
+            "DROP TABLE merchants",
+            "SELECT id FROM merchants; DROP TABLE merchants",
+            "SELECT id, name FROM merchants INTO OUTFILE '/tmp/x.csv'",
+        ] as $sql) {
+            $this->withHeader('Authorization', 'Bearer ops-secret')
+                ->postJson('/api/ops/query', ['sql' => $sql])
+                ->assertStatus(422);
+        }
+
+        $this->assertDatabaseHas('agents', ['id' => $agent->id]);
+    }
+
+    public function test_query_endpoint_rejects_credential_columns(): void
+    {
+        $this->setOpsToken();
+
+        $this->withHeader('Authorization', 'Bearer ops-secret')
+            ->postJson('/api/ops/query', ['sql' => 'SELECT id, password FROM users'])
+            ->assertStatus(422);
+    }
 }

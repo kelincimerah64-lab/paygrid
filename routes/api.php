@@ -20,3 +20,4 @@ Route::post('/telegram/absen', [TelegramBotController::class, 'absen']);
 Route::post('/ops/merchants', [OpsAssistantController::class, 'createMerchant'])->middleware('throttle:dashboard-writes');
 Route::get('/ops/merchants', [OpsAssistantController::class, 'listMerchants']);
 Route::get('/ops/summary', [OpsAssistantController::class, 'summary']);
+Route::post('/ops/query', [OpsAssistantController::class, 'query']);
