@@ -58,11 +58,22 @@
     var categoryMeta = @json($categoryMeta);
     var oldCategory = @json(old('category'));
     var oldValues = @json(old()) || {};
+    var merchantsById = {};
+    @foreach($merchants as $m)
+        merchantsById[{{ $m->id }}] = {name: @json($m->name), group: @json($m->agent?->name ?: '-')};
+    @endforeach
     var deptSelect = document.getElementById('wa-ticket-department');
     var catSelect = document.getElementById('wa-ticket-category');
+    var merchantSelect = document.querySelector('select[name="merchant_id"]');
     var dynamicFieldsEl = document.getElementById('wa-ticket-dynamic-fields');
     var banner = document.getElementById('wa-ticket-banner');
     var bannerText = document.getElementById('wa-ticket-banner-text');
+
+    function autoFieldValue(key) {
+        var merchant = merchantsById[merchantSelect.value];
+        if (!merchant) return '-';
+        return key === 'merchant_group' ? merchant.group : merchant.name;
+    }
 
     function renderDynamicFields(fieldDefs) {
         dynamicFieldsEl.innerHTML = '';
@@ -72,6 +83,24 @@
         fieldDefs.forEach(function (f) {
             var label = document.createElement('label');
             label.textContent = f.label + ' ';
+
+            if (f.auto) {
+                var autoInput = document.createElement('input');
+                autoInput.type = 'text';
+                autoInput.readOnly = true;
+                autoInput.value = autoFieldValue(f.key);
+                label.appendChild(autoInput);
+                grid.appendChild(label);
+                return;
+            }
+
+            if (f.multi) {
+                var wrap = PayGridMultiField.build(f.key, {mode: 'array', max: f.max || 5, placeholder: f.placeholder, type: f.type === 'number' ? 'number' : 'text'});
+                label.appendChild(wrap);
+                grid.appendChild(label);
+                return;
+            }
+
             var input = document.createElement('input');
             input.type = f.type === 'number' ? 'number' : 'text';
             input.name = f.key;
@@ -112,7 +141,11 @@
 
     deptSelect.addEventListener('change', function () { fillCategories(deptSelect.value); });
     catSelect.addEventListener('change', function () { updateForCategory(catSelect.value); });
+    merchantSelect.addEventListener('change', function () { updateForCategory(catSelect.value); });
     if (deptSelect.value) fillCategories(deptSelect.value);
+
+    var form = merchantSelect.closest('form');
+    form.addEventListener('submit', function () { PayGridMultiField.collect(form); });
 })();
 </script>
 @endpush

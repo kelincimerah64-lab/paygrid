@@ -1326,6 +1326,7 @@
     <script src="{{ asset('js/ma-assistant.js') }}?v={{ filemtime(public_path('js/ma-assistant.js')) }}" defer data-ask-url="{{ route('ma.assistant.ask') }}"></script>
 @endif
 @stack('scripts')
+<script src="{{ asset('js/paygrid-multi-field.js') }}?v={{ filemtime(public_path('js/paygrid-multi-field.js')) }}" defer></script>
 <script src="{{ asset('js/paygrid-live.js') }}?v={{ filemtime(public_path('js/paygrid-live.js')) }}" defer></script>
 </body>
 </html>

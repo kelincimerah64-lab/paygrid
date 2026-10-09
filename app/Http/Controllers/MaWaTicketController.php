@@ -67,8 +67,9 @@ class MaWaTicketController extends Controller
     {
         $merchants = Merchant::query()
             ->whereIn('id', $this->scopedMerchantIds($request->user()))
+            ->with('agent:id,name')
             ->orderBy('name')
-            ->get(['id', 'name']);
+            ->get(['id', 'name', 'agent_id']);
 
         return view('paygrid.ma-wa-tickets-create', [
             'roleLabel' => 'MA',
@@ -101,7 +102,11 @@ class MaWaTicketController extends Controller
         abort_unless(array_key_exists($category, $tickets->categoriesFor($department)), 422, 'Kategori tidak valid untuk department ini.');
 
         $needsApproval = $tickets->needsPilotApproval($department, $category);
-        $merchant = Merchant::query()->findOrFail($data['merchant_id']);
+        $merchant = Merchant::query()->with('agent')->findOrFail($data['merchant_id']);
+        if ($category === 'ip_whitelist') {
+            $data['merchant_group'] = $merchant->agent?->name ?: '-';
+            $data['merchant_name'] = $merchant->name;
+        }
         $ticket = $tickets->create($merchant, $request->user(), [
             'department' => $department,
             'category' => $category,

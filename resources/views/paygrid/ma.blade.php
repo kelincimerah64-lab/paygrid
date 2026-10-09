@@ -504,63 +504,10 @@ function paygridToggleEngineType(select, engineTypeId) {
     engineType.style.display = isEngine ? '' : 'none';
     engineType.disabled = !isEngine;
 }
-function paygridRefreshMultiField(wrap) {
-    var rows = wrap.querySelectorAll('.multi-field-row');
-    rows.forEach(function (row, idx) {
-        var btn = row.querySelector('.multi-field-toggle');
-        var isLast = idx === rows.length - 1;
-        btn.textContent = isLast ? '+' : '×';
-        btn.classList.toggle('remove', !isLast);
-        btn.dataset.action = isLast ? 'add' : 'remove';
-    });
-}
-document.addEventListener('click', function (e) {
-    if (e.target.matches && e.target.matches('.multi-field-toggle')) {
-        var wrap = e.target.closest('.multi-field');
-        if (e.target.dataset.action === 'add') {
-            var template = wrap.querySelector('.multi-field-input');
-            var row = document.createElement('div');
-            row.className = 'multi-field-row';
-            var input = document.createElement('input');
-            input.type = template.type;
-            input.className = 'multi-field-input';
-            input.placeholder = template.placeholder;
-            var toggle = document.createElement('button');
-            toggle.type = 'button';
-            toggle.className = 'multi-field-toggle';
-            row.appendChild(input);
-            row.appendChild(toggle);
-            wrap.appendChild(row);
-            paygridRefreshMultiField(wrap);
-            input.focus();
-        } else {
-            e.target.closest('.multi-field-row').remove();
-            paygridRefreshMultiField(wrap);
-        }
-    }
-});
 var createStoreForm = document.getElementById('create-store-form');
 if (createStoreForm) {
     createStoreForm.addEventListener('submit', function () {
-        createStoreForm.querySelectorAll('[data-multi-field]').forEach(function (wrap) {
-            var name = wrap.dataset.multiField;
-            var mode = wrap.dataset.mode || 'comma';
-            var values = Array.from(wrap.querySelectorAll('.multi-field-input')).map(function (i) { return i.value.trim(); }).filter(Boolean);
-            if (mode === 'array') {
-                wrap.querySelectorAll('input[type="hidden"][data-generated]').forEach(function (h) { h.remove(); });
-                values.forEach(function (v) {
-                    var hidden = document.createElement('input');
-                    hidden.type = 'hidden';
-                    hidden.name = name + '[]';
-                    hidden.value = v;
-                    hidden.dataset.generated = '1';
-                    wrap.appendChild(hidden);
-                });
-                return;
-            }
-            var hidden = createStoreForm.querySelector('input[type="hidden"][name="' + name + '"]');
-            if (hidden) hidden.value = values.join(',');
-        });
+        PayGridMultiField.collect(createStoreForm);
     });
 }
 function paygridWarnBelowFloor(input) {

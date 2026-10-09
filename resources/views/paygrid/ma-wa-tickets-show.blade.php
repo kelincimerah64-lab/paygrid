@@ -46,7 +46,7 @@
         <div class="wat-meta-chip"><span>Kategori</span><strong>{{ $ticket->category }}</strong></div>
         <div class="wat-meta-chip"><span>Dibuat</span><strong>{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M Y, H:i') }} WIB</strong></div>
         @foreach($ticket->metadata ?? [] as $key => $value)
-            <div class="wat-meta-chip"><span>{{ ucfirst(str_replace('_', ' ', $key)) }}</span><strong>{{ is_numeric($value) ? 'Rp '.number_format((float) $value, 0, ',', '.') : $value }}</strong></div>
+            <div class="wat-meta-chip"><span>{{ ucfirst(str_replace('_', ' ', $key)) }}</span><strong>{{ is_array($value) ? implode(', ', $value) : (is_numeric($value) ? 'Rp '.number_format((float) $value, 0, ',', '.') : $value) }}</strong></div>
         @endforeach
     </div>
     <p style="margin:0; white-space:pre-wrap; font-size:13.5px; color:var(--ink)">{{ $ticket->description }}</p>

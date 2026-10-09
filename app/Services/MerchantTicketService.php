@@ -137,8 +137,11 @@ class MerchantTicketService
         'ip_whitelist' => [
             'banner' => 'Sertakan IP Address dan nama VPS/server yang ingin di-whitelist.',
             'fields' => [
-                ['key' => 'ip_address', 'label' => 'IP Address', 'type' => 'text', 'placeholder' => 'Contoh: 103.10.20.30'],
+                ['key' => 'merchant_group', 'label' => 'Merchant Group', 'type' => 'text', 'auto' => true],
+                ['key' => 'merchant_name', 'label' => 'Merchant Name', 'type' => 'text', 'auto' => true],
+                ['key' => 'ip_address', 'label' => 'IP Address', 'type' => 'text', 'placeholder' => 'Contoh: 103.10.20.30', 'multi' => true, 'max' => 5],
                 ['key' => 'server_name', 'label' => 'Nama VPS/Server', 'type' => 'text', 'placeholder' => 'Contoh: vps-jakarta-01'],
+                ['key' => 'api_dashboard', 'label' => 'API Dashboard', 'type' => 'text', 'placeholder' => 'Contoh: https://api.toko.com/dashboard'],
             ],
         ],
         'technical_issue' => [
@@ -211,8 +214,15 @@ class MerchantTicketService
     {
         $rules = [];
         foreach ($this->fieldsFor($category) as $field) {
+            if ($field['multi'] ?? false) {
+                $rules[$field['key']] = ['nullable', 'array', 'max:'.($field['max'] ?? 5)];
+                $rules[$field['key'].'.*'] = ['nullable', 'string', 'max:120'];
+
+                continue;
+            }
             $rules[$field['key']] = match (true) {
                 $field['key'] === 'title' => ['nullable', 'string', 'max:100'],
+                $field['auto'] ?? false => ['nullable', 'string', 'max:120'],
                 $field['type'] === 'date' => ['nullable', 'date'],
                 $field['type'] === 'number' => ['nullable', 'numeric', 'min:0'],
                 $field['type'] === 'select' => ['nullable', \Illuminate\Validation\Rule::in($field['options'])],
@@ -238,6 +248,14 @@ class MerchantTicketService
                 continue;
             }
             $value = $validated[$field['key']] ?? null;
+            if ($field['multi'] ?? false) {
+                $value = array_values(array_filter((array) $value, fn ($v) => $v !== null && $v !== ''));
+                if ($value) {
+                    $metadata[$field['key']] = $value;
+                }
+
+                continue;
+            }
             if ($value !== null && $value !== '') {
                 $metadata[$field['key']] = $value;
             }

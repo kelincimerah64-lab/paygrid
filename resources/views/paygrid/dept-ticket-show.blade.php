@@ -36,7 +36,7 @@
         <div class="approval-detail-grid" style="margin-top:8px">
             @foreach($ticket->metadata as $key => $value)
                 @continue($value === null || $value === '')
-                <div class="fee-pill"><span>{{ $ticketsService->fieldLabel($ticket->category, $key) }}</span><strong>{{ $ticketsService->fieldType($ticket->category, $key) === 'number' ? 'Rp'.number_format((float) $value, 0, ',', '.') : $value }}</strong></div>
+                <div class="fee-pill"><span>{{ $ticketsService->fieldLabel($ticket->category, $key) }}</span><strong>{{ is_array($value) ? implode(', ', $value) : ($ticketsService->fieldType($ticket->category, $key) === 'number' ? 'Rp'.number_format((float) $value, 0, ',', '.') : $value) }}</strong></div>
             @endforeach
         </div>
     @endif

@@ -59,6 +59,15 @@ class MerchantTicketController extends Controller
             'attachments.*' => ['mimes:jpg,jpeg,png,pdf,mp4', 'max:10240'],
         ], $tickets->fieldRules($categoryKey)));
 
+        // merchant_group/merchant_name are informational, not user-editable -
+        // always sourced from the real merchant record so whoever processes
+        // the request (e.g. an IP whitelist request) doesn't have to cross-
+        // reference which store this ticket actually belongs to.
+        if ($categoryKey === 'ip_whitelist') {
+            $validated['merchant_group'] = $merchant->agent?->name ?: '-';
+            $validated['merchant_name'] = $merchant->name;
+        }
+
         $data = [
             'department' => $department,
             'category' => $validated['category'],

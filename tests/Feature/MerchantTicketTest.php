@@ -63,6 +63,47 @@ class MerchantTicketTest extends TestCase
         ]);
     }
 
+    public function test_ip_whitelist_ticket_auto_fills_merchant_info_and_accepts_up_to_5_ips(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'card' => 'teknis',
+            'category' => 'ip_whitelist',
+            'description' => 'Butuh whitelist 3 IP VPS baru.',
+            'ip_address' => ['103.10.20.30', '103.10.20.31', ''],
+            'server_name' => 'vps-jakarta-01',
+            'api_dashboard' => 'https://api.toko.com/dashboard',
+            // Client never renders inputs for these - make sure a spoofed
+            // value can't override what the server fills in from $merchant.
+            'merchant_group' => 'Spoofed Group',
+            'merchant_name' => 'Spoofed Name',
+        ])->assertRedirect();
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->where('category', 'ip_whitelist')->firstOrFail();
+        $this->assertSame($merchant->agent?->name ?: '-', $ticket->metadata['merchant_group']);
+        $this->assertSame($merchant->name, $ticket->metadata['merchant_name']);
+        $this->assertSame(['103.10.20.30', '103.10.20.31'], $ticket->metadata['ip_address']);
+        $this->assertSame('vps-jakarta-01', $ticket->metadata['server_name']);
+        $this->assertSame('https://api.toko.com/dashboard', $ticket->metadata['api_dashboard']);
+    }
+
+    public function test_ip_whitelist_rejects_more_than_5_ip_addresses(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'card' => 'teknis',
+            'category' => 'ip_whitelist',
+            'description' => 'Terlalu banyak IP.',
+            'ip_address' => ['1.1.1.1', '2.2.2.2', '3.3.3.3', '4.4.4.4', '5.5.5.5', '6.6.6.6'],
+        ])->assertSessionHasErrors('ip_address');
+    }
+
     public function test_finance_department_ticket_can_be_created(): void
     {
         $this->seed();

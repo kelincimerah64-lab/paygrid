@@ -192,6 +192,10 @@
     var categoriesByDepartment = @json($categoriesByDepartment);
     var categoryMeta = @json($categoryMeta);
     var oldFieldValues = @json(old()) || {};
+    var autoFieldValues = {
+        merchant_group: @json($merchant->agent?->name ?: '-'),
+        merchant_name: @json($merchant->name),
+    };
     var cardInput = document.getElementById('ticket-card-input');
     var cardEls = document.querySelectorAll('#ticket-category-cards .ticket-category-card');
     var detailTitle = document.getElementById('ticket-detail-title');
@@ -219,7 +223,7 @@
             var label = document.createElement('label');
             var span = document.createElement('span');
             span.className = 'ticket-field-label';
-            span.textContent = f.label + ' (Opsional) ';
+            span.textContent = f.auto ? f.label + ' ' : f.label + ' (Opsional) ';
             if (f.tooltip) {
                 var tip = document.createElement('span');
                 tip.className = 'ticket-tooltip';
@@ -228,6 +232,25 @@
                 span.appendChild(tip);
             }
             label.appendChild(span);
+
+            if (f.auto) {
+                // Informational only - the server always fills this in from
+                // the real merchant record, so there's nothing to edit here.
+                var autoInput = document.createElement('input');
+                autoInput.type = 'text';
+                autoInput.readOnly = true;
+                autoInput.value = autoFieldValues[f.key] || '-';
+                label.appendChild(autoInput);
+                grid.appendChild(label);
+                return;
+            }
+
+            if (f.multi) {
+                var wrap = PayGridMultiField.build(f.key, {mode: 'array', max: f.max || 5, placeholder: f.placeholder, type: f.type});
+                label.appendChild(wrap);
+                grid.appendChild(label);
+                return;
+            }
 
             var input;
             if (f.type === 'select') {
@@ -353,6 +376,9 @@
     var continueBtn = document.getElementById('ticket-continue');
     var backBtn = document.getElementById('ticket-back');
     var form = document.getElementById('ticket-wizard-form');
+    form.addEventListener('submit', function () {
+        PayGridMultiField.collect(form);
+    });
 
     function setStepIndicator(step) {
         stepIndicators.forEach(function (el) {
@@ -374,9 +400,19 @@
         var metaEl = document.getElementById('ticket-confirm-metadata');
         metaEl.innerHTML = '';
         ((categoryMeta[categorySelect.value] || {}).fields || []).forEach(function (f) {
-            var el = form[f.key];
-            if (!el || !el.value) return;
-            var display = f.type === 'number' ? 'Rp' + Number(el.value).toLocaleString('id-ID') : el.value;
+            var display;
+            if (f.auto) {
+                display = autoFieldValues[f.key] || '-';
+            } else if (f.multi) {
+                var wrap = dynamicFieldsEl.querySelector('[data-multi-field="' + f.key + '"]');
+                var values = wrap ? Array.from(wrap.querySelectorAll('.multi-field-input')).map(function (i) { return i.value.trim(); }).filter(Boolean) : [];
+                if (!values.length) return;
+                display = values.join(', ');
+            } else {
+                var el = form[f.key];
+                if (!el || !el.value) return;
+                display = f.type === 'number' ? 'Rp' + Number(el.value).toLocaleString('id-ID') : el.value;
+            }
             var pill = document.createElement('div');
             pill.className = 'fee-pill';
             pill.innerHTML = '<span>' + f.label + '</span><strong>' + display + '</strong>';
