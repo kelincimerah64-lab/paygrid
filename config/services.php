@@ -40,6 +40,10 @@ return [
         'callback_token' => env('N8N_CALLBACK_TOKEN'),
     ],
 
+    'ops_assistant' => [
+        'token' => env('OPS_ASSISTANT_TOKEN'),
+    ],
+
     'telegram_bot' => [
         'callback_token' => env('TELEGRAM_BOT_CALLBACK_TOKEN'),
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
