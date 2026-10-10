@@ -98,8 +98,8 @@ class MobileAppController extends Controller
         $tab = (string) $request->query('tab', $allowedTabs[0]);
         $tab = in_array($tab, $allowedTabs, true) ? $tab : $allowedTabs[0];
 
-        $from = (string) $request->query('from', '');
-        $to = (string) $request->query('to', '');
+        $from = (string) $request->query('from', now('Asia/Jakarta')->startOfMonth()->toDateString());
+        $to = (string) $request->query('to', now('Asia/Jakarta')->toDateString());
         $status = (string) $request->query('status', 'all');
 
         $needsTrxStats = array_intersect(['trx', 'keuangan'], $allowedTabs) !== [];
