@@ -41,6 +41,7 @@
     .tab { text-align:center; padding:9px 6px; border-radius:8px; font-size:12px; font-weight:800; color:var(--muted); text-decoration:none; background:var(--soft); }
     .tab.active { background:var(--blue); color:#fff; }
     main { padding:14px; max-width:520px; margin:0 auto; }
+    .period-label { font-size:11.5px; font-weight:700; color:var(--muted); margin-bottom:8px; }
     .period-form { display:flex; gap:8px; margin-bottom:14px; }
     .period-form input { flex:1 1 0; min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:12.5px; font-family:inherit; background:#fff; }
     .period-form button { flex:0 0 auto; padding:9px 14px; border:none; border-radius:8px; background:var(--blue); color:#fff; font-size:12.5px; font-weight:800; }
@@ -96,6 +97,9 @@
     </div>
 
     <main id="top">
+        @if($from && $to)
+            <div class="period-label">Periode: {{ \Carbon\Carbon::parse($from)->translatedFormat('d M Y') }} &ndash; {{ \Carbon\Carbon::parse($to)->translatedFormat('d M Y') }}</div>
+        @endif
         <form class="period-form" method="get">
             <input type="hidden" name="tab" value="{{ $tab }}">
             <input type="hidden" name="status" value="{{ $status }}">
