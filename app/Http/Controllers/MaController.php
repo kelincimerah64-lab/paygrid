@@ -160,7 +160,7 @@ class MaController extends Controller
             'analyticsHourlyTraffic' => $page === 'analytics'
                 ? $this->cachedAnalytics('hourly-traffic', $this->hourlyTrafficFilters(), fn () => $this->analyticsHourlyTraffic($this->hourlyTrafficFilters()))
                 : [],
-            'groupedMerchantsForAnalytics' => $page === 'analytics' ? $this->groupedMerchantsForAnalytics() : collect(),
+            'groupedMerchantsForAnalytics' => in_array($page, ['analytics', 'report'], true) ? $this->groupedMerchantsForAnalytics() : collect(),
             'feeMenus' => $feeMenus,
         ]);
     }
@@ -457,6 +457,7 @@ class MaController extends Controller
             'report_view' => (string) request('report_view', 'transaksi'),
             'from' => request('from'),
             'to' => request('to'),
+            'store_ids' => array_filter((array) request('store_ids', []), fn ($id) => is_numeric($id)),
         ];
     }
 
@@ -474,7 +475,7 @@ class MaController extends Controller
 
     private function blankFilters(): array
     {
-        return ['q' => '', 'status' => 'all', 'agent_id' => 'all', 'store_id' => 'all', 'agents_view' => 'top', 'period' => 'this_month', 'type' => 'all', 'report_view' => 'transaksi', 'from' => null, 'to' => null];
+        return ['q' => '', 'status' => 'all', 'agent_id' => 'all', 'store_id' => 'all', 'agents_view' => 'top', 'period' => 'this_month', 'type' => 'all', 'report_view' => 'transaksi', 'from' => null, 'to' => null, 'store_ids' => []];
     }
 
     private function todayFilters(): array
@@ -588,7 +589,8 @@ class MaController extends Controller
             ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
             ->when($filters['q'] !== '', fn ($query) => $query->where(fn ($nested) => $nested->where('topup_requests.payment_id', 'like', $filters['q'].'%')->orWhere('topup_requests.rrn', 'like', $filters['q'].'%')->orWhere('topup_requests.customer_reference', 'like', $filters['q'].'%')->orWhereIn('topup_requests.merchant_id', $searchMerchantIds)))
             ->when($filters['status'] !== 'all', fn ($query) => $query->where('topup_requests.status', $filters['status']))
-            ->when($filters['store_id'] !== 'all', fn ($query) => $query->where('topup_requests.merchant_id', $filters['store_id']));
+            ->when($filters['store_id'] !== 'all', fn ($query) => $query->where('topup_requests.merchant_id', $filters['store_id']))
+            ->when(! empty($filters['store_ids']), fn ($query) => $query->whereIn('topup_requests.merchant_id', $filters['store_ids']));
     }
 
     private function transactions(array $filters)
@@ -623,6 +625,7 @@ class MaController extends Controller
             ->when($filters['from'], fn ($query) => $query->where('merchant_withdrawals.gateway_created_at', '>=', $this->rangeStart($filters['from'])))
             ->when($filters['to'], fn ($query) => $query->where('merchant_withdrawals.gateway_created_at', '<=', $this->rangeEnd($filters['to'])))
             ->when($filters['store_id'] !== 'all', fn ($query) => $query->where('merchant_withdrawals.merchant_id', $filters['store_id']))
+            ->when(! empty($filters['store_ids']), fn ($query) => $query->whereIn('merchant_withdrawals.merchant_id', $filters['store_ids']))
             ->when($filters['report_view'] === 'withdrawal' && in_array($filters['status'], ['COMPLETED', 'PENDING', 'FAILED'], true), fn ($query) => $query->where('merchant_withdrawals.status', $filters['status']));
     }
 

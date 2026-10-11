@@ -1476,6 +1476,42 @@ class PayGridRoutingTest extends TestCase
         );
     }
 
+    public function test_ma_report_export_can_be_scoped_to_multiple_selected_stores(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $storeA = Merchant::query()->create([
+            'slug' => 'export-multi-a', 'name' => 'Export Multi A', 'agent_id' => $agent->id,
+            'merchant_type' => 'cm', 'gateway' => 'hilogate', 'approval_status' => 'approved',
+        ]);
+        $storeB = Merchant::query()->create([
+            'slug' => 'export-multi-b', 'name' => 'Export Multi B', 'agent_id' => $agent->id,
+            'merchant_type' => 'cm', 'gateway' => 'hilogate', 'approval_status' => 'approved',
+        ]);
+        $storeC = Merchant::query()->create([
+            'slug' => 'export-multi-c', 'name' => 'Export Multi C', 'agent_id' => $agent->id,
+            'merchant_type' => 'cm', 'gateway' => 'hilogate', 'approval_status' => 'approved',
+        ]);
+
+        foreach ([$storeA, $storeB, $storeC] as $store) {
+            TopupRequest::query()->create([
+                'merchant_id' => $store->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+                'gateway_ref_id' => 'export-multi-'.$store->slug, 'transaction_id' => 'export-multi-'.$store->slug,
+                'status' => 'success', 'amount' => 10000, 'net_amount' => 9900, 'fee_amount' => 100,
+                'customer_reference' => 'REF-'.strtoupper($store->slug), 'submitted_at' => now(),
+            ]);
+        }
+
+        $response = $this->actingAs($ma)->get('/ma/report/export?period=all&store_ids[]='.$storeA->id.'&store_ids[]='.$storeB->id)
+            ->assertOk();
+
+        $response->assertSee('REF-EXPORT-MULTI-A');
+        $response->assertSee('REF-EXPORT-MULTI-B');
+        $response->assertDontSee('REF-EXPORT-MULTI-C');
+    }
+
     public function test_ma_pages_and_local_actions_work(): void
     {
         $this->seed();

@@ -162,7 +162,23 @@
 @if($active === 'report')
     <section class="card pad section ma-period-card"><form method="get" class="ma-period-form"><input type="hidden" name="agent_id" value="{{ $filters['agent_id'] }}"><input type="hidden" name="store_id" value="{{ $filters['store_id'] }}"><input type="hidden" name="agents_view" value="{{ $filters['agents_view'] }}"><input type="hidden" name="report_view" value="{{ $filters['report_view'] }}"><label>Periode<select name="period" data-ma-period-select><option value="this_month" @selected($filters['period'] === 'this_month')>Bulan Ini</option><option value="last_month" @selected($filters['period'] === 'last_month')>Bulan Lalu</option><option value="last_30_days" @selected($filters['period'] === 'last_30_days')>30 Hari</option><option value="custom" @selected($filters['period'] === 'custom')>Custom</option><option value="all" @selected($filters['period'] === 'all')>Semua Periode</option></select></label><label>Dari<input type="date" name="from" value="{{ $dateInput($dataFilters['from'] ?? $filters['from']) }}" data-ma-period-custom></label><label>Sampai<input type="date" name="to" value="{{ $dateInput($dataFilters['to'] ?? $filters['to']) }}" data-ma-period-custom></label><button class="btn primary compact-btn">Terapkan</button><span class="badge ok">{{ $periodLabel }}</span></form></section>
     <section class="workspace-tabs section"><a class="btn {{ $filters['report_view'] !== 'withdrawal' ? 'primary' : '' }}" href="{{ route('ma.report', array_merge(request()->except(['page']), ['report_view' => 'transaksi'])) }}">Transaksi</a><a class="btn {{ $filters['report_view'] === 'withdrawal' ? 'primary' : '' }}" href="{{ route('ma.report', array_merge(request()->except(['page']), ['report_view' => 'withdrawal'])) }}">Withdrawal</a></section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Report per Agen</h2><p class="muted" style="margin:4px 0 0">Default menampilkan 5 agen teratas. Klik baris agen untuk melihat toko, lalu klik toko untuk membuka transaksi toko tersebut.</p></div><div style="display:flex;gap:8px"><a class="btn compact-btn" href="{{ route('ma.report.export', request()->query()) }}">Export Excel</a><a class="btn compact-btn" href="{{ route('ma.report', $filters['agents_view'] === 'all' ? request()->except(['page', 'agents_view']) : array_merge(request()->except('page'), ['agents_view' => 'all'])) }}">{{ $filters['agents_view'] === 'all' ? 'Top 5 Agen' : 'Semua Agen' }}</a></div></div><div class="table-wrap"><table class="table qris-table ma-agent-report-table"><thead><tr><th>Nama Agent</th><th>Toko</th><th>Total IDR Sukses</th><th>Total Pending</th><th>Settled</th></tr></thead><tbody>@forelse($reportAgents as $agent)<tr class="ma-click-row {{ (string) $filters['agent_id'] === (string) $agent['id'] ? 'active' : '' }}" onclick="window.location='{{ route('ma.report', array_merge(request()->except(['page', 'store_id']), ['agent_id' => $agent['id']])) }}'"><td><strong>{{ $agent['name'] }}</strong></td><td>{{ number_format($agent['stores'], 0, ',', '.') }}</td><td>{{ number_format($agent['volume'], 0, ',', '.') }}</td><td>{{ number_format($agent['pending'], 0, ',', '.') }}</td><td>{{ number_format($agent['settled'], 0, ',', '.') }}</td></tr>@empty<tr><td colspan="5" class="empty">Belum ada agen.</td></tr>@endforelse</tbody></table></div></section>
+    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Report per Agen</h2><p class="muted" style="margin:4px 0 0">Default menampilkan 5 agen teratas. Klik baris agen untuk melihat toko, lalu klik toko untuk membuka transaksi toko tersebut.</p></div><div style="display:flex;gap:8px"><a class="btn compact-btn" href="{{ route('ma.report.export', request()->query()) }}">Export Excel</a><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="export-report-modal">Export Report&hellip;</button><a class="btn compact-btn" href="{{ route('ma.report', $filters['agents_view'] === 'all' ? request()->except(['page', 'agents_view']) : array_merge(request()->except('page'), ['agents_view' => 'all'])) }}">{{ $filters['agents_view'] === 'all' ? 'Top 5 Agen' : 'Semua Agen' }}</a></div></div><div class="table-wrap"><table class="table qris-table ma-agent-report-table"><thead><tr><th>Nama Agent</th><th>Toko</th><th>Total IDR Sukses</th><th>Total Pending</th><th>Settled</th></tr></thead><tbody>@forelse($reportAgents as $agent)<tr class="ma-click-row {{ (string) $filters['agent_id'] === (string) $agent['id'] ? 'active' : '' }}" onclick="window.location='{{ route('ma.report', array_merge(request()->except(['page', 'store_id']), ['agent_id' => $agent['id']])) }}'"><td><strong>{{ $agent['name'] }}</strong></td><td>{{ number_format($agent['stores'], 0, ',', '.') }}</td><td>{{ number_format($agent['volume'], 0, ',', '.') }}</td><td>{{ number_format($agent['pending'], 0, ',', '.') }}</td><td>{{ number_format($agent['settled'], 0, ',', '.') }}</td></tr>@empty<tr><td colspan="5" class="empty">Belum ada agen.</td></tr>@endforelse</tbody></table></div></section>
+
+    <div class="approval-modal" id="export-report-modal" hidden><div class="approval-modal-card">
+        <div class="qris-toolbar"><div><h2>Export Report</h2><p class="muted" style="margin:4px 0 0">Pilih satu atau beberapa toko spesifik untuk di-export sekaligus. Kosongkan untuk pakai filter toko/agen yang sedang aktif di halaman.</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
+        <form method="get" action="{{ route('ma.report.export') }}" class="pad" id="ma-export-report-form">
+            @foreach(request()->except(['page', 'store_ids']) as $key => $value)@if(! is_array($value))<input type="hidden" name="{{ $key }}" value="{{ $value }}">@endif @endforeach
+            <label>Toko (opsional, bisa pilih lebih dari satu)
+                <div class="export-store-picker">
+                    <div class="export-store-tags" id="export-store-tags"></div>
+                    <input type="text" id="export-store-search" placeholder="Ketik nama toko lalu pilih dari daftar..." list="export-store-datalist" autocomplete="off">
+                    <datalist id="export-store-datalist"></datalist>
+                </div>
+            </label>
+            <script id="export-store-data" type="application/json">@json($groupedMerchantsForAnalytics)</script>
+            <button class="btn primary compact-btn" type="submit" style="margin-top:14px">Generate &amp; Export (CSV)</button>
+        </form>
+    </div></div>
     @if($selectedAgent)
         <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Toko {{ $selectedAgent->name }}</h2><p class="muted" style="margin:4px 0 0">Pilih toko untuk menampilkan {{ $filters['report_view'] === 'withdrawal' ? 'withdrawal' : 'transaksi' }} toko di tabel report.</p></div><a class="btn compact-btn" href="{{ route('ma.report', request()->except(['page', 'store_id'])) }}">Semua Toko</a></div><div class="ma-report-shops">@forelse($selectedAgentStores as $store)<a class="report-pill {{ (string) $filters['store_id'] === (string) $store->id ? 'active' : '' }}" href="{{ route('ma.report', array_merge(request()->except('page'), ['agent_id' => $selectedAgent->id, 'store_id' => $store->id])) }}"><b>{{ $store->name }}</b><span>{{ number_format((int) ($store->metric_trx_total ?? 0), 0, ',', '.') }} {{ $filters['report_view'] === 'withdrawal' ? 'wd' : 'trx' }} | {{ $money((int) ($store->metric_volume_success ?? 0)) }}</span><span class="muted">{{ $store->metric_last_transaction_at ? $store->metric_last_transaction_at->timezone('Asia/Jakarta')->format('d M Y H:i') : ($filters['report_view'] === 'withdrawal' ? 'Belum ada withdrawal' : 'Belum ada transaksi') }}</span></a>@empty<p class="muted">Agen ini belum punya toko.</p>@endforelse</div></section>
     @endif
@@ -790,6 +806,62 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
+
+    const exportStoreData = document.getElementById('export-store-data');
+    const exportStoreSearch = document.getElementById('export-store-search');
+    const exportStoreTags = document.getElementById('export-store-tags');
+    const exportStoreDatalist = document.getElementById('export-store-datalist');
+    const exportReportForm = document.getElementById('ma-export-report-form');
+    if (exportStoreData && exportStoreSearch && exportStoreTags && exportStoreDatalist && exportReportForm) {
+        const grouped = JSON.parse(exportStoreData.textContent || '{}');
+        const allStores = Object.values(grouped).flat();
+        const selected = new Map();
+
+        const renderOptions = () => {
+            exportStoreDatalist.innerHTML = '';
+            allStores.filter((store) => ! selected.has(store.id)).forEach((store) => {
+                const option = document.createElement('option');
+                option.value = store.name;
+                exportStoreDatalist.appendChild(option);
+            });
+        };
+        const renderTags = () => {
+            exportStoreTags.innerHTML = '';
+            selected.forEach((name, id) => {
+                const tag = document.createElement('span');
+                tag.className = 'export-store-tag';
+                tag.textContent = name;
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.textContent = '×';
+                remove.addEventListener('click', () => { selected.delete(id); renderTags(); renderOptions(); });
+                tag.appendChild(remove);
+                exportStoreTags.appendChild(tag);
+            });
+        };
+
+        renderOptions();
+        exportStoreSearch.addEventListener('input', () => {
+            const match = allStores.find((store) => store.name === exportStoreSearch.value && ! selected.has(store.id));
+            if (match) {
+                selected.set(match.id, match.name);
+                exportStoreSearch.value = '';
+                renderTags();
+                renderOptions();
+            }
+        });
+        exportReportForm.addEventListener('submit', () => {
+            exportReportForm.querySelectorAll('input[name="store_ids[]"]').forEach((el) => el.remove());
+            selected.forEach((name, id) => {
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'store_ids[]';
+                hidden.value = id;
+                exportReportForm.appendChild(hidden);
+            });
+        });
+    }
+
     paygridPaginateAllTables();
 });
 </script>

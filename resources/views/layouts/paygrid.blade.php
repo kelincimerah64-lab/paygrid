@@ -588,6 +588,13 @@
         .form-grid.create-store-grid .fee-rate-grid, .form-grid.create-store-grid .field-span-full { grid-column:1 / -1; }
         @media (max-width: 1100px) { .form-grid.create-store-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 800px) { .form-grid.create-store-grid { grid-template-columns:1fr; } }
+        .export-store-picker { border:1px solid var(--line); border-radius:8px; padding:8px; }
+        .export-store-tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
+        .export-store-tags:empty { display:none; }
+        .export-store-tag { display:inline-flex; align-items:center; gap:6px; background:#eef4fb; color:var(--ink); border:1px solid #b9cef6; border-radius:999px; padding:4px 10px; font-size:12.5px; font-weight:700; }
+        .export-store-tag button { border:none; background:none; color:var(--danger); font-weight:900; cursor:pointer; font-size:14px; line-height:1; padding:0; }
+        .export-store-picker input[type="text"] { border:none; width:100%; padding:4px 2px; font-family:inherit; font-size:13.5px; }
+        .export-store-picker input[type="text"]:focus { outline:none; }
         .multi-field-row { position:relative; margin-top:8px; }
         .multi-field-row:first-child { margin-top:0; }
         .multi-field-row .multi-field-input { margin-top:0 !important; width:100%; padding-right:34px; }
