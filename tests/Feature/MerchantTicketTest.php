@@ -852,6 +852,29 @@ class MerchantTicketTest extends TestCase
         ]);
     }
 
+    public function test_ma_ticket_form_cannot_spoof_ip_whitelist_merchant_group_or_name(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+
+        $this->actingAs($ma)->post(route('ma.tickets.store'), [
+            'merchant_id' => $merchant->id,
+            'card' => 'teknis',
+            'category' => 'ip_whitelist',
+            'description' => 'Butuh whitelist IP.',
+            'ip_address' => ['103.10.20.30'],
+            // The form never renders inputs for these - a crafted value must
+            // not override what the server fills in from $merchant.
+            'merchant_group' => 'Spoofed Group',
+            'merchant_name' => 'Spoofed Name',
+        ])->assertRedirect();
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->where('category', 'ip_whitelist')->firstOrFail();
+        $this->assertSame($merchant->agent?->name ?: '-', $ticket->metadata['merchant_group']);
+        $this->assertSame($merchant->name, $ticket->metadata['merchant_name']);
+    }
+
     public function test_agent_cannot_create_ticket_for_merchant_outside_their_scope(): void
     {
         $this->seed();

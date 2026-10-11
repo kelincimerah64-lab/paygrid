@@ -70,6 +70,13 @@ class MaTicketController extends Controller
             'attachments.*' => ['mimes:jpg,jpeg,png,pdf,mp4', 'max:10240'],
         ], $tickets->fieldRules($categoryKey)));
 
+        $merchant = Merchant::query()->with('agent')->where('general_ticket_enabled', true)->findOrFail($validated['merchant_id']);
+
+        if ($categoryKey === 'ip_whitelist') {
+            $validated['merchant_group'] = $merchant->agent?->name ?: '-';
+            $validated['merchant_name'] = $merchant->name;
+        }
+
         $data = [
             'department' => $department,
             'category' => $validated['category'],
@@ -77,8 +84,6 @@ class MaTicketController extends Controller
             'description' => $validated['description'],
             'metadata' => $tickets->metadataFrom($categoryKey, $validated),
         ];
-
-        $merchant = Merchant::query()->where('general_ticket_enabled', true)->findOrFail($validated['merchant_id']);
 
         $ticket = $tickets->create($merchant, $user, $data, $request->file('attachments', []));
         $audit->record('merchant_ticket.created', $ticket, null, $ticket->only(['merchant_id', 'department', 'category', 'ticket_no']));

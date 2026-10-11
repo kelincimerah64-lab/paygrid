@@ -2167,6 +2167,31 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame($maFeeBefore + (int) round(1000000 * ($currentAgentRate - $currentMaRate) / 100), $maFeeAfter);
     }
 
+    public function test_fee_snapshot_is_not_rewritten_when_a_transaction_is_resynced_after_a_rate_change(): void
+    {
+        $this->seed();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $merchant = Merchant::query()->where('agent_id', $agent->id)->where('merchant_type', 'cm')->firstOrFail();
+        $merchant->update(['merchant_mdr_percent' => 1.5, 'agent_fee_percent' => 1.0, 'ma_fee_percent' => 0.5]);
+
+        $ingestion = app(TransactionIngestionService::class);
+        $payload = ['id' => 'resync-snapshot-test', 'status' => 'success', 'amount' => 100000];
+
+        $request = $ingestion->ingestForMerchant($merchant, $payload, 'hilogate', 'hilogate_pull', true);
+        $snapshot = FeeSnapshot::query()->where('topup_request_id', $request->id)->firstOrFail();
+        $this->assertSame('1.5000', $snapshot->merchant_mdr_percent);
+
+        // Rate changes after the transaction already settled and snapshotted.
+        $merchant->update(['merchant_mdr_percent' => 9.0, 'agent_fee_percent' => 8.0, 'ma_fee_percent' => 7.0]);
+
+        // A routine resync (same gateway_ref_id, already exists) must not touch the frozen snapshot.
+        $ingestion->ingestForMerchant($merchant, $payload, 'hilogate', 'hilogate_pull', true);
+        $snapshot->refresh();
+        $this->assertSame('1.5000', $snapshot->merchant_mdr_percent);
+        $this->assertSame('1.0000', $snapshot->agent_fee_percent);
+        $this->assertSame('0.5000', $snapshot->ma_fee_percent);
+    }
+
     public function test_ma_fee_page_shows_estimated_rupiah_per_store(): void
     {
         $this->seed();
