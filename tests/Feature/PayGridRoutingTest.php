@@ -1512,6 +1512,31 @@ class PayGridRoutingTest extends TestCase
         $response->assertDontSee('REF-EXPORT-MULTI-C');
     }
 
+    public function test_ma_report_export_rejects_non_integer_store_ids(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $store = Merchant::query()->create([
+            'slug' => 'export-strict-id-store', 'name' => 'Export Strict Id Store', 'agent_id' => $agent->id,
+            'merchant_type' => 'cm', 'gateway' => 'hilogate', 'approval_status' => 'approved',
+        ]);
+        TopupRequest::query()->create([
+            'merchant_id' => $store->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+            'gateway_ref_id' => 'export-strict-id', 'transaction_id' => 'export-strict-id',
+            'status' => 'success', 'amount' => 10000, 'net_amount' => 9900, 'fee_amount' => 100,
+            'customer_reference' => 'REF-STRICT-ID', 'submitted_at' => now(),
+        ]);
+
+        // '1e5' is_numeric()-true but not a valid merchant id - must be dropped from the filter,
+        // not coerced by MySQL into matching merchant id 100000 (or anything else).
+        $response = $this->actingAs($ma)->get('/ma/report/export?period=all&store_ids[]=1e5')
+            ->assertOk();
+
+        $response->assertSee('REF-STRICT-ID');
+    }
+
     public function test_ma_report_export_can_be_scoped_to_multiple_statuses(): void
     {
         $this->seed();

@@ -160,7 +160,9 @@ class MaController extends Controller
             'analyticsHourlyTraffic' => $page === 'analytics'
                 ? $this->cachedAnalytics('hourly-traffic', $this->hourlyTrafficFilters(), fn () => $this->analyticsHourlyTraffic($this->hourlyTrafficFilters()))
                 : [],
-            'groupedMerchantsForAnalytics' => in_array($page, ['analytics', 'report'], true) ? $this->groupedMerchantsForAnalytics() : collect(),
+            'groupedMerchantsForAnalytics' => in_array($page, ['analytics', 'report'], true)
+                ? $this->cachedAnalytics('grouped-merchants', [], fn () => $this->groupedMerchantsForAnalytics())
+                : collect(),
             'feeMenus' => $feeMenus,
         ]);
     }
@@ -457,7 +459,7 @@ class MaController extends Controller
             'report_view' => (string) request('report_view', 'transaksi'),
             'from' => request('from'),
             'to' => request('to'),
-            'store_ids' => array_filter((array) request('store_ids', []), fn ($id) => is_numeric($id)),
+            'store_ids' => array_filter((array) request('store_ids', []), fn ($id) => ctype_digit((string) $id)),
             'statuses' => array_filter((array) request('statuses', [])),
         ];
     }
@@ -1173,7 +1175,7 @@ class MaController extends Controller
             ->orderBy('name')
             ->get()
             ->groupBy(fn (Merchant $merchant) => $merchant->agent?->name ?: 'Lainnya')
-            ->map(fn ($group) => $group->map(fn (Merchant $merchant) => ['id' => $merchant->id, 'name' => $merchant->name])->values())
+            ->map(fn ($group) => $group->map(fn (Merchant $merchant) => ['id' => $merchant->id, 'name' => $merchant->name, 'agent_id' => $merchant->agent_id])->values())
             ->sortKeys();
     }
 

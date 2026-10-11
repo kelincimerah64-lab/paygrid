@@ -848,13 +848,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (exportStoreData && exportStoreSearch && exportStoreTags && exportStoreDatalist && exportReportForm) {
         const grouped = JSON.parse(exportStoreData.textContent || '{}');
         const allStores = Object.values(grouped).flat();
+        // Merchant names aren't guaranteed unique (no DB constraint), so every
+        // store is labelled with its agent group to avoid picking the wrong
+        // same-named merchant - see agentNameById.
+        const agentNameById = {};
+        Object.entries(grouped).forEach(([agentName, stores]) => {
+            stores.forEach((store) => { agentNameById[store.agent_id] = agentName; });
+        });
+        const storeLabel = (store) => store.name + ' — ' + (agentNameById[store.agent_id] || 'Lainnya');
         const selected = new Map();
         const agentSelect = document.getElementById('export-agent-select');
 
         const storesInScope = () => {
             if (agentSelect && ! agentSelect.disabled && agentSelect.value !== 'all') {
-                const agentName = agentSelect.options[agentSelect.selectedIndex].text;
-                return grouped[agentName] || [];
+                const agentId = parseInt(agentSelect.value, 10);
+                return allStores.filter((store) => store.agent_id === agentId);
             }
             return allStores;
         };
@@ -862,7 +870,7 @@ document.addEventListener('DOMContentLoaded', () => {
             exportStoreDatalist.innerHTML = '';
             storesInScope().filter((store) => ! selected.has(store.id)).forEach((store) => {
                 const option = document.createElement('option');
-                option.value = store.name;
+                option.value = storeLabel(store);
                 exportStoreDatalist.appendChild(option);
             });
         };
@@ -883,7 +891,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderOptions();
         exportStoreSearch.addEventListener('input', () => {
-            const match = storesInScope().find((store) => store.name === exportStoreSearch.value && ! selected.has(store.id));
+            const match = storesInScope().find((store) => storeLabel(store) === exportStoreSearch.value && ! selected.has(store.id));
             if (match) {
                 selected.set(match.id, match.name);
                 exportStoreSearch.value = '';
