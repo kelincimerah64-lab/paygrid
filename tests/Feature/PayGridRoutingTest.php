@@ -1733,13 +1733,13 @@ class PayGridRoutingTest extends TestCase
         $performance = $this->actingAs($ma)->get("/ma/analytics/tab/performance?{$query}")->assertOk();
         // Latency: 30 seconds average shown on the Performance tab.
         $performance->assertSee('30.0 detik', false);
+        // Account activity: the CS user logged in 3 days ago.
+        $performance->assertSee('3 hari lalu', false);
 
         $operations = $this->actingAs($ma)->get("/ma/analytics/tab/operations?{$query}")->assertOk();
         // SLA: our ticket resolved in 2h, well under 24h -> 100% within SLA.
         $operations->assertSee('100,000%', false);
         $operations->assertSee('2.0 jam', false);
-        // Account activity: the CS user logged in 3 days ago.
-        $operations->assertSee('3 hari lalu', false);
     }
 
     public function test_ma_analytics_page_computes_volume_projection(): void
@@ -1852,7 +1852,7 @@ class PayGridRoutingTest extends TestCase
             'provisioning_attempts' => 2,
         ]);
 
-        $response = $this->actingAs($ma)->get('/ma/analytics/tab/operations?period=all')->assertOk();
+        $response = $this->actingAs($ma)->get('/ma/analytics/tab/performance?period=all')->assertOk();
         $response->assertSee('Analitik Kegagalan Provisioning');
         $response->assertSee('Provision Fail Store');
         $response->assertSee('merchant_group_id is required');
