@@ -165,18 +165,51 @@
     <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Report per Agen</h2><p class="muted" style="margin:4px 0 0">Default menampilkan 5 agen teratas. Klik baris agen untuk melihat toko, lalu klik toko untuk membuka transaksi toko tersebut.</p></div><div style="display:flex;gap:8px"><a class="btn compact-btn" href="{{ route('ma.report.export', request()->query()) }}">Export Excel</a><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="export-report-modal">Export Report&hellip;</button><a class="btn compact-btn" href="{{ route('ma.report', $filters['agents_view'] === 'all' ? request()->except(['page', 'agents_view']) : array_merge(request()->except('page'), ['agents_view' => 'all'])) }}">{{ $filters['agents_view'] === 'all' ? 'Top 5 Agen' : 'Semua Agen' }}</a></div></div><div class="table-wrap"><table class="table qris-table ma-agent-report-table"><thead><tr><th>Nama Agent</th><th>Toko</th><th>Total IDR Sukses</th><th>Total Pending</th><th>Settled</th></tr></thead><tbody>@forelse($reportAgents as $agent)<tr class="ma-click-row {{ (string) $filters['agent_id'] === (string) $agent['id'] ? 'active' : '' }}" onclick="window.location='{{ route('ma.report', array_merge(request()->except(['page', 'store_id']), ['agent_id' => $agent['id']])) }}'"><td><strong>{{ $agent['name'] }}</strong></td><td>{{ number_format($agent['stores'], 0, ',', '.') }}</td><td>{{ number_format($agent['volume'], 0, ',', '.') }}</td><td>{{ number_format($agent['pending'], 0, ',', '.') }}</td><td>{{ number_format($agent['settled'], 0, ',', '.') }}</td></tr>@empty<tr><td colspan="5" class="empty">Belum ada agen.</td></tr>@endforelse</tbody></table></div></section>
 
     <div class="approval-modal" id="export-report-modal" hidden><div class="approval-modal-card">
-        <div class="qris-toolbar"><div><h2>Export Report</h2><p class="muted" style="margin:4px 0 0">Pilih satu atau beberapa toko spesifik untuk di-export sekaligus. Kosongkan untuk pakai filter toko/agen yang sedang aktif di halaman.</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
-        <form method="get" action="{{ route('ma.report.export') }}" class="pad" id="ma-export-report-form">
-            @foreach(request()->except(['page', 'store_ids']) as $key => $value)@if(! is_array($value))<input type="hidden" name="{{ $key }}" value="{{ $value }}">@endif @endforeach
-            <label>Toko (opsional, bisa pilih lebih dari satu)
-                <div class="export-store-picker">
-                    <div class="export-store-tags" id="export-store-tags"></div>
-                    <input type="text" id="export-store-search" placeholder="Ketik nama toko lalu pilih dari daftar..." list="export-store-datalist" autocomplete="off">
-                    <datalist id="export-store-datalist"></datalist>
-                </div>
-            </label>
+        <div class="qris-toolbar"><div><h2>Export Report</h2><p class="muted" style="margin:4px 0 0">Konfigurasi lalu generate data transaksi detail.</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
+        <form method="get" action="{{ route('ma.report.export') }}" class="pad export-report-form" id="ma-export-report-form">
+            <input type="hidden" name="report_view" value="{{ $filters['report_view'] }}">
+
+            <label class="export-section-label">Grup Merchant</label>
+            <div class="export-radio-group">
+                <label><input type="radio" name="agent_mode" value="all" data-export-agent-mode checked> Semua Grup Merchant</label>
+                <label><input type="radio" name="agent_mode" value="specific" data-export-agent-mode> Grup Spesifik</label>
+            </div>
+            <select name="agent_id" id="export-agent-select" disabled>
+                <option value="all">Pilih grup merchant&hellip;</option>
+                @foreach($allAgents as $agent)<option value="{{ $agent->id }}">{{ $agent->name }}</option>@endforeach
+            </select>
+
+            <label class="export-section-label" style="margin-top:16px">Toko Spesifik (opsional, bisa lebih dari satu)</label>
+            <div class="export-store-picker">
+                <div class="export-store-tags" id="export-store-tags"></div>
+                <input type="text" id="export-store-search" placeholder="Ketik nama toko lalu pilih dari daftar..." list="export-store-datalist" autocomplete="off">
+                <datalist id="export-store-datalist"></datalist>
+            </div>
             <script id="export-store-data" type="application/json">@json($groupedMerchantsForAnalytics)</script>
-            <button class="btn primary compact-btn" type="submit" style="margin-top:14px">Generate &amp; Export (CSV)</button>
+
+            <label class="export-section-label" style="margin-top:16px">Rentang Tanggal</label>
+            <div class="export-period-presets">
+                <button type="button" class="btn compact-btn" data-export-period="last_30_days">30 Hari Terakhir</button>
+                <button type="button" class="btn compact-btn active" data-export-period="this_month">Bulan Ini</button>
+                <button type="button" class="btn compact-btn" data-export-period="all">Semua Periode</button>
+                <button type="button" class="btn compact-btn" data-export-period="custom">Custom</button>
+            </div>
+            <input type="hidden" name="period" id="export-period-input" value="this_month">
+            <div class="export-date-range" id="export-date-range" hidden>
+                <input type="date" name="from" id="export-from" disabled>
+                <span>&mdash;</span>
+                <input type="date" name="to" id="export-to" disabled>
+            </div>
+
+            <label class="export-section-label" style="margin-top:16px">Status Transaksi</label>
+            <div class="export-status-group">
+                <label><input type="checkbox" checked data-export-status-all> Semua Status</label>
+                @foreach($filters['report_view'] === 'withdrawal' ? ['COMPLETED' => 'Completed', 'PENDING' => 'Pending', 'FAILED' => 'Failed'] : ['success' => 'Sukses', 'pending' => 'Pending', 'expired' => 'Expired'] as $value => $label)
+                <label><input type="checkbox" name="statuses[]" value="{{ $value }}" data-export-status-option disabled> {{ $label }}</label>
+                @endforeach
+            </div>
+
+            <button class="btn primary compact-btn" type="submit" style="margin-top:18px">Generate &amp; Export (CSV)</button>
         </form>
     </div></div>
     @if($selectedAgent)
@@ -816,10 +849,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const grouped = JSON.parse(exportStoreData.textContent || '{}');
         const allStores = Object.values(grouped).flat();
         const selected = new Map();
+        const agentSelect = document.getElementById('export-agent-select');
 
+        const storesInScope = () => {
+            if (agentSelect && ! agentSelect.disabled && agentSelect.value !== 'all') {
+                const agentName = agentSelect.options[agentSelect.selectedIndex].text;
+                return grouped[agentName] || [];
+            }
+            return allStores;
+        };
         const renderOptions = () => {
             exportStoreDatalist.innerHTML = '';
-            allStores.filter((store) => ! selected.has(store.id)).forEach((store) => {
+            storesInScope().filter((store) => ! selected.has(store.id)).forEach((store) => {
                 const option = document.createElement('option');
                 option.value = store.name;
                 exportStoreDatalist.appendChild(option);
@@ -842,7 +883,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderOptions();
         exportStoreSearch.addEventListener('input', () => {
-            const match = allStores.find((store) => store.name === exportStoreSearch.value && ! selected.has(store.id));
+            const match = storesInScope().find((store) => store.name === exportStoreSearch.value && ! selected.has(store.id));
             if (match) {
                 selected.set(match.id, match.name);
                 exportStoreSearch.value = '';
@@ -860,6 +901,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 exportReportForm.appendChild(hidden);
             });
         });
+
+        // Grup Merchant: semua vs spesifik
+        document.querySelectorAll('[data-export-agent-mode]').forEach((radio) => {
+            radio.addEventListener('change', () => {
+                agentSelect.disabled = radio.value !== 'all' ? false : true;
+                if (radio.value === 'all') agentSelect.value = 'all';
+                selected.clear();
+                renderTags();
+                renderOptions();
+            });
+        });
+        if (agentSelect) agentSelect.addEventListener('change', () => { selected.clear(); renderTags(); renderOptions(); });
+
+        // Rentang Tanggal: preset vs custom
+        const periodInput = document.getElementById('export-period-input');
+        const dateRange = document.getElementById('export-date-range');
+        const fromInput = document.getElementById('export-from');
+        const toInput = document.getElementById('export-to');
+        document.querySelectorAll('[data-export-period]').forEach((button) => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('[data-export-period]').forEach((b) => b.classList.remove('active'));
+                button.classList.add('active');
+                const value = button.dataset.exportPeriod;
+                periodInput.value = value;
+                const isCustom = value === 'custom';
+                dateRange.hidden = ! isCustom;
+                fromInput.disabled = ! isCustom;
+                toInput.disabled = ! isCustom;
+            });
+        });
+
+        // Status Transaksi: semua vs spesifik
+        const statusAll = document.querySelector('[data-export-status-all]');
+        const statusOptions = document.querySelectorAll('[data-export-status-option]');
+        if (statusAll) {
+            statusAll.addEventListener('change', () => {
+                statusOptions.forEach((checkbox) => {
+                    checkbox.disabled = statusAll.checked;
+                    if (statusAll.checked) checkbox.checked = false;
+                });
+            });
+        }
     }
 
     paygridPaginateAllTables();

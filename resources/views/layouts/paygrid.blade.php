@@ -588,6 +588,17 @@
         .form-grid.create-store-grid .fee-rate-grid, .form-grid.create-store-grid .field-span-full { grid-column:1 / -1; }
         @media (max-width: 1100px) { .form-grid.create-store-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 800px) { .form-grid.create-store-grid { grid-template-columns:1fr; } }
+        .export-report-form label.export-section-label { display:block; font-weight:800; font-size:13px; margin-bottom:6px; }
+        .export-radio-group { display:flex; gap:16px; margin-bottom:8px; font-size:13px; font-weight:600; }
+        .export-radio-group label { display:flex; align-items:center; gap:6px; font-weight:600; }
+        #export-agent-select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-family:inherit; font-size:13px; }
+        #export-agent-select:disabled { background:var(--bg); color:var(--muted); }
+        .export-period-presets { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+        .export-period-presets .active { background:#eef5ff; border-color:#78a7ff; color:#1557c2; }
+        .export-date-range { display:flex; align-items:center; gap:8px; }
+        .export-date-range input[type="date"] { flex:1 1 0; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-family:inherit; font-size:13px; }
+        .export-status-group { display:flex; gap:14px; flex-wrap:wrap; font-size:13px; font-weight:600; }
+        .export-status-group label { display:flex; align-items:center; gap:6px; font-weight:600; }
         .export-store-picker { border:1px solid var(--line); border-radius:8px; padding:8px; }
         .export-store-tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
         .export-store-tags:empty { display:none; }

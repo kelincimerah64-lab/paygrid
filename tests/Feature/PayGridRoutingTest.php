@@ -1512,6 +1512,34 @@ class PayGridRoutingTest extends TestCase
         $response->assertDontSee('REF-EXPORT-MULTI-C');
     }
 
+    public function test_ma_report_export_can_be_scoped_to_multiple_statuses(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $store = Merchant::query()->create([
+            'slug' => 'export-status-store', 'name' => 'Export Status Store', 'agent_id' => $agent->id,
+            'merchant_type' => 'cm', 'gateway' => 'hilogate', 'approval_status' => 'approved',
+        ]);
+
+        foreach (['success', 'pending', 'expired'] as $status) {
+            TopupRequest::query()->create([
+                'merchant_id' => $store->id, 'gateway' => 'hilogate', 'data_source' => 'gateway_pull',
+                'gateway_ref_id' => 'export-status-'.$status, 'transaction_id' => 'export-status-'.$status,
+                'status' => $status, 'amount' => 10000, 'net_amount' => 9900, 'fee_amount' => 100,
+                'customer_reference' => 'REF-STATUS-'.strtoupper($status), 'submitted_at' => now(),
+            ]);
+        }
+
+        $response = $this->actingAs($ma)->get('/ma/report/export?period=all&statuses[]=success&statuses[]=pending')
+            ->assertOk();
+
+        $response->assertSee('REF-STATUS-SUCCESS');
+        $response->assertSee('REF-STATUS-PENDING');
+        $response->assertDontSee('REF-STATUS-EXPIRED');
+    }
+
     public function test_ma_pages_and_local_actions_work(): void
     {
         $this->seed();
