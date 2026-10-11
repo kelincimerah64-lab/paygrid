@@ -97,7 +97,7 @@
         .ok { background:#dff8ec; color:var(--success); }
         .warn { background:#fff0c7; color:var(--warn); }
         .danger { background:#ffe0dd; color:var(--danger); }
-        .btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid #b9cef6; background:#fff; color:var(--blue); border-radius:7px; min-height:34px; padding:7px 11px; font-size:13px; font-weight:900; text-decoration:none; cursor:pointer; white-space:nowrap; }
+        .btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid #b9cef6; background:#fff; color:var(--blue); border-radius:7px; min-height:34px; padding:7px 11px; font-family:inherit; font-size:13px; font-weight:900; line-height:normal; text-decoration:none; cursor:pointer; white-space:nowrap; }
         .btn.primary { background:var(--blue); color:#fff; border-color:var(--blue); }
         .btn.danger { border-color:#d9a4a4; color:#b52727; background:#fff; }
         .btn.ghost { background:#f7faff; }
