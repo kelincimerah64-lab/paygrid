@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\JiraSyncController;
 use App\Http\Controllers\Api\N8nTicketApprovalController;
 use App\Http\Controllers\Api\OpsAssistantController;
 use App\Http\Controllers\Api\TelegramBotController;
@@ -21,3 +22,5 @@ Route::post('/ops/merchants', [OpsAssistantController::class, 'createMerchant'])
 Route::get('/ops/merchants', [OpsAssistantController::class, 'listMerchants']);
 Route::get('/ops/summary', [OpsAssistantController::class, 'summary']);
 Route::post('/ops/query', [OpsAssistantController::class, 'query']);
+
+Route::post('/jira-sync/trigger', [JiraSyncController::class, 'trigger'])->middleware('throttle:dashboard-writes');

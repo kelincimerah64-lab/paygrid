@@ -68,6 +68,15 @@ return [
         'reminder_threshold_minutes' => (int) env('TELEGRAM_BOT_REMINDER_THRESHOLD_MINUTES', 15),
     ],
 
+    'jira_sync' => [
+        'base_url' => rtrim((string) env('JIRA_BASE_URL', 'https://inacash-team.atlassian.net'), '/'),
+        'email' => env('JIRA_EMAIL'),
+        'api_token' => env('JIRA_API_TOKEN'),
+        'project_key' => env('JIRA_PROJECT_KEY', 'TIC'),
+        'issue_type' => env('JIRA_ISSUE_TYPE', 'Task'),
+        'webhook_token' => env('JIRA_SYNC_WEBHOOK_TOKEN'),
+    ],
+
     'fee_menus' => [
         'ma' => [
             'based' => ['label' => 'Based', 'floor' => 0.80],
