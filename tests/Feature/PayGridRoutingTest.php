@@ -2530,6 +2530,43 @@ class PayGridRoutingTest extends TestCase
         $this->actingAs($maUser)->get(route('ma.create-store'))->assertOk()->assertSee('ma-link-merchant@paygrid.local');
     }
 
+    public function test_ma_generated_link_is_reusable_and_never_expires(): void
+    {
+        $this->seed();
+        $maUser = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $this->actingAs($maUser)->post(route('ma.onboarding-links.store'), ['agent_id' => $agent->id])->assertRedirect();
+
+        $link = AgentOnboardingLink::query()->where('agent_id', $agent->id)->where('status', 'active')->firstOrFail();
+        $this->assertTrue($link->reusable);
+        $this->assertNull($link->expires_at);
+
+        $this->post(route('merchant-registration.token-store', $link), ['store_name' => 'Reusable Store One'])->assertRedirect();
+        $link->refresh();
+        $this->assertSame('active', $link->status, 'Reusable link should stay active after a submission.');
+
+        $this->post(route('merchant-registration.token-store', $link), ['store_name' => 'Reusable Store Two'])->assertRedirect();
+        $this->assertDatabaseHas('merchant_registrations', ['store_name' => 'Reusable Store One']);
+        $this->assertDatabaseHas('merchant_registrations', ['store_name' => 'Reusable Store Two']);
+    }
+
+    public function test_generating_again_for_the_same_agent_returns_the_existing_reusable_link(): void
+    {
+        $this->seed();
+        $maUser = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $this->actingAs($maUser)->post(route('ma.onboarding-links.store'), ['agent_id' => $agent->id])->assertRedirect();
+        $firstLink = AgentOnboardingLink::query()->where('agent_id', $agent->id)->where('status', 'active')->firstOrFail();
+
+        $this->actingAs($maUser)->post(route('ma.onboarding-links.store'), ['agent_id' => $agent->id])->assertRedirect();
+
+        $activeLinks = AgentOnboardingLink::query()->where('agent_id', $agent->id)->where('status', 'active')->get();
+        $this->assertCount(1, $activeLinks, 'Regenerating for the same agent should not create a second active link.');
+        $this->assertSame($firstLink->id, $activeLinks->first()->id);
+    }
+
     public function test_ma_cannot_generate_or_expire_onboarding_link_for_another_mas_agent(): void
     {
         $this->seed();

@@ -14,11 +14,13 @@ class AgentOnboardingLink extends Model
         'recipient_email',
         'recipient_telegram',
         'status',
+        'reusable',
         'expires_at',
         'used_at',
     ];
 
     protected $casts = [
+        'reusable' => 'boolean',
         'expires_at' => 'datetime',
         'used_at' => 'datetime',
     ];

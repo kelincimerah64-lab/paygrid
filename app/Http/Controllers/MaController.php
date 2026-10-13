@@ -417,6 +417,14 @@ class MaController extends Controller
      * same single-use link flow, but since an MA oversees many agents (not
      * just one), the MA must pick which agent/group the link belongs to.
      */
+    /**
+     * MA-generated links are deliberately different from the agent's own
+     * "Generate Link" flow: 1 agent gets 1 permanent, reusable link instead
+     * of a new single-use link every time (agents keep the old single-use/
+     * expiring behavior - see DashboardController::storeAgentOnboardingLink).
+     * Calling this again for an agent that already has an active reusable
+     * link just returns that same link rather than creating a duplicate.
+     */
     public function storeOnboardingLink(Request $request, AuditLogService $audit): RedirectResponse
     {
         $data = $request->validate([
@@ -426,6 +434,15 @@ class MaController extends Controller
         ]);
         $agent = Agent::query()->findOrFail($data['agent_id']);
         abort_unless($this->canUseAgent($agent), 403);
+
+        $existing = AgentOnboardingLink::query()
+            ->where('agent_id', $agent->id)
+            ->where('status', 'active')
+            ->where('reusable', true)
+            ->first();
+        if ($existing) {
+            return back()->with('status', 'Agen ini sudah punya link permanen, berikut link-nya.')->with('onboarding_link', route('merchant-registration.token-form', $existing));
+        }
 
         $link = DB::transaction(function () use ($agent, $data) {
             AgentOnboardingLink::query()
@@ -439,12 +456,13 @@ class MaController extends Controller
                 'recipient_email' => $data['recipient_email'] ?? null,
                 'recipient_telegram' => $data['recipient_telegram'] ?? null,
                 'status' => 'active',
-                'expires_at' => now()->addHours(max(1, (int) config('paygrid.onboarding.link_expires_hours', 24))),
+                'reusable' => true,
+                'expires_at' => null,
             ]);
         });
-        $audit->record('ma.onboarding_link_created', $link, null, $link->only(['agent_id', 'recipient_email', 'recipient_telegram', 'status', 'expires_at']));
+        $audit->record('ma.onboarding_link_created', $link, null, $link->only(['agent_id', 'recipient_email', 'recipient_telegram', 'status', 'reusable']));
 
-        return back()->with('status', 'Link form unik berhasil dibuat.')->with('onboarding_link', route('merchant-registration.token-form', $link));
+        return back()->with('status', 'Link permanen berhasil dibuat.')->with('onboarding_link', route('merchant-registration.token-form', $link));
     }
 
     public function expireOnboardingLink(AgentOnboardingLink $link, AuditLogService $audit): RedirectResponse

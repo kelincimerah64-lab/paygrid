@@ -101,11 +101,19 @@ class MerchantRegistrationController extends Controller
                 'status' => 'pending_agent',
             ]);
 
-            $lockedLink->update([
-                'merchant_registration_id' => $registration->id,
-                'status' => 'used',
-                'used_at' => now(),
-            ]);
+            if ($lockedLink->reusable) {
+                // MA-generated links are 1-per-agent and permanent (see
+                // MaController::storeOnboardingLink) - stay active after a
+                // submission so the same link can be used again, instead of
+                // linking to a single registration like a one-shot link does.
+                $lockedLink->update(['used_at' => now()]);
+            } else {
+                $lockedLink->update([
+                    'merchant_registration_id' => $registration->id,
+                    'status' => 'used',
+                    'used_at' => now(),
+                ]);
+            }
 
             return $registration;
         });
@@ -113,7 +121,11 @@ class MerchantRegistrationController extends Controller
             'agent_id', 'store_name', 'merchant_type', 'gateway', 'status',
         ]));
 
-        return redirect()->route('merchant-registration.token-form', $link)->with('status', 'Data berhasil dikirim. Link ini sudah expired dan tidak bisa dipakai lagi.');
+        $statusMessage = $link->reusable
+            ? 'Data berhasil dikirim. Link ini bisa dipakai lagi untuk request toko berikutnya.'
+            : 'Data berhasil dikirim. Link ini sudah expired dan tidak bisa dipakai lagi.';
+
+        return redirect()->route('merchant-registration.token-form', $link)->with('status', $statusMessage);
     }
 
     public function topup(?Merchant $merchant = null): View
