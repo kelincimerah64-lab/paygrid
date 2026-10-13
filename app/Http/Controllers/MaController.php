@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\GatewaySyncLog;
 use App\Models\Merchant;
 use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
@@ -181,6 +182,7 @@ class MaController extends Controller
                 'analyticsChannelReliability' => $this->cachedAnalytics('channel-reliability', $dataFilters, fn () => $this->analyticsChannelReliability($dataFilters)),
                 'analyticsAccountActivity' => $this->cachedAnalytics('account-activity', [], fn () => $this->analyticsAccountActivity()),
                 'analyticsProvisioningFailures' => $this->cachedAnalytics('provisioning-failures', [], fn () => $this->analyticsProvisioningFailures()),
+                'analyticsConnectivityIssues' => $this->cachedAnalytics('connectivity-issues', [], fn () => $this->analyticsConnectivityIssues()),
             ]);
         }
 
@@ -189,6 +191,7 @@ class MaController extends Controller
             'analyticsOperations' => $this->cachedAnalytics('operations', $dataFilters, fn () => $this->analyticsOperations($dataFilters)),
             'analyticsOutlierDetection' => $this->cachedAnalytics('outlier-detection', [], fn () => $this->analyticsOutlierDetection()),
             'analyticsTicketSla' => $this->cachedAnalytics('ticket-sla', $dataFilters, fn () => $this->analyticsTicketSla($dataFilters)),
+            'analyticsTicketVolume' => $this->cachedAnalytics('ticket-volume', $dataFilters, fn () => $this->analyticsTicketVolume($dataFilters)),
             'analyticsHealthScore' => $this->cachedAnalytics('health-score', [], fn () => $this->analyticsHealthScore()),
         ]);
     }
@@ -1592,6 +1595,43 @@ class MaController extends Controller
         ];
     }
 
+    /**
+     * Plain ticket-count overview (how many, resolved vs not) to sit
+     * alongside analyticsTicketSla()'s timing/percentage view - same
+     * support_tickets source and same period filter for consistency within
+     * this tab.
+     */
+    private function analyticsTicketVolume(array $filters): array
+    {
+        $merchantIds = $this->maScopedMerchantIds();
+
+        $byStatus = SupportTicket::query()
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds))
+            ->when($filters['from'], fn ($query) => $query->where('created_at', '>=', $this->rangeStart($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->where('created_at', '<=', $this->rangeEnd($filters['to'])))
+            ->selectRaw('status, COUNT(*) as cnt')
+            ->groupBy('status')
+            ->pluck('cnt', 'status');
+
+        $done = (int) ($byStatus['done'] ?? 0);
+        $cancelled = (int) ($byStatus['cancelled'] ?? 0);
+        $total = (int) $byStatus->sum();
+
+        return [
+            'total' => $total,
+            'done' => $done,
+            'cancelled' => $cancelled,
+            'open' => $total - $done - $cancelled,
+            'byStatus' => [
+                'not_started' => (int) ($byStatus['not_started'] ?? 0),
+                'open' => (int) ($byStatus['open'] ?? 0),
+                'in_progress' => (int) ($byStatus['in_progress'] ?? 0),
+                'done' => $done,
+                'cancelled' => $cancelled,
+            ],
+        ];
+    }
+
     private function analyticsAccountActivity(): array
     {
         $maId = $this->currentMaId();
@@ -1645,6 +1685,48 @@ class MaController extends Controller
             ])->values(),
             'topErrors' => $topErrors,
             'totalFailed' => $failed->count(),
+        ];
+    }
+
+    /**
+     * Not period-filtered (last 24h fixed window) - this is "what's broken
+     * right now", same convention as analyticsProvisioningFailures(). Pulls
+     * from gateway_sync_logs, which every pull/sync job already writes to
+     * regardless of failure reason - an IP-whitelist rejection is flagged
+     * specifically (string-matched from the gateway's own error message)
+     * since that's the single most common and most actionable cause.
+     */
+    private function analyticsConnectivityIssues(): array
+    {
+        $merchantIds = $this->merchants($this->blankFilters())->pluck('id');
+        $since = now('Asia/Jakarta')->subDay()->utc();
+
+        $rows = GatewaySyncLog::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->where('status', 'failed')
+            ->where('created_at', '>=', $since)
+            ->with('merchant:id,name')
+            ->get()
+            ->groupBy('merchant_id')
+            ->map(function ($group) {
+                $latest = $group->sortByDesc('created_at')->first();
+                $isIpIssue = str_contains(mb_strtolower((string) $latest->message), 'whitelist');
+
+                return [
+                    'merchant_name' => $latest->merchant?->name ?: '-',
+                    'fail_count' => $group->count(),
+                    'issue_type' => $isIpIssue ? 'IP Belum Whitelist' : 'Lainnya',
+                    'last_message' => Str::limit((string) $latest->message, 160),
+                    'last_attempt' => optional($latest->created_at)->timezone('Asia/Jakarta')->format('d M Y H:i'),
+                ];
+            })
+            ->sortByDesc('fail_count')
+            ->values();
+
+        return [
+            'rows' => $rows,
+            'totalMerchantsAffected' => $rows->count(),
+            'totalIpIssues' => $rows->where('issue_type', 'IP Belum Whitelist')->count(),
         ];
     }
 

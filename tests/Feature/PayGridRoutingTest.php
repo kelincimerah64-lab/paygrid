@@ -1923,6 +1923,76 @@ class PayGridRoutingTest extends TestCase
         $response->assertSee('100,000%', false);
     }
 
+    public function test_ma_analytics_page_computes_connectivity_issues(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $merchant = Merchant::query()->create([
+            'slug' => 'connectivity-fail-store', 'name' => 'Connectivity Fail Store', 'agent_id' => $agent->id,
+            'merchant_type' => 'script', 'gateway' => 'hilogate', 'approval_status' => 'approved',
+        ]);
+
+        \App\Models\GatewaySyncLog::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'direction' => 'pull',
+            'status' => 'failed', 'message' => 'Access denied: your IP address is not whitelisted',
+            'created_at' => now()->subHours(2),
+        ]);
+        \App\Models\GatewaySyncLog::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'direction' => 'pull',
+            'status' => 'failed', 'message' => 'Access denied: your IP address is not whitelisted',
+            'created_at' => now()->subHour(),
+        ]);
+        // Outside the 24h window - must not be counted.
+        \App\Models\GatewaySyncLog::query()->create([
+            'merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'direction' => 'pull',
+            'status' => 'failed', 'message' => 'Access denied: your IP address is not whitelisted',
+            'created_at' => now()->subDays(3),
+        ]);
+
+        $response = $this->actingAs($ma)->get('/ma/analytics/tab/performance?period=all')->assertOk();
+        $response->assertSee('Koneksi &amp; IP Bermasalah', false);
+        $response->assertSee('Connectivity Fail Store');
+        $response->assertSee('IP Belum Whitelist');
+        $response->assertSee('>2<', false);
+    }
+
+    public function test_ma_analytics_page_computes_ticket_volume(): void
+    {
+        $this->seed();
+        $ma = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        // This MA's scope already has seeded tickets under other merchants, so
+        // assert on deltas rather than assumed-isolated totals.
+        $maMerchantIds = Merchant::query()->whereRelation('agent', 'ma_user_id', $ma->id)->pluck('id');
+        $before = SupportTicket::query()->whereIn('merchant_id', $maMerchantIds)
+            ->selectRaw('status, COUNT(*) as cnt')->groupBy('status')->pluck('cnt', 'status');
+        $totalBefore = (int) $before->sum();
+        $doneBefore = (int) ($before['done'] ?? 0);
+        $cancelledBefore = (int) ($before['cancelled'] ?? 0);
+
+        $merchant = Merchant::query()->create([
+            'slug' => 'ticket-volume-store', 'name' => 'Ticket Volume Store', 'agent_id' => $agent->id,
+            'merchant_type' => 'cm', 'gateway' => 'hilogate', 'approval_status' => 'approved',
+        ]);
+
+        foreach (['done', 'done', 'open', 'not_started', 'cancelled'] as $i => $status) {
+            SupportTicket::query()->create([
+                'merchant_id' => $merchant->id, 'ticket_no' => "TCK-VOLUME-{$i}",
+                'reference' => "volume-ref-{$i}", 'issue' => 'Payment pending', 'status' => $status,
+                'created_at' => now(),
+            ]);
+        }
+
+        $response = $this->actingAs($ma)->get('/ma/analytics/tab/operations?period=all')->assertOk();
+        $response->assertSee('Volume Tiket');
+        $response->assertSee('>'.($totalBefore + 5).'<', false);
+        $response->assertSee('>'.($doneBefore + 2).'<', false);
+        $response->assertSee('>'.($cancelledBefore + 1).'<', false);
+    }
+
     public function test_ma_analytics_page_computes_provisioning_failures(): void
     {
         $this->seed();
