@@ -1190,7 +1190,6 @@
         #ma-assistant-header { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--line); background:#f7faff; }
         #ma-assistant-header strong { font-size:13px; }
         #ma-assistant-close { border:none; background:none; font-size:20px; line-height:1; cursor:pointer; color:var(--muted); padding:2px 6px; }
-        #ma-assistant-disclaimer { margin:0; padding:8px 14px; font-size:11px; color:var(--muted); border-bottom:1px solid var(--line); background:#fbfdff; }
         #ma-assistant-messages { flex:1 1 auto; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
         .ma-msg { max-width:88%; padding:8px 11px; border-radius:10px; font-size:12.5px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
         .ma-msg.user { align-self:flex-end; background:var(--blue); color:#fff; border-bottom-right-radius:2px; }
@@ -1331,7 +1330,6 @@
                 <strong>Tanya PayGrid AI</strong>
                 <button type="button" id="ma-assistant-close" aria-label="Tutup">&times;</button>
             </div>
-            <p id="ma-assistant-disclaimer">Cuma bisa jawab pertanyaan soal dashboard &amp; data toko kamu &mdash; nggak bisa ubah data atau kode.</p>
             <div id="ma-assistant-messages"></div>
             <div id="ma-assistant-image-preview" hidden><img alt="preview"><button type="button" id="ma-assistant-image-remove">&times;</button></div>
             <form id="ma-assistant-form">
