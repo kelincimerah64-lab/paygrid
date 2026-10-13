@@ -1196,10 +1196,13 @@
         .ma-msg.assistant { align-self:flex-start; background:#f1f5fb; color:var(--ink); border-bottom-left-radius:2px; }
         .ma-msg.assistant.loading { color:var(--muted); font-style:italic; }
         .ma-msg img { display:block; max-width:100%; border-radius:8px; margin-top:6px; }
-        #ma-assistant-image-preview { position:relative; margin:0 14px 8px; display:inline-flex; }
-        #ma-assistant-image-preview[hidden] { display:none; }
-        #ma-assistant-image-preview img { width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
-        #ma-assistant-image-remove { position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; border:none; background:var(--danger); color:#fff; font-size:12px; line-height:1; cursor:pointer; }
+        .ma-msg-file { display:flex; align-items:center; gap:4px; margin-top:6px; font-size:11.5px; opacity:.85; }
+        #ma-assistant-attachments { margin:0 14px 8px; display:flex; flex-wrap:wrap; gap:8px; }
+        #ma-assistant-attachments[hidden] { display:none; }
+        .ma-attachment-chip { position:relative; display:inline-flex; }
+        .ma-attachment-chip img { width:44px; height:44px; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
+        .ma-attachment-chip .file-icon { width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid var(--line); background:#f1f5fb; font-size:18px; }
+        .ma-attachment-chip .remove-btn { position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; border:none; background:var(--danger); color:#fff; font-size:12px; line-height:1; cursor:pointer; }
         #ma-assistant-form { display:flex; align-items:center; gap:6px; padding:10px 12px; border-top:1px solid var(--line); }
         #ma-assistant-attach, #ma-assistant-send { border:none; background:none; font-size:17px; cursor:pointer; padding:4px 6px; color:var(--muted); flex:0 0 auto; }
         #ma-assistant-send { color:var(--blue); }
@@ -1331,10 +1334,10 @@
                 <button type="button" id="ma-assistant-close" aria-label="Tutup">&times;</button>
             </div>
             <div id="ma-assistant-messages"></div>
-            <div id="ma-assistant-image-preview" hidden><img alt="preview"><button type="button" id="ma-assistant-image-remove">&times;</button></div>
+            <div id="ma-assistant-attachments" hidden></div>
             <form id="ma-assistant-form">
-                <input type="file" id="ma-assistant-image-input" accept="image/*" hidden>
-                <button type="button" id="ma-assistant-attach" aria-label="Lampirkan gambar">📎</button>
+                <input type="file" id="ma-assistant-file-input" multiple hidden>
+                <button type="button" id="ma-assistant-attach" aria-label="Lampirkan file">📎</button>
                 <input type="text" id="ma-assistant-input" placeholder="Tanya soal dashboard kamu..." maxlength="2000" autocomplete="off">
                 <button type="submit" id="ma-assistant-send" aria-label="Kirim">&#10148;</button>
             </form>

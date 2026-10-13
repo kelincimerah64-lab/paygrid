@@ -18,23 +18,20 @@ class MaAssistantController extends Controller
         $data = $request->validate([
             'message' => ['required', 'string', 'max:2000'],
             'history' => ['nullable', 'array', 'max:20'],
-            'image' => ['nullable', 'image', 'max:4096'],
+            'attachments' => ['nullable', 'array', 'max:3'],
+            'attachments.*' => ['file', 'max:2000'],
         ]);
 
-        $image = null;
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
-            $image = [
-                'mediaType' => $file->getMimeType(),
-                'data' => base64_encode(file_get_contents($file->getRealPath())),
-            ];
-        }
+        $attachments = array_map(fn ($file) => [
+            'mediaType' => $file->getMimeType(),
+            'data' => base64_encode(file_get_contents($file->getRealPath())),
+        ], $request->file('attachments', []));
 
         $reply = $assistant->ask(
             $request->user(),
             $data['message'],
             $this->sanitizeHistory($data['history'] ?? []),
-            $image,
+            $attachments,
         );
 
         return response()->json(['reply' => $reply]);

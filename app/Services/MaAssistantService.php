@@ -54,7 +54,7 @@ Kalau pertanyaannya soal transaksi/withdrawal/tiket yang nggak pas sama tool spe
 
 Kalau pertanyaannya masih belum kecover sama SEMUA tool di atas (butuh query custom/kompleks), pakai tool run_sql - kamu bisa nulis SQL SELECT bebas ke data toko MA ini.
 
-Kalau user melampirkan gambar (screenshot dashboard), baca angka/informasi di gambar itu buat bantu jawab pertanyaannya.
+Kalau user melampirkan file (screenshot, PDF, dokumen lain, bisa lebih dari satu sekaligus), baca isinya buat bantu jawab pertanyaannya.
 PROMPT;
 
     private bool $sqlScopeReady = false;
@@ -63,9 +63,9 @@ PROMPT;
 
     /**
      * @param  array<int, array{role: string, content: string}>  $history  Prior turns from the client: {role: user|assistant, content: string}.
-     * @param  array{data: string, mediaType: string}|null  $image  Base64 image data + MIME type, if the user attached one.
+     * @param  array<int, array{data: string, mediaType: string}>  $attachments  Base64 file data + MIME type for each file the user attached, if any.
      */
-    public function ask(User $ma, string $message, array $history, ?array $image = null): string
+    public function ask(User $ma, string $message, array $history, array $attachments = []): string
     {
         $apiKey = (string) config('paygrid.assistant.api_key');
         if ($apiKey === '') {
@@ -82,8 +82,8 @@ PROMPT;
         ], $history);
 
         $userParts = [];
-        if ($image) {
-            $userParts[] = ['inlineData' => ['mimeType' => $image['mediaType'], 'data' => $image['data']]];
+        foreach ($attachments as $attachment) {
+            $userParts[] = ['inlineData' => ['mimeType' => $attachment['mediaType'], 'data' => $attachment['data']]];
         }
         $userParts[] = ['text' => $message];
         $contents[] = ['role' => 'user', 'parts' => $userParts];

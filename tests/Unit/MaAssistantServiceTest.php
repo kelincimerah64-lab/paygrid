@@ -198,6 +198,35 @@ class MaAssistantServiceTest extends TestCase
         });
     }
 
+    public function test_it_sends_every_attachment_as_a_separate_inline_data_part(): void
+    {
+        config(['paygrid.assistant.api_key' => 'fake-gemini-key']);
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['role' => 'model', 'parts' => [['text' => 'Oke.']]]]],
+            ]),
+        ]);
+
+        $attachments = [
+            ['mediaType' => 'image/png', 'data' => base64_encode('fake-png-bytes')],
+            ['mediaType' => 'application/pdf', 'data' => base64_encode('fake-pdf-bytes')],
+        ];
+
+        (new MaAssistantService(new CsScopeResolver))->ask($this->makeMa(), 'Lihat lampiran ini', [], $attachments);
+
+        Http::assertSent(function ($request) use ($attachments) {
+            $userParts = $request->data()['contents'][0]['parts'] ?? [];
+            $inlineParts = array_filter($userParts, fn ($p) => isset($p['inlineData']));
+
+            if (count($inlineParts) !== 2) {
+                return false;
+            }
+            $mimeTypes = array_column(array_column($inlineParts, 'inlineData'), 'mimeType');
+
+            return $mimeTypes === ['image/png', 'application/pdf'];
+        });
+    }
+
     public function test_query_transactions_never_leaks_another_mas_data(): void
     {
         $ma1 = $this->makeMa('ma1@paygrid.local');

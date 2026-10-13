@@ -11,27 +11,66 @@
     const form = document.getElementById('ma-assistant-form');
     const input = document.getElementById('ma-assistant-input');
     const attachBtn = document.getElementById('ma-assistant-attach');
-    const imageInput = document.getElementById('ma-assistant-image-input');
-    const imagePreview = document.getElementById('ma-assistant-image-preview');
-    const imagePreviewImg = imagePreview.querySelector('img');
-    const imageRemoveBtn = document.getElementById('ma-assistant-image-remove');
+    const fileInput = document.getElementById('ma-assistant-file-input');
+    const attachmentsEl = document.getElementById('ma-assistant-attachments');
     const sendBtn = document.getElementById('ma-assistant-send');
+
+    const MAX_ATTACHMENTS = 3;
 
     const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
 
     let history = [];
-    let pendingImage = null;
+    let pendingAttachments = []; // { file, dataUrl, isImage }
     let busy = false;
 
-    const addMessage = (role, text, imageDataUrl) => {
+    const renderAttachments = () => {
+        attachmentsEl.innerHTML = '';
+        pendingAttachments.forEach((att, idx) => {
+            const chip = document.createElement('div');
+            chip.className = 'ma-attachment-chip';
+            if (att.isImage) {
+                const img = document.createElement('img');
+                img.src = att.dataUrl;
+                img.alt = att.file.name;
+                chip.appendChild(img);
+            } else {
+                const icon = document.createElement('div');
+                icon.className = 'file-icon';
+                icon.textContent = '📄';
+                icon.title = att.file.name;
+                chip.appendChild(icon);
+            }
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'remove-btn';
+            removeBtn.textContent = '×';
+            removeBtn.setAttribute('aria-label', 'Hapus lampiran');
+            removeBtn.addEventListener('click', () => {
+                pendingAttachments.splice(idx, 1);
+                renderAttachments();
+            });
+            chip.appendChild(removeBtn);
+            attachmentsEl.appendChild(chip);
+        });
+        attachmentsEl.hidden = pendingAttachments.length === 0;
+    };
+
+    const addMessage = (role, text, attachments) => {
         const bubble = document.createElement('div');
         bubble.className = `ma-msg ${role}`;
         bubble.textContent = text;
-        if (imageDataUrl) {
-            const img = document.createElement('img');
-            img.src = imageDataUrl;
-            bubble.appendChild(img);
-        }
+        (attachments || []).forEach((att) => {
+            if (att.isImage) {
+                const img = document.createElement('img');
+                img.src = att.dataUrl;
+                bubble.appendChild(img);
+            } else {
+                const tag = document.createElement('div');
+                tag.className = 'ma-msg-file';
+                tag.textContent = `📎 ${att.file.name}`;
+                bubble.appendChild(tag);
+            }
+        });
         messagesEl.appendChild(bubble);
         messagesEl.scrollTop = messagesEl.scrollHeight;
         return bubble;
@@ -48,22 +87,19 @@
     });
     closeBtn.addEventListener('click', () => { panel.hidden = true; });
 
-    attachBtn.addEventListener('click', () => imageInput.click());
-    imageInput.addEventListener('change', () => {
-        const file = imageInput.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            pendingImage = { file, dataUrl: reader.result };
-            imagePreviewImg.src = reader.result;
-            imagePreview.hidden = false;
-        };
-        reader.readAsDataURL(file);
-    });
-    imageRemoveBtn.addEventListener('click', () => {
-        pendingImage = null;
-        imageInput.value = '';
-        imagePreview.hidden = true;
+    attachBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+        const files = Array.from(fileInput.files || []);
+        files.forEach((file) => {
+            if (pendingAttachments.length >= MAX_ATTACHMENTS) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                pendingAttachments.push({ file, dataUrl: reader.result, isImage: file.type.startsWith('image/') });
+                renderAttachments();
+            };
+            reader.readAsDataURL(file);
+        });
+        fileInput.value = '';
     });
 
     form.addEventListener('submit', async (event) => {
@@ -72,13 +108,12 @@
         const message = input.value.trim();
         if (!message) return;
 
-        addMessage('user', message, pendingImage?.dataUrl);
+        addMessage('user', message, pendingAttachments);
         history.push({ role: 'user', content: message });
-        const imageToSend = pendingImage;
+        const attachmentsToSend = pendingAttachments;
         input.value = '';
-        pendingImage = null;
-        imageInput.value = '';
-        imagePreview.hidden = true;
+        pendingAttachments = [];
+        renderAttachments();
 
         busy = true;
         sendBtn.disabled = true;
@@ -89,7 +124,7 @@
             const body = new FormData();
             body.append('message', message);
             body.append('history', JSON.stringify(history.slice(-20)));
-            if (imageToSend) body.append('image', imageToSend.file);
+            attachmentsToSend.forEach((att) => body.append('attachments[]', att.file));
 
             const res = await fetch(askUrl, {
                 method: 'POST',
