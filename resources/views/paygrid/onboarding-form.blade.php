@@ -67,7 +67,7 @@
         <label>Tipe Merchant<select name="merchant_type" id="onboarding-merchant-type" onchange="paygridToggleEngineType(this, 'onboarding-engine-type')"><option value="cm">CM</option><option value="script">Script</option></select></label>
         <label>Script / API<select name="engine_type" id="onboarding-engine-type" style="display:none" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
         <label>Merchant MDR<select name="fee_menu"><option value="">Belum dipilih</option>@foreach($feeMenuOptions as $key => $option)<option value="{{ $key }}">{{ $option['label'] }}</option>@endforeach</select></label>
-        <label>Fee (%)<input name="merchant_mdr_percent" inputmode="decimal" placeholder="contoh: 1.2"></label>
+        <label>Merchant Disbursement<input name="merchant_mdr_percent" inputmode="decimal" placeholder="contoh: 1.2"></label>
         <label>Settlement Type ID<input name="settlement_type_id" placeholder="diisi MA jika belum tahu"></label>
     </div>
 

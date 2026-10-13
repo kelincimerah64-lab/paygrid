@@ -2406,6 +2406,7 @@ class PayGridRoutingTest extends TestCase
             ->assertSee('Merchant Group')
             ->assertSee('Merchant Name')
             ->assertSee('Merchant MDR')
+            ->assertSee('Merchant Disbursement')
             ->assertDontSee('Payment Gateway')
             ->assertDontSee('ID Gateway dan Fee')
             ->assertDontSee('Cash Back Toko %');
