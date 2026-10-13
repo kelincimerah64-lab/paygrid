@@ -64,8 +64,8 @@
     <div class="form-grid">
         <label>Merchant Group<input name="store_name" placeholder="contoh: Tambang SBO" required></label>
         <label>Merchant Name<input name="engine_name" placeholder="contoh: GENESIS DIGITAL"></label>
-        <label>Tipe Merchant<select name="merchant_type" id="onboarding-merchant-type" onchange="paygridToggleEngineType(this, 'onboarding-engine-type')"><option value="cm">CM</option><option value="script">Script</option></select></label>
-        <label>Script / API<select name="engine_type" id="onboarding-engine-type" style="display:none" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
+        <label style="display:flex; flex-direction:row; align-items:center; gap:8px; text-transform:none; font-weight:700"><input type="checkbox" name="merchant_type" value="script" id="onboarding-merchant-type" onchange="paygridToggleEngineType(this, 'onboarding-engine-type-wrap')" style="width:auto; min-height:auto"> Tipe Merchant: Script (centang jika Script, kosongkan jika CM)</label>
+        <label id="onboarding-engine-type-wrap" style="display:none">Script / API<select name="engine_type" id="onboarding-engine-type" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
         <label>Merchant MDR<select name="fee_menu"><option value="">Belum dipilih</option>@foreach($feeMenuOptions as $key => $option)<option value="{{ $key }}">{{ $option['label'] }}</option>@endforeach</select></label>
         <label>Merchant Disbursement<input name="merchant_mdr_percent" inputmode="decimal" placeholder="contoh: 1.2"></label>
         <label>Settlement Type ID<input name="settlement_type_id" placeholder="diisi MA jika belum tahu"></label>
@@ -119,11 +119,12 @@
     <script>document.addEventListener('DOMContentLoaded', () => document.querySelectorAll('form input, form select, form button').forEach((el) => el.disabled = true));</script>
 @endif
 <script>
-function paygridToggleEngineType(select, engineTypeId) {
-    var isScript = select.value === 'script';
-    var engineType = document.getElementById(engineTypeId);
-    engineType.style.display = isScript ? '' : 'none';
-    engineType.disabled = !isScript;
+function paygridToggleEngineType(checkbox, wrapId) {
+    var isScript = checkbox.checked;
+    var wrap = document.getElementById(wrapId);
+    var select = wrap.querySelector('select');
+    wrap.style.display = isScript ? '' : 'none';
+    select.disabled = !isScript;
 }
 </script>
 </div>

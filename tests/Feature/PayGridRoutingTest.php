@@ -2409,7 +2409,32 @@ class PayGridRoutingTest extends TestCase
             ->assertSee('Merchant Disbursement')
             ->assertDontSee('Payment Gateway')
             ->assertDontSee('ID Gateway dan Fee')
-            ->assertDontSee('Cash Back Toko %');
+            ->assertDontSee('Cash Back Toko %')
+            ->assertSee('type="checkbox" name="merchant_type"', false);
+    }
+
+    public function test_onboarding_form_checkbox_submits_cm_when_unchecked_and_script_when_checked(): void
+    {
+        $this->seed();
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+
+        $this->actingAs($agentUser)->post(route('agent.onboarding-links.store'), [])->assertRedirect();
+        $link1 = AgentOnboardingLink::query()->where('status', 'active')->latest()->firstOrFail();
+        $this->post(route('merchant-registration.token-store', $link1), [
+            'store_name' => 'Unchecked Type Store',
+        ])->assertRedirect();
+        $this->assertSame('cm', MerchantRegistration::query()->where('store_name', 'Unchecked Type Store')->firstOrFail()->merchant_type);
+
+        $this->actingAs($agentUser)->post(route('agent.onboarding-links.store'), [])->assertRedirect();
+        $link2 = AgentOnboardingLink::query()->where('status', 'active')->latest()->firstOrFail();
+        $this->post(route('merchant-registration.token-store', $link2), [
+            'store_name' => 'Checked Type Store',
+            'merchant_type' => 'script',
+            'engine_type' => 'api',
+        ])->assertRedirect();
+        $scriptRegistration = MerchantRegistration::query()->where('store_name', 'Checked Type Store')->firstOrFail();
+        $this->assertSame('script', $scriptRegistration->merchant_type);
+        $this->assertSame('api', $scriptRegistration->payload['engine_type']);
     }
 
     public function test_agent_can_download_own_registration_pdf_but_not_another_agents(): void
