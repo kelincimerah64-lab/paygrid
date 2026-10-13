@@ -10,6 +10,7 @@ use App\Models\MerchantWithdrawal;
 use App\Models\TopupRequest;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -46,8 +47,12 @@ Kamu punya beberapa tool buat narik data ASLI milik MA yang sedang tanya - selal
 
 Kalau pertanyaannya soal transaksi/withdrawal/tiket yang nggak pas sama tool spesifik yang ada (misal butuh filter atau pengelompokan tertentu), pakai tool query_transactions/query_withdrawals/query_tickets - itu tool serbaguna buat narik data dengan filter status/toko/tanggal dan pengelompokan sesuka kamu.
 
+Kalau pertanyaannya masih belum kecover sama SEMUA tool di atas (butuh query custom/kompleks), pakai tool run_sql - kamu bisa nulis SQL SELECT bebas ke data toko MA ini.
+
 Kalau user melampirkan gambar (screenshot dashboard), baca angka/informasi di gambar itu buat bantu jawab pertanyaannya.
 PROMPT;
+
+    private bool $sqlScopeReady = false;
 
     public function __construct(private CsScopeResolver $scope) {}
 
@@ -174,6 +179,7 @@ PROMPT;
                 'query_transactions' => $this->toolQueryTransactions($ma, $input),
                 'query_withdrawals' => $this->toolQueryWithdrawals($ma, $input),
                 'query_tickets' => $this->toolQueryTickets($ma, $input),
+                'run_sql' => $this->toolRunSql($ma, $input),
                 default => ['error' => "Tool tidak dikenal: {$name}"],
             };
         } catch (\Throwable $e) {
@@ -499,6 +505,131 @@ PROMPT;
         ])->all()];
     }
 
+    /**
+     * Builds a per-request set of temporary tables containing ONLY this MA's own
+     * rows, computed server-side from CsScopeResolver (never from AI input). The
+     * run_sql tool is only ever allowed to query these - never the real tables -
+     * so no AI-written SQL, however it's phrased, can reach another MA's data:
+     * the rows simply don't exist in these tables to begin with.
+     */
+    private function ensureSqlScope(User $ma): void
+    {
+        if ($this->sqlScopeReady) {
+            return;
+        }
+
+        $ids = $this->scope->merchantIds($ma);
+        $idList = implode(',', array_map('intval', $ids) ?: [0]);
+
+        // SQLite (used by the test suite) has no "DROP TEMPORARY TABLE" syntax -
+        // plain DROP TABLE already targets the temp one there. MySQL/MariaDB get
+        // the more specific form so this can never touch a permanent table.
+        $dropKeyword = DB::connection()->getDriverName() === 'sqlite' ? 'TABLE' : 'TEMPORARY TABLE';
+        DB::statement("DROP {$dropKeyword} IF EXISTS my_merchants");
+        DB::statement("DROP {$dropKeyword} IF EXISTS my_transactions");
+        DB::statement("DROP {$dropKeyword} IF EXISTS my_withdrawals");
+        DB::statement("DROP {$dropKeyword} IF EXISTS my_tickets");
+
+        DB::statement("
+            CREATE TEMPORARY TABLE my_merchants AS
+            SELECT id, name, merchant_type, approval_status, gateway,
+                   merchant_mdr_percent, ma_fee_percent, agent_fee_percent, created_at
+            FROM merchants WHERE id IN ({$idList})
+        ");
+
+        DB::statement("
+            CREATE TEMPORARY TABLE my_transactions AS
+            SELECT t.id, t.merchant_id, m.name AS merchant_name, t.status, t.amount,
+                   t.net_amount, t.fee_amount, t.submitted_at, t.rrn
+            FROM topup_requests t JOIN merchants m ON m.id = t.merchant_id
+            WHERE t.merchant_id IN ({$idList})
+        ");
+
+        DB::statement("
+            CREATE TEMPORARY TABLE my_withdrawals AS
+            SELECT w.id, w.merchant_id, m.name AS merchant_name, w.status, w.amount,
+                   w.net_amount, w.fee, w.gateway_created_at, w.gateway_completed_at
+            FROM merchant_withdrawals w JOIN merchants m ON m.id = w.merchant_id
+            WHERE w.merchant_id IN ({$idList})
+        ");
+
+        DB::statement("
+            CREATE TEMPORARY TABLE my_tickets AS
+            SELECT tk.id, tk.merchant_id, m.name AS merchant_name, tk.ticket_no, tk.department,
+                   tk.category, tk.status, tk.created_at, tk.closed_at
+            FROM merchant_tickets tk JOIN merchants m ON m.id = tk.merchant_id
+            WHERE tk.merchant_id IN ({$idList})
+        ");
+
+        $this->sqlScopeReady = true;
+    }
+
+    private function toolRunSql(User $ma, array $input): array
+    {
+        $sql = trim((string) ($input['sql'] ?? ''));
+        if (str_ends_with($sql, ';')) {
+            $sql = rtrim(substr($sql, 0, -1));
+        }
+
+        $reason = $this->rejectUnsafeSql($sql);
+        if ($reason) {
+            return ['error' => $reason];
+        }
+
+        $this->ensureSqlScope($ma);
+
+        try {
+            $rows = DB::select("SELECT * FROM ({$sql}) AS sql_result LIMIT 200");
+        } catch (\Throwable $e) {
+            return ['error' => 'Query gagal dijalankan: '.$e->getMessage()];
+        }
+
+        return ['rows' => $rows, 'row_count' => count($rows)];
+    }
+
+    private function rejectUnsafeSql(string $sql): ?string
+    {
+        if (str_contains($sql, ';')) {
+            return 'Cuma boleh 1 statement (nggak boleh pakai titik koma).';
+        }
+
+        if (! preg_match('/^SELECT\s/i', $sql)) {
+            return 'Cuma boleh pakai SELECT.';
+        }
+
+        if (preg_match('/select\s+(distinct\s+)?\*/i', $sql) || preg_match('/\w+\.\*/', $sql)) {
+            return 'Kolom wildcard (SELECT *) nggak boleh - sebutkan kolom yang dibutuhkan satu-satu.';
+        }
+
+        $forbidden = [
+            'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'TRUNCATE', 'GRANT', 'REVOKE',
+            'CREATE', 'REPLACE', 'CALL', 'EXEC', 'EXECUTE', 'LOCK', 'UNLOCK', 'SET', 'LOAD',
+            'OUTFILE', 'DUMPFILE', 'BENCHMARK', 'SLEEP',
+            'password', 'plain_password', 'secondary_password', 'merchant_key',
+        ];
+        foreach ($forbidden as $keyword) {
+            if (preg_match('/\b'.preg_quote($keyword, '/').'\b/i', $sql)) {
+                return "Query mengandung keyword yang nggak diizinkan: {$keyword}.";
+            }
+        }
+
+        preg_match_all('/\b(?:FROM|JOIN)\s+`?(\w+)`?/i', $sql, $matches);
+        $referenced = array_map('strtolower', $matches[1] ?? []);
+        $allowedTables = ['my_merchants', 'my_transactions', 'my_withdrawals', 'my_tickets'];
+
+        if ($referenced === []) {
+            return 'Query harus punya FROM ke salah satu tabel: '.implode(', ', $allowedTables).'.';
+        }
+
+        foreach ($referenced as $table) {
+            if (! in_array($table, $allowedTables, true)) {
+                return "Tabel '{$table}' tidak ada/tidak diizinkan. Tabel yang bisa dipakai: ".implode(', ', $allowedTables).'.';
+            }
+        }
+
+        return null;
+    }
+
     private function toolDefinitions(): array
     {
         return [
@@ -602,6 +733,17 @@ PROMPT;
                         'date_to' => ['type' => 'STRING', 'description' => 'YYYY-MM-DD (WIB)'],
                         'limit' => ['type' => 'INTEGER', 'description' => 'Hanya dipakai saat mode=list, default 10 maksimal 50'],
                     ],
+                ],
+            ],
+            [
+                'name' => 'run_sql',
+                'description' => "Jalankan query SQL SELECT bebas buat jawab pertanyaan data toko MA ini yang nggak kecover tool lain. Cuma bisa akses 4 tabel yang udah otomatis di-scope ke toko MA ini (nggak ada data MA lain yang bisa kelihatan lewat tool ini):\n- my_merchants (id, name, merchant_type, approval_status, gateway, merchant_mdr_percent, ma_fee_percent, agent_fee_percent, created_at)\n- my_transactions (id, merchant_id, merchant_name, status, amount, net_amount, fee_amount, submitted_at, rrn)\n- my_withdrawals (id, merchant_id, merchant_name, status, amount, net_amount, fee, gateway_created_at, gateway_completed_at)\n- my_tickets (id, merchant_id, merchant_name, ticket_no, department, category, status, created_at, closed_at)\nCuma SELECT, 1 statement, nggak boleh SELECT * (sebutkan kolom), nggak bisa JOIN ke tabel lain selain 4 di atas. Coba tool lain dulu kalau udah ada yang pas - pakai ini buat query custom/kompleks yang belum kecover.",
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'sql' => ['type' => 'STRING', 'description' => 'Query SQL SELECT, cuma dari 4 tabel yang diizinkan (my_merchants/my_transactions/my_withdrawals/my_tickets).'],
+                    ],
+                    'required' => ['sql'],
                 ],
             ],
         ];

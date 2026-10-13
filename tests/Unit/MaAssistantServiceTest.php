@@ -319,4 +319,103 @@ class MaAssistantServiceTest extends TestCase
             return false;
         });
     }
+
+    public function test_run_sql_never_leaks_another_mas_data_even_with_no_where_clause(): void
+    {
+        $ma1 = $this->makeMa('sql-ma1@paygrid.local');
+        $ma2 = $this->makeMa('sql-ma2@paygrid.local');
+        $store1 = $this->makeMerchantFor($ma1, 'sql-store-one', 'SQL Toko Satu');
+        $store2 = $this->makeMerchantFor($ma2, 'sql-store-two', 'SQL Toko Dua');
+        TopupRequest::query()->create(['merchant_id' => $store1->id, 'gateway' => 'hilogate', 'gateway_ref_id' => 'sql-ref-1', 'status' => 'success', 'amount' => 11111, 'submitted_at' => now()]);
+        TopupRequest::query()->create(['merchant_id' => $store2->id, 'gateway' => 'hilogate', 'gateway_ref_id' => 'sql-ref-2', 'status' => 'success', 'amount' => 99999, 'submitted_at' => now()]);
+
+        // Deliberately no WHERE - the AI could write this, intentionally or not.
+        $result = $this->callTool('toolRunSql', $ma1, ['sql' => 'SELECT merchant_name, amount FROM my_transactions']);
+
+        $this->assertArrayNotHasKey('error', $result);
+        $this->assertCount(1, $result['rows']);
+        $this->assertSame('SQL Toko Satu', $result['rows'][0]->merchant_name);
+    }
+
+    public function test_run_sql_rejects_non_select_statements(): void
+    {
+        $ma = $this->makeMa();
+
+        $result = $this->callTool('toolRunSql', $ma, ['sql' => 'DELETE FROM my_transactions']);
+
+        $this->assertArrayHasKey('error', $result);
+    }
+
+    public function test_run_sql_rejects_multiple_statements(): void
+    {
+        $ma = $this->makeMa();
+
+        $result = $this->callTool('toolRunSql', $ma, ['sql' => "SELECT id FROM my_merchants; DROP TABLE my_merchants"]);
+
+        $this->assertArrayHasKey('error', $result);
+    }
+
+    public function test_run_sql_rejects_select_star(): void
+    {
+        $ma = $this->makeMa();
+
+        $result = $this->callTool('toolRunSql', $ma, ['sql' => 'SELECT * FROM my_merchants']);
+
+        $this->assertArrayHasKey('error', $result);
+    }
+
+    public function test_run_sql_rejects_tables_outside_the_whitelist(): void
+    {
+        $ma = $this->makeMa();
+
+        $result = $this->callTool('toolRunSql', $ma, ['sql' => 'SELECT id, name FROM merchants']);
+
+        $this->assertArrayHasKey('error', $result);
+        $this->assertStringContainsString('tidak diizinkan', $result['error']);
+    }
+
+    public function test_run_sql_rejects_users_table_even_via_join(): void
+    {
+        $ma = $this->makeMa();
+
+        $result = $this->callTool('toolRunSql', $ma, ['sql' => 'SELECT id FROM my_merchants JOIN users ON users.id = my_merchants.id']);
+
+        $this->assertArrayHasKey('error', $result);
+    }
+
+    public function test_run_sql_runs_a_valid_scoped_aggregate_query(): void
+    {
+        $ma = $this->makeMa();
+        $store = $this->makeMerchantFor($ma, 'sql-agg-store', 'SQL Agg Toko');
+        TopupRequest::query()->create(['merchant_id' => $store->id, 'gateway' => 'hilogate', 'gateway_ref_id' => 'agg-1', 'status' => 'success', 'amount' => 15000, 'submitted_at' => now()]);
+        TopupRequest::query()->create(['merchant_id' => $store->id, 'gateway' => 'hilogate', 'gateway_ref_id' => 'agg-2', 'status' => 'success', 'amount' => 25000, 'submitted_at' => now()]);
+
+        $result = $this->callTool('toolRunSql', $ma, ['sql' => 'SELECT COUNT(id) AS trx_count, SUM(amount) AS total FROM my_transactions WHERE status = \'success\'']);
+
+        $this->assertArrayNotHasKey('error', $result);
+        $this->assertSame(2, (int) $result['rows'][0]->trx_count);
+        $this->assertSame(40000, (int) $result['rows'][0]->total);
+    }
+
+    public function test_ask_wires_up_run_sql_tool_end_to_end(): void
+    {
+        config(['paygrid.assistant.api_key' => 'fake-gemini-key']);
+        $ma = $this->makeMa();
+        $store = $this->makeMerchantFor($ma, 'sql-e2e-store', 'SQL E2E Toko');
+        TopupRequest::query()->create(['merchant_id' => $store->id, 'gateway' => 'hilogate', 'gateway_ref_id' => 'e2e-sql-1', 'status' => 'success', 'amount' => 77000, 'submitted_at' => now()]);
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::sequence()
+                ->push(['candidates' => [[
+                    'content' => ['role' => 'model', 'parts' => [[
+                        'functionCall' => ['name' => 'run_sql', 'args' => ['sql' => 'SELECT SUM(amount) AS total FROM my_transactions']],
+                    ]]],
+                ]]])
+                ->push(['candidates' => [['content' => ['role' => 'model', 'parts' => [['text' => 'Totalnya Rp77.000.']]]]]]),
+        ]);
+
+        $reply = (new MaAssistantService(new CsScopeResolver))->ask($ma, 'Total transaksi berapa?', []);
+
+        $this->assertSame('Totalnya Rp77.000.', $reply);
+    }
 }
