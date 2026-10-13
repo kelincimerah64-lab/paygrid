@@ -64,7 +64,12 @@
     <div class="form-grid">
         <label>Merchant Group<input name="store_name" placeholder="contoh: Tambang SBO" required></label>
         <label>Merchant Name<input name="engine_name" placeholder="contoh: GENESIS DIGITAL"></label>
-        <label style="display:flex; flex-direction:row; align-items:center; gap:8px; text-transform:none; font-weight:700"><input type="checkbox" name="merchant_type" value="script" id="onboarding-merchant-type" onchange="paygridToggleEngineType(this, 'onboarding-engine-type-wrap')" style="width:auto; min-height:auto"> Tipe Merchant: Script (centang jika Script, kosongkan jika CM)</label>
+        <label>Tipe Merchant
+            <div style="display:flex; align-items:center; gap:8px; border:1px solid #c9d6ea; border-radius:9px; min-height:40px; padding:9px 11px; background:#fff">
+                <input type="checkbox" name="merchant_type" value="script" id="onboarding-merchant-type" onchange="paygridToggleEngineType(this, 'onboarding-engine-type-wrap')" style="width:auto; min-height:auto; margin:0">
+                <span style="text-transform:none; font-weight:600; font-size:13px; color:var(--ink)">Script (centang jika Script, kosongkan jika CM)</span>
+            </div>
+        </label>
         <label id="onboarding-engine-type-wrap" style="display:none">Script / API<select name="engine_type" id="onboarding-engine-type" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
         <label>Merchant MDR<select name="fee_menu"><option value="">Belum dipilih</option>@foreach($feeMenuOptions as $key => $option)<option value="{{ $key }}">{{ $option['label'] }}</option>@endforeach</select></label>
         <label>Merchant Disbursement<input name="merchant_mdr_percent" inputmode="decimal" placeholder="contoh: 1.2"></label>
