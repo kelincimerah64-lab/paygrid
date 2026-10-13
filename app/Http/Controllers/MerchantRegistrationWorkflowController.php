@@ -14,6 +14,7 @@ use App\Rules\FeeMenuRatesAboveReference;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -178,6 +179,19 @@ class MerchantRegistrationWorkflowController extends Controller
         $audit->record('merchant_registration.rejected', $registration, $before, $registration->only(array_keys($before)));
 
         return back()->with('status', 'Request merchant ditolak.');
+    }
+
+    public function downloadPdf(Request $request, MerchantRegistration $registration): \Illuminate\Http\Response
+    {
+        $this->authorizeMaRegistration($request, $registration);
+
+        $pdf = Pdf::loadView('paygrid.merchant-registration-pdf', [
+            'registration' => $registration,
+            'detailRows' => $registration->detailRowsForMa(),
+            'admin' => $registration->adminInfo(),
+        ]);
+
+        return $pdf->download('request-toko-'.Str::slug($registration->store_name).'-'.$registration->id.'.pdf');
     }
 
     private function authorizeMaRegistration(Request $request, MerchantRegistration $registration): void

@@ -273,9 +273,10 @@
             $payload = (array) ($r->payload ?? []);
             $merchant = $r->merchant;
             $initial = strtoupper(substr($r->store_name ?: 'T', 0, 1));
-            $adminEmail = $payload['admin_email'] ?? $payload['email_admin'] ?? $payload['email_pic'] ?? '-';
-            $adminName = $payload['admin_name'] ?? $payload['username'] ?? ($adminEmail !== '-' ? str($adminEmail)->before('@')->replace(['.', '_', '-'], ' ')->title()->toString() : '-');
-            $adminPassword = $payload['admin_password'] ?? $payload['password'] ?? config('paygrid.demo_password');
+            $admin = $r->adminInfo();
+            $adminName = $admin['name'];
+            $adminEmail = $admin['email'];
+            $adminPassword = $admin['password'];
             $merchantMdr = $merchant?->merchant_mdr_percent ?? ($payload['merchant_mdr_percent'] ?? 0);
             $payinFee = $merchant?->payin_fee_percent ?? ($payload['payin_fee_percent'] ?? $payload['engine_service_fee_percent'] ?? 0);
             $cashbackAgentFee = $merchant?->cashback_agent_percent ?? ($payload['cashback_agent_percent'] ?? 0);
@@ -284,37 +285,7 @@
             $requestMenuOptions = $feeMenus->optionsFor('merchant');
             $requestFeeMenu = $merchant?->fee_menu ?? $payload['fee_menu'] ?? null;
             $requestRates = $merchant?->fee_menu_rates ?? ($payload['fee_menu_rates'] ?? []);
-            $detailRows = [
-                'Engine Name' => $r->engine_name ?: ($payload['engine_name'] ?? '-'),
-                'Tipe Merchant' => strtoupper($r->merchant_type ?: ($payload['merchant_type'] ?? '-')),
-                'PIC Email' => $payload['pic_email'] ?? '-',
-                'PIC Telegram' => $payload['pic_telegram'] ?? '-',
-                'Finance Email' => $payload['finance_email'] ?? '-',
-                'Finance Telegram' => $payload['finance_telegram'] ?? '-',
-                'CS Email' => $payload['cs_email'] ?? '-',
-                'CS Telegram' => $payload['cs_telegram'] ?? '-',
-                'IP Dashboard' => $payload['ip_dashboard'] ?? '-',
-                'IP Finance' => $payload['ip_finance'] ?? '-',
-                'HG Merchant ID' => $merchant?->merchant_id ?? ($payload['merchant_id'] ?? $payload['hg_merchant_id'] ?? '-'),
-                'HG Merchant Key' => $payload['merchant_key'] ?? $payload['hg_merchant_key'] ?? '-',
-                'HG Group ID' => $r->agent?->hg_group_id ?? $payload['merchant_group_id'] ?? $payload['hg_group_id'] ?? '-',
-                'Transaction Gateway ID' => $payload['transaction_gateway_ids'] ?? '-',
-                'Withdrawal Gateway ID' => $payload['withdrawal_gateway_ids'] ?? '-',
-                'Settlement Type ID' => $payload['settlement_type_id'] ?? $r->settlement_method ?? '-',
-                'Transaction Callback' => $payload['transaction_callback_url'] ?? url('/api/callbacks/hilogate/transaction'),
-                'Withdrawal Callback' => $payload['withdrawal_callback_url'] ?? url('/api/callbacks/hilogate/withdrawal'),
-                'API IP Whitelist' => $payload['api_ip_whitelist'] ?? '15.232.137.74',
-                'Link Topup' => $payload['topup_url'] ?? $merchant?->topup_url ?? '-',
-                'Whitelist' => ($payload['is_whitelisted'] ?? false) ? 'Ya' : 'Tidak',
-                'Cash Back Toko' => $pct($payinFee),
-                'Cash Back Agen' => $pct($cashbackAgentFee),
-                'Cash Back Trx Toko' => $money($cashbackTrxToko),
-                'Cash Back Trx Agen' => $money($cashbackTrxAgent),
-                'Second TRX Fee' => $pct($payload['second_transaction_fee_percentage'] ?? 0),
-                'Third TRX Fee' => $pct($payload['third_transaction_fee_percentage'] ?? 0),
-                'Disbursement Fee' => $payload['disbursement_fee_fixed'] ?? $payload['withdrawal_fee'] ?? '-',
-                'Disbursement Fee %' => $pct($payload['withdrawal_fee_percentage'] ?? 0),
-            ];
+            $detailRows = $r->detailRowsForMa();
         @endphp
         <tr>
             <td data-label="Toko"><strong>{{ $r->store_name }}</strong><br><span class="muted truncate" style="display:block; max-width:180px">{{ $payload['topup_url'] ?? $merchant?->topup_url ?? $r->engine_name ?? '-' }}</span></td>
@@ -324,6 +295,7 @@
             <td data-label="Admin">{{ $adminName }}<br><span class="muted truncate" style="display:block; max-width:180px">{{ $adminEmail }}</span></td>
             <td data-label="Status"><span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></td>
             <td data-label=""><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="approval-detail-{{ $r->id }}">Detail</button>
+            <a class="btn compact-btn" href="{{ route('ma.merchant-registration.pdf', $r) }}" target="_blank" rel="noopener">PDF</a>
             <div class="approval-modal" id="approval-detail-{{ $r->id }}" hidden><div class="approval-modal-card">
                 <div class="qris-toolbar"><div><h2>{{ $r->store_name }}</h2><p class="muted" style="margin:4px 0 0">Agen: {{ $r->agent?->name ?: '-' }} &mdash; <span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
                 <div class="user-access-card"><strong>ADMIN</strong><h2>{{ $adminName }}</h2><div class="muted truncate">{{ $adminEmail }}</div><b>PW: {{ $adminPassword }}</b></div>

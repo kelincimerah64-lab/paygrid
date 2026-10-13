@@ -187,37 +187,9 @@
             <thead><tr><th>Nama Toko</th><th>Merchant ID</th><th>Tanggal Request</th><th>User Finance</th><th>User CS</th><th>Status Approval</th><th>Detail</th><th>Action</th></tr></thead>
             <tbody>
             @foreach($registrations as $registration)
-                @php($regPayload = (array) ($registration->payload ?? []))
-                @php($regDetailRows = [
-                    'Engine Name' => $registration->engine_name ?: ($regPayload['engine_name'] ?? '-'),
-                    'Tipe Merchant' => strtoupper($registration->merchant_type ?: ($regPayload['merchant_type'] ?? '-')),
-                    'Payment Gateway' => ucfirst($registration->gateway ?: ($regPayload['gateway'] ?? '-')),
-                    'PIC Email' => $regPayload['pic_email'] ?? '-',
-                    'PIC Telegram' => $regPayload['pic_telegram'] ?? '-',
-                    'Finance Email' => $regPayload['finance_email'] ?? '-',
-                    'Finance Telegram' => $regPayload['finance_telegram'] ?? '-',
-                    'CS Email' => $regPayload['cs_email'] ?? '-',
-                    'CS Telegram' => $regPayload['cs_telegram'] ?? '-',
-                    'IP Dashboard' => $regPayload['ip_dashboard'] ?? '-',
-                    'IP Finance' => $regPayload['ip_finance'] ?? '-',
-                    'Settlement Type ID' => $regPayload['settlement_type_id'] ?? $registration->settlement_method ?? '-',
-                    'Transaction Callback' => $regPayload['transaction_callback_url'] ?? '-',
-                    'Withdrawal Callback' => $regPayload['withdrawal_callback_url'] ?? '-',
-                    'API IP Whitelist' => $regPayload['api_ip_whitelist'] ?? '-',
-                    'Whitelist' => ($regPayload['is_whitelisted'] ?? false) ? 'Ya' : 'Tidak',
-                    'Transaction Gateway ID' => $regPayload['transaction_gateway_ids'] ?? '-',
-                    'Withdrawal Gateway ID' => $regPayload['withdrawal_gateway_ids'] ?? '-',
-                    'Merchant MDR' => $pct($regPayload['merchant_mdr_percent'] ?? 0),
-                    'Base MDR' => $pct($regPayload['base_mdr_percent'] ?? 0),
-                    'MA Fee' => $pct($regPayload['ma_fee_percent'] ?? 0),
-                    'Agent Fee' => $pct($regPayload['agent_fee_percent'] ?? 0),
-                    'Cash Back Toko' => $pct($regPayload['payin_fee_percent'] ?? 0),
-                    'Cash Back Agen' => $pct($regPayload['cashback_agent_percent'] ?? 0),
-                    'Cash Back Trx Toko' => $money($regPayload['cashback_trx_toko_amount'] ?? 0),
-                    'Cash Back Trx Agen' => $money($regPayload['cashback_trx_agent_amount'] ?? 0),
-                    'Disbursement Fee' => $regPayload['disbursement_fee_fixed'] ?? '-',
-                ])
+                @php($regDetailRows = $registration->detailRows())
                 <tr><td>@if($canResubmit($registration))<input type="checkbox" name="registration_ids[]" value="{{ $registration->id }}">@endif {{ $registration->store_name }}</td><td><span class="truncate" style="display:block; max-width:190px">{{ $registration->merchant?->merchant_id ?: 'Pending MA' }}</span></td><td>{{ $registration->created_at->timezone('Asia/Jakarta')->format('d M y') }}</td><td>FIN-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['finance_email'] ?? 'Menunggu approval' }}</span></td><td>CS-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['cs_email'] ?? 'Menunggu approval' }}</span></td><td><span class="badge {{ $statusClass($registration->status) }}">{{ ucfirst(str_replace('_', ' ', $registration->status)) }}</span>@if($registration->status === 'rejected')<br><span class="muted">Revisi {{ $registration->revision_count }}/{{ \App\Http\Controllers\MerchantRegistrationWorkflowController::MAX_REVISIONS }}</span>@endif</td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-reg-detail-{{ $registration->id }}">Detail</button>
+                <a class="btn compact-btn" href="{{ route('agent.requests.pdf', $registration) }}" target="_blank" rel="noopener">PDF</a>
                 <div class="approval-modal" id="agent-reg-detail-{{ $registration->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Request Toko</h2><p class="muted" style="margin:4px 0 0">{{ $registration->store_name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><div class="approval-detail-grid">@foreach($regDetailRows as $label => $value)<div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>@endforeach</div></div></div></td>
                 <td>@if($registration->status === 'pending_agent')<button class="btn primary" formaction="{{ route('api.merchant-registration.submit', $registration) }}" formmethod="post">Submit MA</button><button class="btn danger" formaction="{{ route('agent.requests.delete', $registration) }}" formmethod="post" name="_method" value="delete">Delete</button>@elseif($registration->status === 'pending_ma')<span class="badge warn">Terkirim MA</span>@elseif($registration->status === 'rejected' && $canResubmit($registration))<button class="btn primary" formaction="{{ route('api.merchant-registration.submit', $registration) }}" formmethod="post">Submit Ulang</button>@elseif($registration->status === 'rejected')<span class="muted">Batas revisi tercapai</span>@else<span class="muted">-</span>@endif</td></tr>
             @endforeach

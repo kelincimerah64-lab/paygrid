@@ -14,6 +14,7 @@ use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
 use App\Services\MetricsService;
 use App\Services\Navigation\MenuBuilder;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -259,6 +260,19 @@ class DashboardController extends Controller
         $registration->delete();
 
         return back()->with('status', 'Request toko berhasil dihapus.');
+    }
+
+    public function downloadAgentRegistrationPdf(MerchantRegistration $registration): \Illuminate\Http\Response
+    {
+        $agent = $this->currentAgent();
+        abort_unless((int) $registration->agent_id === (int) $agent->id, 403);
+
+        $pdf = Pdf::loadView('paygrid.merchant-registration-pdf', [
+            'registration' => $registration,
+            'detailRows' => $registration->detailRows(),
+        ]);
+
+        return $pdf->download('request-toko-'.Str::slug($registration->store_name).'-'.$registration->id.'.pdf');
     }
 
     public function bulkAgentOnboardingLinks(Request $request, AuditLogService $audit): RedirectResponse

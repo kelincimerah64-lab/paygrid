@@ -2372,6 +2372,75 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame('expired', $cleanupLink->refresh()->status);
     }
 
+    public function test_agent_can_download_own_registration_pdf_but_not_another_agents(): void
+    {
+        $this->seed();
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $otherAgentUser = User::query()->where('username', 'AG-OTHER')->firstOrFail();
+
+        $registration = MerchantRegistration::query()->create([
+            'agent_id' => $agent->id,
+            'token' => (string) \Illuminate\Support\Str::uuid(),
+            'store_name' => 'PDF Export Store',
+            'engine_name' => 'GENESIS DIGITAL',
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'payload' => ['pic_email' => 'pic@paygrid.local', 'finance_email' => 'finance@paygrid.local'],
+            'status' => 'pending_agent',
+        ]);
+
+        $response = $this->actingAs($agentUser)->get(route('agent.requests.pdf', $registration));
+        $response->assertOk();
+        $this->assertSame('application/pdf', $response->headers->get('content-type'));
+
+        $this->actingAs($otherAgentUser)->get(route('agent.requests.pdf', $registration))->assertForbidden();
+    }
+
+    public function test_ma_approval_page_renders_with_a_pending_registration(): void
+    {
+        $this->seed();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        MerchantRegistration::query()->create([
+            'agent_id' => $agent->id,
+            'token' => 'ma-render-test-token',
+            'store_name' => 'MA Render Test Store',
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'status' => 'pending_ma',
+            'payload' => ['pic_email' => 'pic-render@paygrid.local'],
+        ]);
+
+        $maUser = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $this->actingAs($maUser)->get(route('ma.approvals'))
+            ->assertOk()
+            ->assertSee('MA Render Test Store')
+            ->assertSee('PDF');
+    }
+
+    public function test_ma_can_download_own_agents_registration_pdf_but_not_another_mas(): void
+    {
+        $this->seed();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $registration = MerchantRegistration::query()->create([
+            'agent_id' => $agent->id,
+            'token' => 'ma-pdf-test-token',
+            'store_name' => 'MA PDF Store',
+            'merchant_type' => 'cm',
+            'gateway' => 'hilogate',
+            'status' => 'pending_ma',
+            'payload' => ['admin_email' => 'admin-ma-pdf@paygrid.local', 'merchant_key' => 'secret-hg-key'],
+        ]);
+
+        $maUser = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $response = $this->actingAs($maUser)->get(route('ma.merchant-registration.pdf', $registration));
+        $response->assertOk();
+        $this->assertSame('application/pdf', $response->headers->get('content-type'));
+
+        $otherMa = User::query()->create(['name' => 'Other MA', 'email' => 'other-ma-pdf@paygrid.local', 'role' => 'ma', 'password' => 'secret']);
+        $this->actingAs($otherMa)->get(route('ma.merchant-registration.pdf', $registration))->assertForbidden();
+    }
+
     public function test_agent_dashboard_shows_scoped_ticket_tracking(): void
     {
         $this->seed();

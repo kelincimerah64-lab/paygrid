@@ -159,6 +159,7 @@ Route::post('/agent/onboarding-links/{link}/expire', [DashboardController::class
 Route::post('/agent/onboarding-links/bulk', [DashboardController::class, 'bulkAgentOnboardingLinks'])->middleware('throttle:dashboard-writes')->name('agent.onboarding-links.bulk');
 Route::get('/agent/requests', fn (DashboardController $controller) => $controller->agentSimple('status-request', app(\App\Services\Navigation\MenuBuilder::class)))->name('agent.requests');
 Route::delete('/agent/requests/{registration}', [DashboardController::class, 'deleteAgentRegistration'])->middleware('throttle:dashboard-writes')->name('agent.requests.delete');
+Route::get('/agent/requests/{registration}/pdf', [DashboardController::class, 'downloadAgentRegistrationPdf'])->name('agent.requests.pdf');
 Route::post('/agent/requests/bulk', [DashboardController::class, 'bulkAgentRegistrations'])->middleware('throttle:dashboard-writes')->name('agent.requests.bulk');
 Route::get('/agent/export', [DashboardController::class, 'exportAgentReport'])->name('agent.export');
 Route::redirect('/agent/new-store', '/agent/create-store')->name('agent.new-store');
@@ -173,6 +174,7 @@ Route::middleware(['auth', 'role:agent,ma,superadmin'])->group(function () {
 Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
     Route::post('/api/merchant-registrations/{registration}/approve', [MerchantRegistrationWorkflowController::class, 'approve'])->name('api.merchant-registration.approve');
     Route::post('/api/merchant-registrations/{registration}/reject', [MerchantRegistrationWorkflowController::class, 'reject'])->name('api.merchant-registration.reject');
+    Route::get('/api/merchant-registrations/{registration}/pdf', [MerchantRegistrationWorkflowController::class, 'downloadPdf'])->name('ma.merchant-registration.pdf');
     Route::post('/api/merchants/{merchant}/provision/retry', [MerchantProvisioningController::class, 'retry'])->name('api.merchant.provision.retry');
     Route::post('/api/merchants/{merchant}/sync/retry', [GatewaySyncRetryController::class, 'store'])->name('api.merchant.sync.retry');
 });
