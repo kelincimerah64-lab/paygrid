@@ -299,8 +299,13 @@
             <div class="approval-modal" id="approval-detail-{{ $r->id }}" hidden><div class="approval-modal-card">
                 <div class="qris-toolbar"><div><h2>{{ $r->store_name }}</h2><p class="muted" style="margin:4px 0 0">Agen: {{ $r->agent?->name ?: '-' }} &mdash; <span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
                 <div class="user-access-card"><strong>ADMIN</strong><h2>{{ $adminName }}</h2><div class="muted truncate">{{ $adminEmail }}</div><b>PW: {{ $adminPassword }}</b></div>
+                <div class="approval-detail-grid" style="margin-top:12px">
+                    @foreach($detailRows as $label => $value)
+                        <div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>
+                    @endforeach
+                </div>
                 @if(!in_array($r->status, ['approved', 'rejected'], true))
-                    <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form">
+                    <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form" style="margin-top:12px">
                         @csrf
                         <label>Email Admin<input type="email" name="admin_email" value="{{ old('admin_email', $adminEmail !== '-' ? $adminEmail : '') }}" required></label>
                         @if(($r->merchant_type ?: ($payload['merchant_type'] ?? null)) === 'script')
@@ -318,11 +323,6 @@
                         <button class="btn danger compact-btn" style="width:100%">Reject</button>
                     </form>
                 @endif
-                <div class="approval-detail-grid" style="margin-top:12px">
-                    @foreach($detailRows as $label => $value)
-                        <div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>
-                    @endforeach
-                </div>
             </div></div></td>
         </tr>
     @endforeach
