@@ -2,13 +2,12 @@
 
 namespace App\Services;
 
-use Anthropic\Client;
-use Anthropic\Messages\ToolUseBlock;
 use App\Models\Agent;
 use App\Models\GatewaySyncLog;
 use App\Models\Merchant;
 use App\Models\TopupRequest;
 use App\Models\User;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -19,6 +18,9 @@ use Illuminate\Support\Facades\Log;
  * guarantees one MA's chat can never surface another MA's data, regardless
  * of what is asked. No tool here writes anything - this assistant can only
  * answer questions, never change data or code.
+ *
+ * Backed by Gemini's generateContent API (function calling), not an SDK -
+ * same pattern as HilogateClient/JiraClient elsewhere in this codebase.
  */
 class MaAssistantService
 {
@@ -45,7 +47,7 @@ PROMPT;
     public function __construct(private CsScopeResolver $scope) {}
 
     /**
-     * @param  array<int, array{role: string, content: mixed}>  $history  Prior turns from the client, already in Anthropic message shape.
+     * @param  array<int, array{role: string, content: string}>  $history  Prior turns from the client: {role: user|assistant, content: string}.
      * @param  array{data: string, mediaType: string}|null  $image  Base64 image data + MIME type, if the user attached one.
      */
     public function ask(User $ma, string $message, array $history, ?array $image = null): string
@@ -57,75 +59,87 @@ PROMPT;
             return 'Fitur ini belum aktif - kredensial AI belum dikonfigurasi. Hubungi tim PayGrid.';
         }
 
-        $client = new Client(apiKey: $apiKey);
-        $model = (string) config('paygrid.assistant.model', 'claude-opus-5');
+        $model = (string) config('paygrid.assistant.model', 'gemini-3.8-flash');
 
-        $userContent = [];
+        $contents = array_map(fn ($turn) => [
+            'role' => $turn['role'] === 'assistant' ? 'model' : 'user',
+            'parts' => [['text' => $turn['content']]],
+        ], $history);
+
+        $userParts = [];
         if ($image) {
-            $userContent[] = [
-                'type' => 'image',
-                'source' => ['type' => 'base64', 'mediaType' => $image['mediaType'], 'data' => $image['data']],
-            ];
+            $userParts[] = ['inlineData' => ['mimeType' => $image['mediaType'], 'data' => $image['data']]];
         }
-        $userContent[] = ['type' => 'text', 'text' => $message];
+        $userParts[] = ['text' => $message];
+        $contents[] = ['role' => 'user', 'parts' => $userParts];
 
-        $messages = [...$history, ['role' => 'user', 'content' => $userContent]];
-        $tools = $this->toolDefinitions();
+        $tools = [['functionDeclarations' => $this->toolDefinitions()]];
 
         for ($turn = 0; $turn < 6; $turn++) {
             try {
-                $response = $client->messages->create(
-                    model: $model,
-                    maxTokens: 2048,
-                    system: self::SYSTEM_PROMPT,
-                    tools: $tools,
-                    messages: $messages,
+                $response = Http::timeout(30)->post(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?".http_build_query(['key' => $apiKey]),
+                    [
+                        'systemInstruction' => ['parts' => [['text' => self::SYSTEM_PROMPT]]],
+                        'contents' => $contents,
+                        'tools' => $tools,
+                    ],
                 );
-            } catch (\Anthropic\Core\Exceptions\RateLimitException) {
-                return 'Lagi banyak yang pakai AI-nya, coba lagi sebentar ya.';
-            } catch (\Anthropic\Core\Exceptions\APIStatusException $e) {
-                Log::warning('paygrid.ma_assistant.api_error', ['message' => $e->getMessage()]);
+            } catch (\Throwable $e) {
+                Log::warning('paygrid.ma_assistant.request_failed', ['message' => $e->getMessage()]);
 
                 return 'Maaf, ada gangguan sesaat. Coba lagi ya.';
             }
 
-            if ($response->stopReason !== 'tool_use') {
-                return $this->textFrom($response->content);
+            if ($response->status() === 429) {
+                return 'Lagi banyak yang pakai AI-nya, coba lagi sebentar ya.';
+            }
+            if (! $response->successful()) {
+                Log::warning('paygrid.ma_assistant.api_error', ['status' => $response->status(), 'body' => $response->body()]);
+
+                return 'Maaf, ada gangguan sesaat. Coba lagi ya.';
             }
 
-            $toolResults = [];
-            foreach ($response->content as $block) {
-                if ($block instanceof ToolUseBlock) {
-                    $toolResults[] = [
-                        'type' => 'tool_result',
-                        'toolUseID' => $block->id,
-                        'content' => $this->runTool($ma, $block->name, $block->input),
-                    ];
-                }
+            $parts = $response->json('candidates.0.content.parts') ?? [];
+            $functionCalls = array_filter($parts, fn ($p) => isset($p['functionCall']));
+
+            if ($functionCalls === []) {
+                return $this->textFrom($parts);
             }
 
-            $messages[] = ['role' => 'assistant', 'content' => $response->content];
-            $messages[] = ['role' => 'user', 'content' => $toolResults];
+            $contents[] = ['role' => 'model', 'parts' => $parts];
+
+            $responseParts = [];
+            foreach ($functionCalls as $part) {
+                $call = $part['functionCall'];
+                $responseParts[] = [
+                    'functionResponse' => [
+                        'name' => $call['name'],
+                        'response' => $this->runTool($ma, $call['name'], $call['args'] ?? []),
+                    ],
+                ];
+            }
+            $contents[] = ['role' => 'user', 'parts' => $responseParts];
         }
 
         return 'Maaf, pertanyaan ini butuh terlalu banyak langkah buat dijawab. Coba pecah jadi pertanyaan yang lebih spesifik ya.';
     }
 
-    private function textFrom(array $content): string
+    private function textFrom(array $parts): string
     {
-        foreach ($content as $block) {
-            if ($block->type === 'text') {
-                return $block->text;
+        foreach ($parts as $part) {
+            if (isset($part['text'])) {
+                return $part['text'];
             }
         }
 
         return 'Maaf, saya tidak bisa memproses jawabannya.';
     }
 
-    private function runTool(User $ma, string $name, array $input): string
+    private function runTool(User $ma, string $name, array $input): array
     {
         try {
-            $result = match ($name) {
+            return match ($name) {
                 'get_overview_summary' => $this->toolOverviewSummary($ma, $input),
                 'list_merchants' => $this->toolListMerchants($ma, $input),
                 'get_merchant_detail' => $this->toolMerchantDetail($ma, $input),
@@ -136,10 +150,9 @@ PROMPT;
             };
         } catch (\Throwable $e) {
             Log::warning('paygrid.ma_assistant.tool_failed', ['tool' => $name, 'input' => $input, 'message' => $e->getMessage()]);
-            $result = ['error' => 'Terjadi kesalahan saat mengambil data.'];
-        }
 
-        return json_encode($result);
+            return ['error' => 'Terjadi kesalahan saat mengambil data.'];
+        }
     }
 
     private function merchantScope(User $ma)
@@ -282,54 +295,54 @@ PROMPT;
             [
                 'name' => 'get_overview_summary',
                 'description' => 'Ambil ringkasan volume, jumlah transaksi sukses, dan fee untuk MA ini pada periode tertentu.',
-                'inputSchema' => [
-                    'type' => 'object',
+                'parameters' => [
+                    'type' => 'OBJECT',
                     'properties' => [
-                        'period' => ['type' => 'string', 'enum' => ['today', 'this_month', 'last_30_days'], 'description' => 'Periode data, default today'],
+                        'period' => ['type' => 'STRING', 'enum' => ['today', 'this_month', 'last_30_days'], 'description' => 'Periode data, default today'],
                     ],
                 ],
             ],
             [
                 'name' => 'list_merchants',
                 'description' => 'Daftar toko milik MA ini, bisa difilter nama atau status approval.',
-                'inputSchema' => [
-                    'type' => 'object',
+                'parameters' => [
+                    'type' => 'OBJECT',
                     'properties' => [
-                        'search' => ['type' => 'string', 'description' => 'Cari sebagian nama toko'],
-                        'status' => ['type' => 'string', 'description' => 'Filter status approval, misal approved'],
+                        'search' => ['type' => 'STRING', 'description' => 'Cari sebagian nama toko'],
+                        'status' => ['type' => 'STRING', 'description' => 'Filter status approval, misal approved'],
                     ],
                 ],
             ],
             [
                 'name' => 'get_merchant_detail',
                 'description' => 'Detail 1 toko spesifik milik MA ini: volume 7 hari terakhir, status sync terakhir.',
-                'inputSchema' => [
-                    'type' => 'object',
-                    'properties' => ['name' => ['type' => 'string', 'description' => 'Nama toko (boleh sebagian)']],
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => ['name' => ['type' => 'STRING', 'description' => 'Nama toko (boleh sebagian)']],
                     'required' => ['name'],
                 ],
             ],
             [
                 'name' => 'list_recent_transactions',
                 'description' => 'Transaksi terbaru milik MA ini, bisa difilter per toko atau status.',
-                'inputSchema' => [
-                    'type' => 'object',
+                'parameters' => [
+                    'type' => 'OBJECT',
                     'properties' => [
-                        'merchant_name' => ['type' => 'string', 'description' => 'Filter nama toko (boleh sebagian)'],
-                        'status' => ['type' => 'string', 'description' => 'success, pending, expired, dll'],
-                        'limit' => ['type' => 'integer', 'description' => 'Jumlah baris, default 10, maksimal 50'],
+                        'merchant_name' => ['type' => 'STRING', 'description' => 'Filter nama toko (boleh sebagian)'],
+                        'status' => ['type' => 'STRING', 'description' => 'success, pending, expired, dll'],
+                        'limit' => ['type' => 'INTEGER', 'description' => 'Jumlah baris, default 10, maksimal 50'],
                     ],
                 ],
             ],
             [
                 'name' => 'list_agents',
                 'description' => 'Daftar agen di bawah MA ini beserta jumlah toko masing-masing.',
-                'inputSchema' => ['type' => 'object', 'properties' => (object) []],
+                'parameters' => ['type' => 'OBJECT', 'properties' => (object) []],
             ],
             [
                 'name' => 'get_sync_health',
                 'description' => 'Kegagalan sinkronisasi data gateway terbaru (2 jam terakhir) untuk toko-toko milik MA ini - berguna buat jawab pertanyaan soal data yang telat/tidak muncul.',
-                'inputSchema' => ['type' => 'object', 'properties' => (object) []],
+                'parameters' => ['type' => 'OBJECT', 'properties' => (object) []],
             ],
         ];
     }

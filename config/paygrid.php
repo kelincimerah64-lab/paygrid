@@ -117,8 +117,8 @@ return [
     ],
 
     'assistant' => [
-        'api_key' => env('ANTHROPIC_API_KEY'),
-        'model' => env('PAYGRID_ASSISTANT_MODEL', 'claude-opus-5'),
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('PAYGRID_ASSISTANT_MODEL', 'gemini-3.8-flash'),
     ],
 
     'whatsapp' => [
