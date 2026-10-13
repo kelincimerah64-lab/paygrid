@@ -44,7 +44,7 @@ class JiraClient
 
     private function toAdf(string $text): array
     {
-        $paragraphs = array_filter(explode("\n", $text), fn ($line) => $line !== '');
+        $paragraphs = array_values(array_filter(explode("\n", $text), fn ($line) => $line !== ''));
 
         return [
             'type' => 'doc',

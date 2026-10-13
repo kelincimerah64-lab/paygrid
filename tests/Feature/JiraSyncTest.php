@@ -136,8 +136,18 @@ class JiraSyncTest extends TestCase
                 return false;
             }
 
+            // descriptionFor() always inserts a blank line before "Deskripsi:",
+            // which previously left a gap in the array keys array_filter()
+            // produced - PHP's json_encode then serialized that as a JSON
+            // *object* instead of an array, which Jira's ADF parser rejects.
+            // Decoding the RAW body (not the in-memory PHP array Http::fake
+            // hands back, which hides the gap) is what actually catches that.
+            $decoded = json_decode($request->body());
+            $content = $decoded->fields->description->content;
+
             return $request['fields']['summary'] === '[T-2] API Error'
-                && str_contains(json_encode($request['fields']['description']), 'Tech Ina - Gummy');
+                && is_array($content)
+                && str_contains(json_encode($content), 'Tech Ina - Gummy');
         });
     }
 
