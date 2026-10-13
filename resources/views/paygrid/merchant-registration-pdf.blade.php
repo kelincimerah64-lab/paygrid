@@ -4,18 +4,19 @@
     <meta charset="utf-8">
     <title>Request Toko - {{ $registration->store_name }}</title>
     <style>
-        body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #1a1a1a; }
-        h1 { font-size: 18px; margin: 0 0 4px; }
-        .sub { color: #555; margin: 0 0 16px; }
+        @page { margin: 10mm 12mm; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #1a1a1a; }
+        h1 { font-size: 16px; margin: 0 0 3px; }
+        .sub { color: #555; margin: 0 0 10px; font-size: 10px; }
         table { width: 100%; border-collapse: collapse; }
-        td, th { padding: 6px 8px; border: 1px solid #ddd; text-align: left; vertical-align: top; }
-        th { width: 220px; background: #f4f4f4; font-weight: bold; }
-        .meta { margin-bottom: 16px; }
-        .meta td { border: none; padding: 2px 8px 2px 0; }
-        .footer { margin-top: 20px; color: #888; font-size: 10px; }
-        .signatures { width: 100%; margin-top: 40px; }
+        td, th { padding: 3px 6px; border: 1px solid #ddd; text-align: left; vertical-align: top; }
+        th { width: 190px; background: #f4f4f4; font-weight: bold; }
+        .meta { margin-bottom: 8px; }
+        .meta td { border: none; padding: 1px 8px 1px 0; }
+        .footer { margin-top: 10px; color: #888; font-size: 8px; }
+        .signatures { width: 100%; margin-top: 16px; page-break-inside: avoid; }
         .signatures td { border: none; padding: 0 12px; text-align: center; }
-        .signature-box { border: 1px solid #999; height: 70px; margin-bottom: 6px; }
+        .signature-box { border: 1px solid #999; height: 45px; margin-bottom: 4px; }
     </style>
 </head>
 <body>

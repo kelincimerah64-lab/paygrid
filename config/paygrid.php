@@ -30,7 +30,7 @@ return [
         'ticket_grace_minutes' => (int) env('PAYGRID_TOPUP_TICKET_GRACE_MINUTES', 10),
     ],
     'onboarding' => [
-        'link_expires_hours' => (int) env('PAYGRID_ONBOARDING_LINK_EXPIRES_HOURS', 24),
+        'link_expires_hours' => (int) env('PAYGRID_ONBOARDING_LINK_EXPIRES_HOURS', 720),
     ],
     'gateway_sync' => [
         'enabled' => env('PAYGRID_GATEWAY_SYNC_ENABLED', true),
