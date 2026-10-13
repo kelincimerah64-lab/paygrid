@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\AgentOnboardingLink;
 use App\Models\GatewaySyncLog;
 use App\Models\Merchant;
 use App\Models\MerchantGatewayBalance;
@@ -165,6 +166,9 @@ class MaController extends Controller
                 ? $this->cachedAnalytics('grouped-merchants', [], fn () => $this->groupedMerchantsForAnalytics())
                 : collect(),
             'feeMenus' => $feeMenus,
+            'onboardingLinks' => $page === 'create-store'
+                ? AgentOnboardingLink::query()->when($this->currentMaId() !== null, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $this->currentMaId()))->with('agent', 'registration')->latest()->limit(20)->get()
+                : collect(),
         ]);
     }
 
@@ -406,6 +410,76 @@ class MaController extends Controller
         $admins->each(fn ($admin) => $audit->record('ma.merchant_admin_created', $admin, null, $admin->only(['email', 'role', 'merchant_id'])));
 
         return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admins->pluck('email')->implode(', ').' / '.config('paygrid.demo_password').'.');
+    }
+
+    /**
+     * MA-side equivalent of DashboardController::storeAgentOnboardingLink() -
+     * same single-use link flow, but since an MA oversees many agents (not
+     * just one), the MA must pick which agent/group the link belongs to.
+     */
+    public function storeOnboardingLink(Request $request, AuditLogService $audit): RedirectResponse
+    {
+        $data = $request->validate([
+            'agent_id' => ['required', 'exists:agents,id'],
+            'recipient_email' => ['nullable', 'email', 'max:160'],
+            'recipient_telegram' => ['nullable', 'string', 'max:80'],
+        ]);
+        $agent = Agent::query()->findOrFail($data['agent_id']);
+        abort_unless($this->canUseAgent($agent), 403);
+
+        $link = DB::transaction(function () use ($agent, $data) {
+            AgentOnboardingLink::query()
+                ->where('agent_id', $agent->id)
+                ->where('status', 'active')
+                ->update(['status' => 'expired', 'expires_at' => now()]);
+
+            return AgentOnboardingLink::query()->create([
+                'agent_id' => $agent->id,
+                'token' => Str::random(48),
+                'recipient_email' => $data['recipient_email'] ?? null,
+                'recipient_telegram' => $data['recipient_telegram'] ?? null,
+                'status' => 'active',
+                'expires_at' => now()->addHours(max(1, (int) config('paygrid.onboarding.link_expires_hours', 24))),
+            ]);
+        });
+        $audit->record('ma.onboarding_link_created', $link, null, $link->only(['agent_id', 'recipient_email', 'recipient_telegram', 'status', 'expires_at']));
+
+        return back()->with('status', 'Link form unik berhasil dibuat.')->with('onboarding_link', route('merchant-registration.token-form', $link));
+    }
+
+    public function expireOnboardingLink(AgentOnboardingLink $link, AuditLogService $audit): RedirectResponse
+    {
+        abort_unless($this->canUseAgent($link->agent), 403);
+        abort_unless($link->status === 'active', 422);
+
+        $before = $link->only(['status', 'expires_at']);
+        $link->update(['status' => 'expired', 'expires_at' => now()]);
+        $audit->record('ma.onboarding_link_expired', $link, $before, $link->only(array_keys($before)));
+
+        return back()->with('status', 'Link onboarding berhasil di-expire.');
+    }
+
+    public function bulkExpireOnboardingLinks(Request $request, AuditLogService $audit): RedirectResponse
+    {
+        $data = $request->validate([
+            'action' => ['required', 'in:expire'],
+            'link_ids' => ['required', 'array'],
+            'link_ids.*' => ['integer'],
+        ]);
+        $maId = $this->currentMaId();
+        $links = AgentOnboardingLink::query()
+            ->when($maId !== null, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $maId))
+            ->whereIn('id', $data['link_ids'])
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($links as $link) {
+            $before = $link->only(['status', 'expires_at']);
+            $link->update(['status' => 'expired', 'expires_at' => now()]);
+            $audit->record('ma.onboarding_link_bulk_expired', $link, $before, $link->only(array_keys($before)));
+        }
+
+        return back()->with('status', $links->count().' link berhasil di-expire.');
     }
 
     public function updateAgentFee(Request $request, Agent $agent, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse

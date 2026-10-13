@@ -13,6 +13,9 @@
         .meta { margin-bottom: 16px; }
         .meta td { border: none; padding: 2px 8px 2px 0; }
         .footer { margin-top: 20px; color: #888; font-size: 10px; }
+        .signatures { width: 100%; margin-top: 40px; }
+        .signatures td { border: none; padding: 0 12px; text-align: center; }
+        .signature-box { border: 1px solid #999; height: 70px; margin-bottom: 6px; }
     </style>
 </head>
 <body>
@@ -35,6 +38,14 @@
                 <td>{{ $value ?: '-' }}</td>
             </tr>
         @endforeach
+    </table>
+
+    <table class="signatures">
+        <tr>
+            <td><div class="signature-box"></div>Approved By</td>
+            <td><div class="signature-box"></div>Check By</td>
+            <td><div class="signature-box"></div>Requested By</td>
+        </tr>
     </table>
 
     <p class="footer">Dicetak dari dashboard PayGrid pada {{ now()->timezone('Asia/Jakarta')->format('d M Y H:i') }} WIB.</p>

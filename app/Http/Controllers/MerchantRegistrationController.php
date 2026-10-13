@@ -55,7 +55,7 @@ class MerchantRegistrationController extends Controller
             'merchant_type' => $data['merchant_type'] ?? 'cm',
             'gateway' => $data['gateway'] ?? 'hilogate',
             'settlement_method' => isset($data['fee_menu']) ? $feeMenus->settlementMethod($data['fee_menu']) : null,
-            'payload' => $request->except('_token'),
+            'payload' => $this->normalizeMultiSlotFields($request->except('_token')),
             'status' => 'pending_agent',
         ]);
         $audit->record('merchant_registration.created', $registration, null, $registration->only([
@@ -75,7 +75,7 @@ class MerchantRegistrationController extends Controller
             'fee_menu' => ['nullable', Rule::in(array_keys($this->feeMenuOptionsExcludingBased($feeMenus)))],
         ]);
 
-        $payload = $request->except('_token');
+        $payload = $this->normalizeMultiSlotFields($request->except('_token'));
         $registration = DB::transaction(function () use ($link, $data, $payload, $feeMenus) {
             $lockedLink = AgentOnboardingLink::query()->whereKey($link->id)->lockForUpdate()->firstOrFail();
 
@@ -121,6 +121,25 @@ class MerchantRegistrationController extends Controller
         return view('paygrid.topup', [
             'merchant' => $merchant ?? Merchant::query()->where('merchant_type', 'cm')->first(),
         ]);
+    }
+
+    /**
+     * The onboarding form collects ip_dashboard/ip_finance/api_ip_whitelist as
+     * several numbered input slots (ip_dashboard[], etc.) instead of one
+     * comma-separated field. Join each back into a single comma-separated
+     * string here so the stored payload shape - and everything downstream
+     * that reads it (MerchantRegistration::detailRows(), the MA approval
+     * view, the PDF export) - stays exactly as it was before.
+     */
+    private function normalizeMultiSlotFields(array $payload): array
+    {
+        foreach (['ip_dashboard', 'ip_finance', 'api_ip_whitelist'] as $field) {
+            if (is_array($payload[$field] ?? null)) {
+                $payload[$field] = implode(', ', array_filter(array_map('trim', $payload[$field]), fn ($v) => $v !== ''));
+            }
+        }
+
+        return $payload;
     }
 
     private function feeMenuOptionsExcludingBased(FeeMenuCatalog $feeMenus): array

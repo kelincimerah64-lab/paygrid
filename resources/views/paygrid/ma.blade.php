@@ -416,6 +416,24 @@
         <label>Engine Type<select name="engine_type" id="create-store-engine-type" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
         @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus])
         <label class="field-span-full">Catatan<textarea name="note" rows="3"></textarea></label></div><button class="btn primary" style="margin-top:16px">Buat Toko</button></form></section>
+
+    @php($latestMaLink = session('onboarding_link') ?: '')
+    <section class="card pad section agent-onboarding-card">
+        <div class="qris-toolbar compact-toolbar"><div><h2>Generate Link Onboarding</h2><p class="muted">Buat link registrasi unik untuk merchant isi sendiri - pilih agen/grup tujuan toko ini. Link otomatis expired setelah satu kali submit.</p></div></div>
+        <form method="post" action="{{ route('ma.onboarding-links.store') }}" class="form-grid pad">
+            @csrf
+            <label>Agen / Grup<select name="agent_id" required><option value="">Pilih agen</option>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label>
+            <label>Email Penerima<input name="recipient_email" type="email" placeholder="merchant@domain.com"></label>
+            <label>Username Telegram<input name="recipient_telegram" placeholder="@merchantusername"></label>
+            <div class="actions"><button class="btn primary">Generate Link</button><button class="btn" type="button" data-copy-onboarding-link>Copy Link</button></div>
+            <label style="grid-column:1 / -1">Link Form Unik<input data-onboarding-link readonly value="{{ $latestMaLink ?: 'Link akan muncul di sini.' }}"></label>
+        </form>
+    </section>
+    <section class="card section">
+        <div class="qris-toolbar"><h2>Link Terakhir</h2><span class="muted">{{ ($onboardingLinks ?? collect())->count() }} link</span></div>
+        <form method="post" action="{{ route('ma.onboarding-links.bulk') }}">@csrf<input type="hidden" name="action" value="expire"><div class="actions pad"><button class="btn danger">Expire Selected</button></div><div class="table-wrap"><table class="table qris-table agent-link-table"><thead><tr><th>Pilih</th><th>Dibuat</th><th>Agen</th><th>Penerima</th><th>Status</th><th>Link</th><th>Request</th><th>Aksi</th></tr></thead><tbody>@forelse(($onboardingLinks ?? collect()) as $row)@php($effectiveStatus = $row->isUsable() ? $row->status : 'expired')<tr><td class="checkbox-cell">@if($row->isUsable())<input type="checkbox" name="link_ids[]" value="{{ $row->id }}">@else<span class="muted">-</span>@endif</td><td class="time-cell">{{ $row->created_at->timezone('Asia/Jakarta')->format('d M y') }}<span>{{ $row->created_at->timezone('Asia/Jakarta')->format('H:i') }}</span></td><td>{{ $row->agent?->name ?: '-' }}</td><td><strong>{{ $row->recipient_email ?: '-' }}</strong><br><span class="muted">{{ $row->recipient_telegram ?: '-' }}</span></td><td><span class="badge {{ $effectiveStatus === 'active' ? 'ok' : 'warn' }}">{{ ucfirst($effectiveStatus) }}</span></td><td><input readonly value="{{ route('merchant-registration.token-form', $row) }}"></td><td>{{ $row->registration?->store_name ?: '-' }}</td><td>@if($row->isUsable())<button class="btn danger" formaction="{{ route('ma.onboarding-links.expire', $row) }}" formmethod="post">Expire</button>@else<span class="muted">-</span>@endif</td></tr>@empty<tr><td colspan="8" class="empty">Belum ada link.</td></tr>@endforelse</tbody></table></div></form>
+    </section>
+    <script>document.addEventListener('DOMContentLoaded', () => document.querySelector('[data-copy-onboarding-link]')?.addEventListener('click', () => navigator.clipboard?.writeText(document.querySelector('[data-onboarding-link]')?.value || '')));</script>
 @endif
 
 @if($active === 'bot-monitoring')

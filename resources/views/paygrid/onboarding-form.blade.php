@@ -62,11 +62,11 @@
 
     <h2>Data Dasar</h2>
     <div class="form-grid">
-        <label>Nama Toko<input name="store_name" placeholder="contoh: Tambang SBO" required></label>
-        <label>Engine Name<input name="engine_name" placeholder="contoh: GENESIS DIGITAL"></label>
-        <label>Tipe Merchant<select name="merchant_type"><option value="cm">CM</option><option value="script">Script</option></select></label>
-        <label>Payment Gateway<select name="gateway"><option value="hilogate">Hilogate</option><option value="alpha">Alpha</option><option value="artageto">Artageto</option><option value="kingspay">KingsPay</option></select></label>
-        <label>Menu Fee<select name="fee_menu"><option value="">Belum dipilih</option>@foreach($feeMenuOptions as $key => $option)<option value="{{ $key }}">{{ $option['label'] }}</option>@endforeach</select></label>
+        <label>Merchant Group<input name="store_name" placeholder="contoh: Tambang SBO" required></label>
+        <label>Merchant Name<input name="engine_name" placeholder="contoh: GENESIS DIGITAL"></label>
+        <label>Tipe Merchant<select name="merchant_type" id="onboarding-merchant-type" onchange="paygridToggleEngineType(this, 'onboarding-engine-type')"><option value="cm">CM</option><option value="script">Script</option></select></label>
+        <label>Script / API<select name="engine_type" id="onboarding-engine-type" style="display:none" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
+        <label>Merchant MDR<select name="fee_menu"><option value="">Belum dipilih</option>@foreach($feeMenuOptions as $key => $option)<option value="{{ $key }}">{{ $option['label'] }}</option>@endforeach</select></label>
         <label>Fee (%)<input name="merchant_mdr_percent" inputmode="decimal" placeholder="contoh: 1.2"></label>
         <label>Settlement Type ID<input name="settlement_type_id" placeholder="diisi MA jika belum tahu"></label>
     </div>
@@ -84,23 +84,30 @@
 
     <h2 class="section">Akses dan Callback</h2>
     <div class="form-grid">
-        <label>IP Dashboard<input name="ip_dashboard" placeholder="IP atau URL dashboard CS"></label>
-        <label>IP Finance<input name="ip_finance" placeholder="IP atau URL finance/withdrawal"></label>
         <label>Transaction Callback<input name="transaction_callback_url" placeholder="https://domain/api/callback/transaction"></label>
         <label>Withdrawal Callback<input name="withdrawal_callback_url" placeholder="https://domain/api/callback/withdrawal"></label>
-        <label>API IP Whitelist<input name="api_ip_whitelist" placeholder="pisahkan koma jika lebih dari satu"></label>
         <label>Whitelist<select name="is_whitelisted"><option value="0">Tidak</option><option value="1">Ya</option></select></label>
     </div>
 
-    <h2 class="section">ID Gateway dan Fee</h2>
+    <h2 class="section" style="font-size:14px">IP Dashboard</h2>
     <div class="form-grid">
-        <label>Transaction Gateway ID<input name="transaction_gateway_ids" placeholder="default Hilogate jika kosong"></label>
-        <label>Withdrawal Gateway ID<input name="withdrawal_gateway_ids" placeholder="default Hilogate jika kosong"></label>
-        <label>Cash Back Toko %<input name="payin_fee_percent" inputmode="decimal" placeholder="cashback toko dari volume sukses"></label>
-        <label>Cash Back Agen %<input name="cashback_agent_percent" inputmode="decimal" placeholder="cashback agen dari volume sukses"></label>
-        <label>Cash Back Trx Toko (IDR)<input name="cashback_trx_toko_amount" inputmode="numeric" placeholder="IDR x jumlah trx sukses, ke toko"></label>
-        <label>Cash Back Trx Agen (IDR)<input name="cashback_trx_agent_amount" inputmode="numeric" placeholder="IDR x jumlah trx sukses, ke agen"></label>
-        <label>Disbursement Fee Fixed<input name="disbursement_fee_fixed" inputmode="numeric" placeholder="fee x jumlah disbursement"></label>
+        @for($i = 1; $i <= 5; $i++)
+            <label>IP/URL Dashboard CS #{{ $i }}<input name="ip_dashboard[]"></label>
+        @endfor
+    </div>
+
+    <h2 class="section" style="font-size:14px">IP Finance</h2>
+    <div class="form-grid">
+        @for($i = 1; $i <= 2; $i++)
+            <label>IP/URL Finance #{{ $i }}<input name="ip_finance[]"></label>
+        @endfor
+    </div>
+
+    <h2 class="section" style="font-size:14px">API IP Whitelist</h2>
+    <div class="form-grid">
+        @for($i = 1; $i <= 5; $i++)
+            <label>IP Whitelist #{{ $i }}<input name="api_ip_whitelist[]"></label>
+        @endfor
     </div>
 
     <div class="actions section">
@@ -111,6 +118,14 @@
 @if(! $usable)
     <script>document.addEventListener('DOMContentLoaded', () => document.querySelectorAll('form input, form select, form button').forEach((el) => el.disabled = true));</script>
 @endif
+<script>
+function paygridToggleEngineType(select, engineTypeId) {
+    var isScript = select.value === 'script';
+    var engineType = document.getElementById(engineTypeId);
+    engineType.style.display = isScript ? '' : 'none';
+    engineType.disabled = !isScript;
+}
+</script>
 </div>
 </main>
 </body>

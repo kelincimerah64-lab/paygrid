@@ -2372,6 +2372,45 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame('expired', $cleanupLink->refresh()->status);
     }
 
+    public function test_onboarding_form_joins_multi_slot_ip_fields_into_comma_separated_strings(): void
+    {
+        $this->seed();
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+
+        $this->actingAs($agentUser)->post(route('agent.onboarding-links.store'), [])->assertRedirect();
+        $link = AgentOnboardingLink::query()->where('status', 'active')->latest()->firstOrFail();
+
+        $this->post(route('merchant-registration.token-store', $link), [
+            'store_name' => 'Multi Slot Store',
+            'merchant_type' => 'cm',
+            'ip_dashboard' => ['1.1.1.1', '', '2.2.2.2', '', ''],
+            'ip_finance' => ['3.3.3.3', ''],
+            'api_ip_whitelist' => ['4.4.4.4', '5.5.5.5', '', '', ''],
+        ])->assertRedirect();
+
+        $registration = MerchantRegistration::query()->where('store_name', 'Multi Slot Store')->firstOrFail();
+        $this->assertSame('1.1.1.1, 2.2.2.2', $registration->payload['ip_dashboard']);
+        $this->assertSame('3.3.3.3', $registration->payload['ip_finance']);
+        $this->assertSame('4.4.4.4, 5.5.5.5', $registration->payload['api_ip_whitelist']);
+    }
+
+    public function test_onboarding_form_shows_redesigned_fields(): void
+    {
+        $this->seed();
+        $agentUser = User::query()->where('username', 'AG-EPC')->firstOrFail();
+        $this->actingAs($agentUser)->post(route('agent.onboarding-links.store'), [])->assertRedirect();
+        $link = AgentOnboardingLink::query()->where('status', 'active')->latest()->firstOrFail();
+
+        $this->get(route('merchant-registration.token-form', $link))
+            ->assertOk()
+            ->assertSee('Merchant Group')
+            ->assertSee('Merchant Name')
+            ->assertSee('Merchant MDR')
+            ->assertDontSee('Payment Gateway')
+            ->assertDontSee('ID Gateway dan Fee')
+            ->assertDontSee('Cash Back Toko %');
+    }
+
     public function test_agent_can_download_own_registration_pdf_but_not_another_agents(): void
     {
         $this->seed();
@@ -2439,6 +2478,52 @@ class PayGridRoutingTest extends TestCase
 
         $otherMa = User::query()->create(['name' => 'Other MA', 'email' => 'other-ma-pdf@paygrid.local', 'role' => 'ma', 'password' => 'secret']);
         $this->actingAs($otherMa)->get(route('ma.merchant-registration.pdf', $registration))->assertForbidden();
+    }
+
+    public function test_ma_can_generate_onboarding_link_scoped_to_a_chosen_agent(): void
+    {
+        $this->seed();
+        $maUser = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+        $otherAgent = Agent::query()->where('code', 'AG-OTHER')->firstOrFail();
+
+        $this->actingAs($maUser)
+            ->get(route('ma.create-store'))
+            ->assertOk()
+            ->assertSee('Generate Link Onboarding');
+
+        $this->actingAs($maUser)
+            ->post(route('ma.onboarding-links.store'), [
+                'agent_id' => $otherAgent->id,
+                'recipient_email' => 'ma-link-merchant@paygrid.local',
+            ])
+            ->assertRedirect()->assertSessionHas('onboarding_link');
+
+        $link = AgentOnboardingLink::query()->where('recipient_email', 'ma-link-merchant@paygrid.local')->firstOrFail();
+        $this->assertSame($otherAgent->id, $link->agent_id);
+
+        $this->actingAs($maUser)->get(route('ma.create-store'))->assertOk()->assertSee('ma-link-merchant@paygrid.local');
+    }
+
+    public function test_ma_cannot_generate_or_expire_onboarding_link_for_another_mas_agent(): void
+    {
+        $this->seed();
+        $otherMa = User::query()->create(['name' => 'Other MA', 'email' => 'other-ma-link@paygrid.local', 'role' => 'ma', 'password' => 'secret']);
+        $foreignAgent = Agent::query()->create(['ma_user_id' => $otherMa->id, 'code' => 'AG-FOREIGN', 'name' => 'Foreign Agent', 'is_active' => true]);
+        $ownAgent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+
+        $maUser = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
+
+        $this->actingAs($maUser)
+            ->post(route('ma.onboarding-links.store'), ['agent_id' => $foreignAgent->id])
+            ->assertForbidden();
+
+        $ownLink = AgentOnboardingLink::query()->create([
+            'agent_id' => $ownAgent->id,
+            'token' => (string) \Illuminate\Support\Str::uuid(),
+            'status' => 'active',
+            'expires_at' => now()->addDay(),
+        ]);
+        $this->actingAs($otherMa)->post(route('ma.onboarding-links.expire', $ownLink))->assertForbidden();
     }
 
     public function test_agent_dashboard_shows_scoped_ticket_tracking(): void

@@ -52,6 +52,9 @@ Route::post('/ma/agents', [MaController::class, 'storeAgent'])->middleware('thro
 Route::post('/ma/agents/{agent}/fee', [MaController::class, 'updateAgentFee'])->middleware('throttle:dashboard-writes')->name('ma.agents.fee.update');
 Route::get('/ma/create-store', fn (MaController $controller) => $controller->page('create-store'))->name('ma.create-store');
 Route::post('/ma/create-store', [MaController::class, 'storeMerchant'])->middleware('throttle:dashboard-writes')->name('ma.create-store.store');
+Route::post('/ma/onboarding-links', [MaController::class, 'storeOnboardingLink'])->middleware('throttle:dashboard-writes')->name('ma.onboarding-links.store');
+Route::post('/ma/onboarding-links/{link}/expire', [MaController::class, 'expireOnboardingLink'])->middleware('throttle:dashboard-writes')->name('ma.onboarding-links.expire');
+Route::post('/ma/onboarding-links/bulk', [MaController::class, 'bulkExpireOnboardingLinks'])->middleware('throttle:dashboard-writes')->name('ma.onboarding-links.bulk');
 Route::get('/ma/bot-monitoring', fn (MaController $controller) => $controller->page('bot-monitoring'))->name('ma.bot-monitoring');
 Route::get('/ma/analytics', fn (MaController $controller) => $controller->page('analytics'))->name('ma.analytics');
 Route::get('/ma/analytics/tab/{tab}', [MaController::class, 'analyticsTab'])->name('ma.analytics.tab');
