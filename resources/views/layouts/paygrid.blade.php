@@ -383,16 +383,9 @@
         .agent-bulk-bar span { display:block; margin-top:3px; color:var(--muted); font-size:12px; font-weight:700; }
         .agent-request-table th { background:#f3f7fc; color:#20324d; font-size:11px; letter-spacing:.08em; }
         .agent-request-table td { padding:10px 12px; }
-        .agent-link-table { table-layout:fixed; min-width:980px; }
-        .agent-link-table th:nth-child(1) { width:6%; text-align:center; }
-        .agent-link-table th:nth-child(2) { width:12%; }
-        .agent-link-table th:nth-child(3) { width:20%; }
-        .agent-link-table th:nth-child(4) { width:10%; }
-        .agent-link-table th:nth-child(5) { width:30%; }
-        .agent-link-table th:nth-child(6) { width:14%; }
-        .agent-link-table th:nth-child(7) { width:8%; }
-        .agent-link-table td { height:auto; padding:8px 10px; vertical-align:middle; }
-        .agent-link-table td:first-child { text-align:center; }
+        .agent-link-table { table-layout:auto; min-width:0; width:100%; }
+        .agent-link-table th:first-child, .agent-link-table td:first-child { width:1%; text-align:center; white-space:nowrap; }
+        .agent-link-table td { height:auto; padding:8px 10px; vertical-align:middle; white-space:nowrap; }
         .agent-link-table .time-cell span { display:block; margin-top:3px; color:var(--muted); font-size:12px; font-weight:800; }
         .agent-link-table input[readonly] { width:100%; min-height:30px; height:30px; padding:5px 8px; font-size:12px; }
         .agent-store-report-table th:nth-child(1) { width:23%; }
@@ -992,6 +985,14 @@
             .agent-link-table td:nth-child(5)::before { content:'Link'; }
             .agent-link-table td:nth-child(6)::before { content:'Request'; }
             .agent-link-table td:nth-child(7)::before { content:'Aksi'; }
+            /* MA's link table has an extra "Agen" column (position 3), shifting
+               every label after it by one - overrides the rules above. */
+            .ma-link-table td:nth-child(3)::before { content:'Agen'; }
+            .ma-link-table td:nth-child(4)::before { content:'Penerima'; }
+            .ma-link-table td:nth-child(5)::before { content:'Status'; }
+            .ma-link-table td:nth-child(6)::before { content:'Link'; }
+            .ma-link-table td:nth-child(7)::before { content:'Request'; }
+            .ma-link-table td:nth-child(8)::before { content:'Aksi'; }
             .agent-store-report-table, .agent-ticket-table { min-width:0; }
             .agent-store-report-table td:nth-child(1)::before { content:'Toko'; }
             .agent-store-report-table td:nth-child(2)::before { content:'Tipe'; }
