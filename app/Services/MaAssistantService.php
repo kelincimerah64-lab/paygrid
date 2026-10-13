@@ -107,7 +107,18 @@ PROMPT;
                 return $this->textFrom($parts);
             }
 
-            $contents[] = ['role' => 'model', 'parts' => $parts];
+            // json_decode(..., true) turns Gemini's "args": {} into a PHP [],
+            // and json_encode(['args' => []]) on the next turn re-serializes
+            // that as a JSON array - which Gemini's strict proto parser
+            // rejects for a map-typed field ("cannot start list"). Cast back
+            // to an object so a no-arg tool call can be replayed in history.
+            $contents[] = ['role' => 'model', 'parts' => array_map(function ($part) {
+                if (isset($part['functionCall']['args']) && $part['functionCall']['args'] === []) {
+                    $part['functionCall']['args'] = (object) [];
+                }
+
+                return $part;
+            }, $parts)];
 
             $responseParts = [];
             foreach ($functionCalls as $part) {

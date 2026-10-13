@@ -94,6 +94,35 @@ class MaAssistantServiceTest extends TestCase
         });
     }
 
+    public function test_a_no_argument_tool_calls_history_replays_an_empty_object_not_an_array(): void
+    {
+        config(['paygrid.assistant.api_key' => 'fake-gemini-key']);
+        $ma = $this->makeMa();
+
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::sequence()
+                ->push([
+                    'candidates' => [[
+                        'content' => [
+                            'role' => 'model',
+                            // Gemini's own JSON has "args": {} for a no-arg tool call -
+                            // json_decode(..., true) turns that into a PHP [].
+                            'parts' => [['functionCall' => ['name' => 'list_agents', 'args' => []]]],
+                        ],
+                    ]],
+                ])
+                ->push([
+                    'candidates' => [['content' => ['role' => 'model', 'parts' => [['text' => 'Oke.']]]]],
+                ]),
+        ]);
+
+        (new MaAssistantService(new CsScopeResolver))->ask($ma, 'Ada agen apa aja?', []);
+
+        $secondRequestBody = Http::recorded()[1][0]->body();
+        $this->assertStringContainsString('"args":{}', $secondRequestBody);
+        $this->assertStringNotContainsString('"args":[]', $secondRequestBody);
+    }
+
     public function test_it_returns_a_friendly_message_on_rate_limit(): void
     {
         config(['paygrid.assistant.api_key' => 'fake-gemini-key']);
