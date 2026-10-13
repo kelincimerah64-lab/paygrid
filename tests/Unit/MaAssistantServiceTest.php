@@ -133,6 +133,32 @@ class MaAssistantServiceTest extends TestCase
         $this->assertStringContainsString('banyak yang pakai', $reply);
     }
 
+    public function test_it_retries_once_on_a_transient_503_and_succeeds(): void
+    {
+        config(['paygrid.assistant.api_key' => 'fake-gemini-key']);
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::sequence()
+                ->push(['error' => ['code' => 503, 'status' => 'UNAVAILABLE']], 503)
+                ->push(['candidates' => [['content' => ['role' => 'model', 'parts' => [['text' => 'Oke.']]]]]]),
+        ]);
+
+        $reply = (new MaAssistantService(new CsScopeResolver))->ask($this->makeMa(), 'Halo', []);
+
+        $this->assertSame('Oke.', $reply);
+        Http::assertSentCount(2);
+    }
+
+    public function test_it_returns_a_friendly_message_when_503_persists_after_retry(): void
+    {
+        config(['paygrid.assistant.api_key' => 'fake-gemini-key']);
+        Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['error' => ['code' => 503, 'status' => 'UNAVAILABLE']], 503)]);
+
+        $reply = (new MaAssistantService(new CsScopeResolver))->ask($this->makeMa(), 'Halo', []);
+
+        $this->assertStringContainsString('banyak yang pakai', $reply);
+        Http::assertSentCount(2);
+    }
+
     public function test_it_maps_assistant_history_role_to_geminis_model_role(): void
     {
         config(['paygrid.assistant.api_key' => 'fake-gemini-key']);

@@ -76,22 +76,31 @@ PROMPT;
         $tools = [['functionDeclarations' => $this->toolDefinitions()]];
 
         for ($turn = 0; $turn < 6; $turn++) {
-            try {
-                $response = Http::timeout(30)->post(
-                    "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?".http_build_query(['key' => $apiKey]),
-                    [
-                        'systemInstruction' => ['parts' => [['text' => self::SYSTEM_PROMPT]]],
-                        'contents' => $contents,
-                        'tools' => $tools,
-                    ],
-                );
-            } catch (\Throwable $e) {
-                Log::warning('paygrid.ma_assistant.request_failed', ['message' => $e->getMessage()]);
+            // Gemini's free-tier capacity returns 503 "high demand" fairly often and
+            // it's usually gone within a couple seconds, so one quick retry here avoids
+            // surfacing a hard error for what's normally a transient blip.
+            for ($attempt = 0; $attempt < 2; $attempt++) {
+                try {
+                    $response = Http::timeout(30)->post(
+                        "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?".http_build_query(['key' => $apiKey]),
+                        [
+                            'systemInstruction' => ['parts' => [['text' => self::SYSTEM_PROMPT]]],
+                            'contents' => $contents,
+                            'tools' => $tools,
+                        ],
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning('paygrid.ma_assistant.request_failed', ['message' => $e->getMessage()]);
 
-                return 'Maaf, ada gangguan sesaat. Coba lagi ya.';
+                    return 'Maaf, ada gangguan sesaat. Coba lagi ya.';
+                }
+
+                if ($response->status() !== 503) {
+                    break;
+                }
             }
 
-            if ($response->status() === 429) {
+            if ($response->status() === 429 || $response->status() === 503) {
                 return 'Lagi banyak yang pakai AI-nya, coba lagi sebentar ya.';
             }
             if (! $response->successful()) {
