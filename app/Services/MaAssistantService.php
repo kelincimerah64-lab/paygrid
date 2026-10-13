@@ -5,8 +5,11 @@ namespace App\Services;
 use App\Models\Agent;
 use App\Models\GatewaySyncLog;
 use App\Models\Merchant;
+use App\Models\MerchantTicket;
+use App\Models\MerchantWithdrawal;
 use App\Models\TopupRequest;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -40,6 +43,8 @@ Konteks penting soal istilah di dashboard PayGrid:
 - Toko dengan tipe "cm" pakai alur Topup/Checklist manual oleh CS; toko tipe "script" cuma punya halaman History (tanpa checklist).
 
 Kamu punya beberapa tool buat narik data ASLI milik MA yang sedang tanya - selalu pakai tool itu kalau pertanyaannya soal angka/data spesifik ("kenapa volume saya turun", "toko apa yang paling rame", dst), jangan menebak angka. Kalau pertanyaannya soal konsep/istilah umum, jawab langsung dari pengetahuan di atas tanpa perlu tool.
+
+Kalau pertanyaannya soal transaksi/withdrawal/tiket yang nggak pas sama tool spesifik yang ada (misal butuh filter atau pengelompokan tertentu), pakai tool query_transactions/query_withdrawals/query_tickets - itu tool serbaguna buat narik data dengan filter status/toko/tanggal dan pengelompokan sesuka kamu.
 
 Kalau user melampirkan gambar (screenshot dashboard), baca angka/informasi di gambar itu buat bantu jawab pertanyaannya.
 PROMPT;
@@ -166,6 +171,9 @@ PROMPT;
                 'list_recent_transactions' => $this->toolRecentTransactions($ma, $input),
                 'list_agents' => $this->toolListAgents($ma),
                 'get_sync_health' => $this->toolSyncHealth($ma),
+                'query_transactions' => $this->toolQueryTransactions($ma, $input),
+                'query_withdrawals' => $this->toolQueryWithdrawals($ma, $input),
+                'query_tickets' => $this->toolQueryTickets($ma, $input),
                 default => ['error' => "Tool tidak dikenal: {$name}"],
             };
         } catch (\Throwable $e) {
@@ -309,6 +317,188 @@ PROMPT;
         ])->all()];
     }
 
+    private function applyDateRange($query, array $input, string $column): void
+    {
+        if (! empty($input['date_from'])) {
+            $query->where($column, '>=', Carbon::parse($input['date_from'], 'Asia/Jakarta')->startOfDay()->utc());
+        }
+        if (! empty($input['date_to'])) {
+            $query->where($column, '<=', Carbon::parse($input['date_to'], 'Asia/Jakarta')->endOfDay()->utc());
+        }
+    }
+
+    private function toolQueryTransactions(User $ma, array $input): array
+    {
+        $query = TopupRequest::query()->whereIn('merchant_id', $this->scope->merchantIds($ma));
+
+        if (! empty($input['status'])) {
+            $query->where('status', $input['status']);
+        }
+        if (! empty($input['merchant_name'])) {
+            $query->whereHas('merchant', fn ($q) => $q->where('name', 'like', '%'.$input['merchant_name'].'%'));
+        }
+        $this->applyDateRange($query, $input, 'submitted_at');
+
+        if (($input['mode'] ?? 'summary') === 'list') {
+            $limit = min(50, max(1, (int) ($input['limit'] ?? 10)));
+            $rows = $query->with('merchant:id,name')->latest('submitted_at')->limit($limit)->get();
+
+            return ['transactions' => $rows->map(fn ($t) => [
+                'merchant' => $t->merchant?->name,
+                'status' => $t->status,
+                'amount' => (int) $t->amount,
+                'submitted_at_wib' => $t->submitted_at?->timezone('Asia/Jakarta')->toDateTimeString(),
+            ])->all()];
+        }
+
+        $groupBy = $input['group_by'] ?? 'none';
+        $groupExpr = match ($groupBy) {
+            'status' => 'status',
+            'merchant' => 'merchant_id',
+            'day' => 'DATE(CONVERT_TZ(submitted_at, "+00:00", "+07:00"))',
+            default => "'all'",
+        };
+
+        $rows = $query
+            ->selectRaw("{$groupExpr} as group_key")
+            ->selectRaw('COUNT(*) as trx_count')
+            ->selectRaw('COALESCE(SUM(amount), 0) as sum_amount')
+            ->selectRaw('COALESCE(SUM(net_amount), 0) as sum_net_amount')
+            ->selectRaw('COALESCE(SUM(fee_amount), 0) as sum_fee')
+            ->groupByRaw($groupExpr)
+            ->orderByDesc('sum_amount')
+            ->limit(50)
+            ->get();
+
+        $merchantNames = $groupBy === 'merchant'
+            ? Merchant::query()->whereIn('id', $rows->pluck('group_key'))->pluck('name', 'id')
+            : collect();
+
+        return ['summary' => $rows->map(fn ($r) => [
+            'group' => $groupBy === 'merchant' ? ($merchantNames[$r->group_key] ?? $r->group_key) : $r->group_key,
+            'trx_count' => (int) $r->trx_count,
+            'sum_amount' => (int) $r->sum_amount,
+            'sum_net_amount' => (int) $r->sum_net_amount,
+            'sum_fee' => (int) $r->sum_fee,
+        ])->all()];
+    }
+
+    private function toolQueryWithdrawals(User $ma, array $input): array
+    {
+        $query = MerchantWithdrawal::query()->whereIn('merchant_id', $this->scope->merchantIds($ma));
+
+        if (! empty($input['status'])) {
+            $query->where('status', $input['status']);
+        }
+        if (! empty($input['merchant_name'])) {
+            $query->whereHas('merchant', fn ($q) => $q->where('name', 'like', '%'.$input['merchant_name'].'%'));
+        }
+        $this->applyDateRange($query, $input, 'gateway_created_at');
+
+        if (($input['mode'] ?? 'summary') === 'list') {
+            $limit = min(50, max(1, (int) ($input['limit'] ?? 10)));
+            $rows = $query->with('merchant:id,name')->latest('gateway_created_at')->limit($limit)->get();
+
+            return ['withdrawals' => $rows->map(fn ($w) => [
+                'merchant' => $w->merchant?->name,
+                'status' => $w->status,
+                'amount' => (int) $w->amount,
+                'net_amount' => (int) $w->net_amount,
+                'created_at_wib' => $w->gateway_created_at?->timezone('Asia/Jakarta')->toDateTimeString(),
+            ])->all()];
+        }
+
+        $groupBy = $input['group_by'] ?? 'none';
+        $groupExpr = match ($groupBy) {
+            'status' => 'status',
+            'merchant' => 'merchant_id',
+            'day' => 'DATE(CONVERT_TZ(gateway_created_at, "+00:00", "+07:00"))',
+            default => "'all'",
+        };
+
+        $rows = $query
+            ->selectRaw("{$groupExpr} as group_key")
+            ->selectRaw('COUNT(*) as wd_count')
+            ->selectRaw('COALESCE(SUM(amount), 0) as sum_amount')
+            ->selectRaw('COALESCE(SUM(net_amount), 0) as sum_net_amount')
+            ->selectRaw('COALESCE(SUM(fee), 0) as sum_fee')
+            ->groupByRaw($groupExpr)
+            ->orderByDesc('sum_amount')
+            ->limit(50)
+            ->get();
+
+        $merchantNames = $groupBy === 'merchant'
+            ? Merchant::query()->whereIn('id', $rows->pluck('group_key'))->pluck('name', 'id')
+            : collect();
+
+        return ['summary' => $rows->map(fn ($r) => [
+            'group' => $groupBy === 'merchant' ? ($merchantNames[$r->group_key] ?? $r->group_key) : $r->group_key,
+            'wd_count' => (int) $r->wd_count,
+            'sum_amount' => (int) $r->sum_amount,
+            'sum_net_amount' => (int) $r->sum_net_amount,
+            'sum_fee' => (int) $r->sum_fee,
+        ])->all()];
+    }
+
+    private function toolQueryTickets(User $ma, array $input): array
+    {
+        $query = MerchantTicket::query()->whereIn('merchant_id', $this->scope->merchantIds($ma));
+
+        if (! empty($input['status'])) {
+            $query->where('status', $input['status']);
+        }
+        if (! empty($input['department'])) {
+            $query->where('department', $input['department']);
+        }
+        if (! empty($input['category'])) {
+            $query->where('category', $input['category']);
+        }
+        if (! empty($input['merchant_name'])) {
+            $query->whereHas('merchant', fn ($q) => $q->where('name', 'like', '%'.$input['merchant_name'].'%'));
+        }
+        $this->applyDateRange($query, $input, 'created_at');
+
+        if (($input['mode'] ?? 'summary') === 'list') {
+            $limit = min(50, max(1, (int) ($input['limit'] ?? 10)));
+            $rows = $query->with('merchant:id,name')->latest('created_at')->limit($limit)->get();
+
+            return ['tickets' => $rows->map(fn ($t) => [
+                'ticket_no' => $t->ticket_no,
+                'merchant' => $t->merchant?->name,
+                'department' => $t->department,
+                'category' => $t->category,
+                'status' => $t->status,
+                'created_at_wib' => $t->created_at?->timezone('Asia/Jakarta')->toDateTimeString(),
+            ])->all()];
+        }
+
+        $groupBy = $input['group_by'] ?? 'none';
+        $groupExpr = match ($groupBy) {
+            'status' => 'status',
+            'department' => 'department',
+            'category' => 'category',
+            'merchant' => 'merchant_id',
+            default => "'all'",
+        };
+
+        $rows = $query
+            ->selectRaw("{$groupExpr} as group_key")
+            ->selectRaw('COUNT(*) as ticket_count')
+            ->groupByRaw($groupExpr)
+            ->orderByDesc('ticket_count')
+            ->limit(50)
+            ->get();
+
+        $merchantNames = $groupBy === 'merchant'
+            ? Merchant::query()->whereIn('id', $rows->pluck('group_key'))->pluck('name', 'id')
+            : collect();
+
+        return ['summary' => $rows->map(fn ($r) => [
+            'group' => $groupBy === 'merchant' ? ($merchantNames[$r->group_key] ?? $r->group_key) : $r->group_key,
+            'ticket_count' => (int) $r->ticket_count,
+        ])->all()];
+    }
+
     private function toolDefinitions(): array
     {
         return [
@@ -363,6 +553,56 @@ PROMPT;
                 'name' => 'get_sync_health',
                 'description' => 'Kegagalan sinkronisasi data gateway terbaru (2 jam terakhir) untuk toko-toko milik MA ini - berguna buat jawab pertanyaan soal data yang telat/tidak muncul.',
                 'parameters' => ['type' => 'OBJECT', 'properties' => (object) []],
+            ],
+            [
+                'name' => 'query_transactions',
+                'description' => 'Query fleksibel transaksi toko MA ini - list transaksi mentah atau ringkasan agregat (jumlah & total nominal), dengan filter status/toko/tanggal dan pengelompokan. Pakai ini buat pertanyaan transaksi yang nggak kecover tool lain, misal "volume per toko minggu ini", "transaksi gagal bulan lalu berapa", "tren harian 7 hari terakhir".',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'mode' => ['type' => 'STRING', 'enum' => ['summary', 'list'], 'description' => 'summary = agregat (default), list = daftar transaksi mentah'],
+                        'group_by' => ['type' => 'STRING', 'enum' => ['none', 'status', 'merchant', 'day'], 'description' => 'Hanya dipakai saat mode=summary, default none'],
+                        'status' => ['type' => 'STRING', 'description' => 'Filter status: pending/success/expired/failed/rejected'],
+                        'merchant_name' => ['type' => 'STRING', 'description' => 'Filter sebagian nama toko'],
+                        'date_from' => ['type' => 'STRING', 'description' => 'Tanggal mulai, format YYYY-MM-DD (WIB)'],
+                        'date_to' => ['type' => 'STRING', 'description' => 'Tanggal akhir, format YYYY-MM-DD (WIB)'],
+                        'limit' => ['type' => 'INTEGER', 'description' => 'Hanya dipakai saat mode=list, default 10 maksimal 50'],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'query_withdrawals',
+                'description' => 'Query fleksibel withdrawal/disbursement toko MA ini - list mentah atau ringkasan agregat, dengan filter status/toko/tanggal dan pengelompokan. Pakai buat pertanyaan withdrawal yang nggak kecover tool lain.',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'mode' => ['type' => 'STRING', 'enum' => ['summary', 'list']],
+                        'group_by' => ['type' => 'STRING', 'enum' => ['none', 'status', 'merchant', 'day']],
+                        'status' => ['type' => 'STRING', 'description' => 'Filter status withdrawal dari gateway'],
+                        'merchant_name' => ['type' => 'STRING', 'description' => 'Filter sebagian nama toko'],
+                        'date_from' => ['type' => 'STRING', 'description' => 'YYYY-MM-DD (WIB)'],
+                        'date_to' => ['type' => 'STRING', 'description' => 'YYYY-MM-DD (WIB)'],
+                        'limit' => ['type' => 'INTEGER', 'description' => 'Hanya dipakai saat mode=list, default 10 maksimal 50'],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'query_tickets',
+                'description' => 'Query fleksibel tiket toko MA ini - list mentah atau ringkasan jumlah tiket, dengan filter status/department/category/toko/tanggal dan pengelompokan. Pakai buat pertanyaan tiket yang nggak kecover tool lain, misal "tiket open berapa", "breakdown tiket per kategori".',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'mode' => ['type' => 'STRING', 'enum' => ['summary', 'list']],
+                        'group_by' => ['type' => 'STRING', 'enum' => ['none', 'status', 'department', 'category', 'merchant']],
+                        'status' => ['type' => 'STRING', 'description' => 'open/in_progress/closed'],
+                        'department' => ['type' => 'STRING', 'description' => 'cs/tech'],
+                        'category' => ['type' => 'STRING'],
+                        'merchant_name' => ['type' => 'STRING', 'description' => 'Filter sebagian nama toko'],
+                        'date_from' => ['type' => 'STRING', 'description' => 'YYYY-MM-DD (WIB)'],
+                        'date_to' => ['type' => 'STRING', 'description' => 'YYYY-MM-DD (WIB)'],
+                        'limit' => ['type' => 'INTEGER', 'description' => 'Hanya dipakai saat mode=list, default 10 maksimal 50'],
+                    ],
+                ],
             ],
         ];
     }
