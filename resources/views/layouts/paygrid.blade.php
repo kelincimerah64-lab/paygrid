@@ -213,14 +213,16 @@
         .ma-bottom-grid { grid-template-columns:1.3fr 1fr 0.7fr; align-items:start; }
         .ma-withdrawal-grid { grid-template-columns:1fr 1fr; align-items:start; margin-top:14px; }
         .ma-mini-panel-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-        .ma-mini-panel h3 { margin:0; font-size:13px; font-weight:900; }
-        .ma-view-all { font-size:11px; font-weight:800; color:var(--blue); text-decoration:none; }
+        .ma-mini-panel h3 { margin:0; font-size:15px; font-weight:900; }
+        .ma-view-all { font-size:12.5px; font-weight:800; color:var(--blue); text-decoration:none; }
         .ma-view-all:hover { text-decoration:underline; }
-        .ma-mini-list { display:grid; gap:8px; margin-top:10px; }
-        .ma-mini-row { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; gap:10px; align-items:center; padding:8px 10px; border:1px solid #e7edf6; border-radius:8px; background:#fbfdff; font-size:12px; }
-        .ma-mini-row .rank { width:20px; height:20px; border-radius:50%; background:#eef4fb; color:#1557c2; font-weight:900; font-size:11px; display:grid; place-items:center; }
-        .ma-mini-row-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .ma-mini-bar { display:block; margin-top:4px; height:4px; border-radius:999px; background:#eef2f8; overflow:hidden; }
+        .ma-mini-list { display:grid; gap:10px; margin-top:12px; }
+        .ma-mini-row { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; gap:12px; align-items:center; padding:11px 13px; border:1px solid #e7edf6; border-radius:10px; background:#fbfdff; font-size:14px; }
+        .ma-mini-row .rank { width:26px; height:26px; border-radius:50%; background:#eef4fb; color:#1557c2; font-weight:900; font-size:13px; display:grid; place-items:center; flex:0 0 auto; }
+        .ma-mini-row-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; }
+        .ma-mini-row strong { font-size:14px; }
+        .ma-mini-row small { font-size:11.5px; }
+        .ma-mini-bar { display:block; margin-top:6px; height:5px; border-radius:999px; background:#eef2f8; overflow:hidden; }
         .ma-mini-bar span { display:block; height:100%; background:#1557c2; border-radius:999px; }
         @media (max-width: 1280px) { .ma-hero-row { flex-wrap:wrap; } .ma-bottom-grid { grid-template-columns:1fr 1fr; } .ma-disb-tiles { grid-template-columns:1fr 1fr; } }
         @media (max-width: 1100px) { .ma-bottom-grid { grid-template-columns:1fr; } .ma-withdrawal-grid { grid-template-columns:1fr; } }
@@ -608,22 +610,90 @@
         .ticket-create-form label { display:grid; gap:8px; margin:0; text-transform:none; letter-spacing:normal; }
         .ticket-create-form textarea, .ticket-reply-form textarea { width:100%; border:1px solid #c9d6ea; border-radius:7px; padding:8px 10px; font:inherit; font-size:13px; resize:vertical; }
         .ticket-reply-form { display:flex; flex-direction:column; gap:10px; padding:0 14px 14px; }
-        .ticket-thread { display:flex; flex-direction:column; gap:10px; padding:14px; max-height:420px; overflow-y:auto; }
-        .ticket-message { max-width:78%; padding:10px 12px; border-radius:10px; background:#fbfdff; border:1px solid var(--line); }
-        .ticket-message.staff { align-self:flex-start; background:#eef4ff; }
-        .ticket-message.store { align-self:flex-end; }
-        .ticket-message-meta { display:flex; justify-content:space-between; gap:14px; font-size:11px; color:var(--muted); margin-bottom:4px; }
-        .ticket-message-meta strong { color:var(--ink); font-size:12px; }
-        .ticket-message-body { font-size:13px; white-space:pre-wrap; color:var(--ink); }
-        .ticket-message-read { display:block; font-size:10.5px; color:var(--muted); margin-top:5px; }
-        .ticket-message-edit-trigger { border:none; background:transparent; padding:0; font:inherit; font-size:11px; font-weight:700; text-decoration:underline; cursor:pointer; color:var(--blue); }
-        .ticket-message-edit-form { display:flex; flex-direction:column; gap:4px; margin-top:4px; }
-        .ticket-message-edit-form[hidden] { display:none; }
-        .ticket-message-edit-form textarea { width:100%; border:none; border-radius:6px; padding:3px 5px; font:inherit; font-size:13px; line-height:1.5; resize:none; background:rgba(6,22,47,.05); color:inherit; }
-        .ticket-message-edit-actions { display:flex; gap:12px; }
-        .ticket-message-edit-actions button { border:none; background:transparent; padding:0; font-size:11px; font-weight:800; text-decoration:underline; cursor:pointer; }
-        .ticket-message-edit-actions .primary { color:var(--blue); }
-        .ticket-message-edit-actions .cancel { color:var(--muted); }
+        /* ---------- Ticket detail: breadcrumb + title + 2-col layout ---------- */
+        .ticket-detail-crumb { font-size:12px; color:var(--muted); margin-bottom:10px; }
+        .ticket-detail-crumb a { color:var(--muted); text-decoration:none; }
+        .ticket-detail-crumb a:hover { color:var(--blue); }
+        .ticket-detail-title-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .ticket-detail-title-row h1 { margin:0; font-size:21px; }
+        .ticket-status-pill { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:800; padding:5px 12px; border-radius:999px; white-space:nowrap; }
+        .ticket-status-pill::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; flex:0 0 auto; }
+        .ticket-status-pill.warn { background:#fdf1e1; color:var(--warn); }
+        .ticket-status-pill.ok { background:#e3f3ea; color:var(--success); }
+        .ticket-status-pill.danger { background:#fde8e8; color:var(--danger); }
+        .ticket-detail-sub { margin:3px 0 16px; font-size:12.5px; color:var(--muted); }
+        .ticket-detail-grid { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:16px; align-items:start; }
+        @media (max-width:900px) { .ticket-detail-grid { grid-template-columns:1fr; } }
+        .ticket-detail-aside { display:flex; flex-direction:column; gap:14px; }
+        .ticket-aside-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+        .ticket-aside-card h3 { margin:0 0 12px; font-size:12.5px; font-weight:900; }
+        .ticket-aside-card select { width:100%; margin-bottom:10px; }
+        .ticket-aside-card textarea { width:100%; border:1px solid #c9d6ea; border-radius:10px; padding:10px 12px; font:inherit; font-size:13px; resize:vertical; margin-bottom:10px; }
+        .ticket-info-row { display:flex; justify-content:space-between; gap:10px; padding:7px 0; font-size:12.5px; border-top:1px solid var(--line); }
+        .ticket-info-row:first-child { border-top:none; padding-top:0; }
+        .ticket-info-row span { color:var(--muted); }
+        .ticket-info-row strong { color:var(--ink); text-align:right; }
+        .ticket-aside-desc { font-size:13px; color:var(--ink); white-space:pre-wrap; margin:0; line-height:1.5; }
+        .ticket-aside-card .ticket-attachments-label { font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:14px 0 8px; }
+        .ticket-attachment-row { display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid var(--line); border-radius:10px; margin-top:7px; }
+        .ticket-attachment-row:hover { border-color:#b9cef6; }
+        .ticket-attachment-preview { display:flex; align-items:center; gap:10px; flex:1; min-width:0; text-decoration:none; color:inherit; }
+        .ticket-attachment-icon { flex:0 0 32px; width:32px; height:32px; border-radius:8px; background:var(--soft); color:var(--blue); display:grid; place-items:center; font-size:14px; }
+        .ticket-attachment-row .name { font-weight:800; font-size:12.5px; }
+        .ticket-attachment-row .hint { font-size:10.5px; color:var(--muted); }
+        .ticket-attachment-dl { margin-left:auto; flex:0 0 auto; color:var(--muted); font-size:14px; text-decoration:none; padding:5px 7px; border-radius:7px; }
+        .ticket-attachment-dl:hover { color:var(--blue); background:var(--soft); }
+
+        .ticket-chat-card { background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+        .ticket-chat-head { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--line); }
+        .ticket-chat-head h3 { margin:0; font-size:14px; font-weight:900; }
+        .ticket-chat-head span { font-size:11.5px; color:var(--muted); }
+        .ticket-thread { padding:16px 18px; max-height:460px; overflow-y:auto; }
+        .ticket-date-divider { display:flex; align-items:center; gap:10px; margin:2px 0 18px; font-size:11px; color:var(--muted); }
+        .ticket-date-divider span { flex:1; height:1px; background:var(--line); }
+        .ticket-msg { margin-bottom:18px; max-width:82%; }
+        .ticket-msg:last-child { margin-bottom:0; }
+        .ticket-msg.mine { margin-left:auto; text-align:right; }
+        .ticket-msg-head { display:flex; align-items:center; gap:8px; }
+        .ticket-msg.mine .ticket-msg-head { flex-direction:row-reverse; }
+        .ticket-avatar { flex:0 0 26px; width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:10.5px; font-weight:900; color:#fff; letter-spacing:-.02em; background:linear-gradient(135deg, var(--blue-2), var(--blue)); }
+        .ticket-msg-who { font-size:11.5px; }
+        .ticket-msg-who strong { color:var(--ink); font-weight:800; }
+        .ticket-msg-who span { color:var(--muted); margin-left:4px; }
+        .ticket-msg-bubble { display:inline-block; margin-top:7px; padding:9px 14px; border-radius:14px; font-size:13px; white-space:pre-wrap; line-height:1.45; text-align:left; background:#f1f3f6; color:var(--ink); margin-left:34px; border-bottom-left-radius:4px; }
+        .ticket-msg.mine .ticket-msg-bubble { background:var(--blue); color:#fff; margin-left:0; margin-right:34px; border-bottom-left-radius:14px; border-bottom-right-radius:4px; }
+        .ticket-msg-read { display:block; font-size:10px; color:var(--muted); margin-top:4px; margin-left:34px; }
+        .ticket-msg.mine .ticket-msg-read { margin-left:0; margin-right:34px; }
+        .ticket-msg-edit-trigger { border:none; background:transparent; padding:0; font:inherit; font-size:11px; font-weight:700; text-decoration:underline; cursor:pointer; color:var(--blue); }
+        .ticket-msg.mine .ticket-msg-edit-trigger { color:#dce9ff; }
+        .ticket-msg-edit-form { display:flex; flex-direction:column; gap:4px; margin-top:6px; margin-left:34px; text-align:left; }
+        .ticket-msg.mine .ticket-msg-edit-form { margin-left:0; margin-right:34px; }
+        .ticket-msg-edit-form[hidden] { display:none; }
+        .ticket-msg-edit-form textarea { width:100%; border:1px solid var(--line); border-radius:8px; padding:7px 9px; font:inherit; font-size:13px; line-height:1.5; resize:none; }
+        .ticket-msg-edit-actions { display:flex; gap:12px; }
+        .ticket-msg-edit-actions button { border:none; background:transparent; padding:0; font-size:11px; font-weight:800; text-decoration:underline; cursor:pointer; }
+        .ticket-msg-edit-actions .primary { color:var(--blue); }
+        .ticket-msg-edit-actions .cancel { color:var(--muted); }
+        .ticket-reply-box { border-top:1px solid var(--line); padding:14px 18px; }
+        .ticket-reply-box label { display:block; font-size:12px; font-weight:800; color:var(--ink); margin-bottom:8px; }
+        .ticket-reply-box textarea { width:100%; border:1px solid #c9d6ea; border-radius:10px; padding:10px 12px; font:inherit; font-size:13px; resize:vertical; }
+        .ticket-reply-footer { display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
+        .ticket-reply-attach { font-size:12.5px; color:var(--muted); display:inline-flex; align-items:center; gap:6px; }
+        .ticket-list { display:flex; flex-direction:column; gap:10px; padding:14px; }
+        .ticket-list-row { display:flex; align-items:center; gap:14px; padding:13px 16px; border:1px solid var(--line); border-radius:12px; background:#fff; text-decoration:none; color:inherit; transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+        .ticket-list-row:hover { border-color:#b9cef6; box-shadow:0 6px 16px rgba(14,35,70,.07); transform:translateY(-1px); }
+        .ticket-list-icon { flex:0 0 38px; width:38px; height:38px; border-radius:10px; background:var(--soft); color:var(--blue); display:grid; place-items:center; font-size:15px; font-weight:900; }
+        .ticket-list-main { flex:1 1 auto; min-width:0; }
+        .ticket-list-no { font-weight:900; font-size:13.5px; color:var(--ink); }
+        .ticket-list-sub { font-size:12px; color:var(--muted); margin-top:2px; display:flex; flex-wrap:wrap; gap:4px 10px; }
+        .ticket-list-meta { display:flex; flex-direction:column; align-items:flex-end; gap:7px; flex:0 0 auto; text-align:right; }
+        .ticket-list-time { font-size:11px; color:var(--muted); white-space:nowrap; }
+        .ticket-list-empty { padding:30px 16px; text-align:center; color:var(--muted); font-size:13px; }
+        @media (max-width:640px) {
+            .ticket-msg { max-width:92%; }
+            .ticket-list-row { flex-wrap:wrap; }
+            .ticket-list-meta { flex-direction:row; align-items:center; width:100%; justify-content:space-between; }
+        }
 
         /* ---------- WA Tiket pilot ---------- */
         .wat-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
@@ -858,7 +928,7 @@
             main { padding:20px 14px 40px; }
             h1 { font-size:28px; }
             .cards, .qris-metrics, .qris-metrics.history-metrics, .qris-metrics.ticket-metrics, .topup-cards, .checklist-cards, .split, .approval-card, .approval-review-card, .approval-detail-grid, .form-grid, .bot-charts { grid-template-columns:1fr; }
-            .ticket-message { max-width:100%; }
+            .ticket-msg { max-width:100%; }
             .ticket-create-form { max-width:100%; }
             .bot-chart-box { height:170px; }
             .admin-create-form, .admin-minimum-form { grid-template-columns:1fr; }
@@ -1211,9 +1281,13 @@
             #ma-assistant-panel { right:16px; left:16px; width:auto; bottom:80px; }
             #ma-assistant-toggle { right:16px; bottom:16px; }
         }
+        #pg-topbar { position:fixed; top:0; left:0; height:3px; width:0; z-index:9999; background:linear-gradient(90deg, var(--blue-2), var(--orange)); box-shadow:0 0 8px rgba(21,87,194,.55); opacity:0; transition:width 1.6s cubic-bezier(.1,.6,.2,1), opacity .2s ease; pointer-events:none; }
+        #pg-topbar.active { opacity:1; width:82%; }
     </style>
 </head>
 <body>
+<div id="pg-topbar" aria-hidden="true"></div>
+<script src="{{ asset('js/paygrid-page-loader.js') }}?v={{ filemtime(public_path('js/paygrid-page-loader.js')) }}"></script>
 <div class="shell">
     <aside class="sidebar">
         <div class="sidebar-top">
@@ -1234,6 +1308,7 @@
                             'fee' => '%',
                             'approval' => '✓',
                             'mapping' => '⇄',
+                            'insentif' => '★',
                             'stores' => '▦',
                             'agents' => '◎',
                             'create-store' => '+',
@@ -1254,6 +1329,7 @@
                             'support-ticket' => '',
                             'create-ticket' => '',
                             'manual-tickets' => '✉',
+                            'merchant-support' => '◆',
                             'analytics' => '◫',
                         ][$item['key']] ?? '•')
                         <a href="{{ $item['url'] }}" class="{{ ($active ?? '') === $item['key'] ? 'active' : '' }}" data-key="{{ $item['key'] }}"><span class="nav-icon" aria-hidden="true">{{ $navIcon }}</span><span class="nav-label">{{ $item['label'] }}</span>@if(! empty($item['badge']))<span class="nav-badge">{{ $item['badge'] > 99 ? '99+' : $item['badge'] }}</span>@endif</a>

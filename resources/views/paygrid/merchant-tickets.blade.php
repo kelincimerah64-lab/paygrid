@@ -1,10 +1,10 @@
 @extends('layouts.paygrid')
 
 @php
-    $statusLabel = fn ($status) => App\Support\PayGridLabels::status($status);
+    $statusLabel = fn ($status) => match ($status) { 'open' => 'Belum Diproses', 'closed' => 'Selesai', default => App\Support\PayGridLabels::status($status) };
     $statusClass = fn ($status) => match ($status) {
         'closed' => 'ok',
-        'in_progress' => 'warn',
+        'in_progress', 'open' => 'warn',
         default => 'danger',
     };
     $deptLabel = fn ($dept) => app(App\Services\MerchantTicketService::class)->departmentLabel($dept);

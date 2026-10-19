@@ -44,6 +44,8 @@ Route::get('/ma/report/export', [MaController::class, 'export'])->name('ma.repor
 Route::get('/ma/fee', fn (MaController $controller) => $controller->page('fee'))->name('ma.fee');
 Route::get('/ma/approvals', fn (MaController $controller) => $controller->page('approval'))->name('ma.approvals');
 Route::get('/ma/mapping', fn (MaController $controller) => $controller->page('mapping'))->name('ma.mapping');
+Route::get('/ma/insentif', [MaController::class, 'insentifForm'])->name('ma.insentif');
+Route::post('/ma/insentif/pdf', [MaController::class, 'insentifPdf'])->middleware('throttle:dashboard-writes')->name('ma.insentif.pdf');
 Route::post('/ma/mapping/{merchant}', [MaController::class, 'mapAgent'])->middleware('throttle:dashboard-writes')->name('ma.mapping.update');
 Route::get('/ma/stores', fn (MaController $controller) => $controller->page('stores'))->name('ma.stores');
 Route::post('/ma/stores/{merchant}/fee', [MaController::class, 'updateStoreFee'])->middleware('throttle:dashboard-writes')->name('ma.stores.fee.update');
@@ -155,6 +157,8 @@ Route::get('/portal/{merchant}/admin/history', fn (\App\Models\Merchant $merchan
 Route::middleware(['auth', 'role:agent'])->group(function () {
 Route::get('/agent', [DashboardController::class, 'agent'])->name('agent.overview');
 Route::get('/agent/fee', [DashboardController::class, 'agentFee'])->name('agent.fee');
+Route::get('/agent/insentif', [DashboardController::class, 'agentInsentifForm'])->name('agent.insentif');
+Route::post('/agent/insentif/pdf', [DashboardController::class, 'agentInsentifPdf'])->middleware('throttle:dashboard-writes')->name('agent.insentif.pdf');
 Route::redirect('/agen', '/agent');
 Route::get('/agent/create-store', fn (DashboardController $controller) => $controller->agentSimple('create-store', app(\App\Services\Navigation\MenuBuilder::class)))->name('agent.create-store');
 Route::post('/agent/onboarding-links', [DashboardController::class, 'storeAgentOnboardingLink'])->middleware('throttle:dashboard-writes')->name('agent.onboarding-links.store');
@@ -199,6 +203,8 @@ Route::get('/portal/{merchant}/cs/history', fn (\App\Models\Merchant $merchant, 
 Route::middleware(['auth', 'role:admin,readonly_admin,boss,cs,readonly_cs,ma,agent,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/tickets', [MerchantTicketController::class, 'index'])->name('merchant.tickets.index');
 Route::post('/portal/{merchant}/tickets', [MerchantTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.store');
+Route::get('/portal/{merchant}/tickets/simple/create', [MerchantTicketController::class, 'createSimple'])->name('merchant.tickets.simple.create');
+Route::post('/portal/{merchant}/tickets/simple', [MerchantTicketController::class, 'storeSimple'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.simple.store');
 Route::get('/portal/{merchant}/tickets/{ticket}', [MerchantTicketController::class, 'show'])->name('merchant.tickets.show');
 Route::post('/portal/{merchant}/tickets/{ticket}/reply', [MerchantTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.reply');
 Route::patch('/portal/{merchant}/tickets/{ticket}/messages/{message}', [MerchantTicketController::class, 'updateMessage'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.messages.update');
@@ -208,6 +214,7 @@ Route::get('/portal/{merchant}/tickets/{ticket}/attachment/{index}', [MerchantTi
 Route::middleware(['auth', 'role:cs_pusat,superadmin'])->group(function () {
 Route::get('/dept-support/tickets', [DepartmentTicketController::class, 'index'])->name('dept-tickets.index');
 Route::get('/dept-support/tickets/{ticket}', [DepartmentTicketController::class, 'show'])->name('dept-tickets.show');
+Route::get('/dept-support/tickets/{ticket}/attachment/{index}', [DepartmentTicketController::class, 'attachment'])->whereNumber('index')->name('dept-tickets.attachment');
 Route::post('/dept-support/tickets/{ticket}/reply', [DepartmentTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('dept-tickets.reply');
 Route::post('/dept-support/tickets/{ticket}/status', [DepartmentTicketController::class, 'updateStatus'])->middleware('throttle:dashboard-writes')->name('dept-tickets.status');
 });

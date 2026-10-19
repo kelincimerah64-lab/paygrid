@@ -41,7 +41,7 @@ class MerchantRegistrationController extends Controller
             'store_name' => ['required', 'string', 'max:120'],
             'engine_name' => ['nullable', 'string', 'max:120'],
             'merchant_type' => ['nullable', 'in:cm,script'],
-            'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
+            'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay,magnetopay'],
             'fee_menu' => ['nullable', Rule::in(array_keys($this->feeMenuOptionsExcludingBased($feeMenus)))],
         ]);
 
@@ -71,7 +71,7 @@ class MerchantRegistrationController extends Controller
             'store_name' => ['required', 'string', 'max:120'],
             'engine_name' => ['nullable', 'string', 'max:120'],
             'merchant_type' => ['nullable', 'in:cm,script'],
-            'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
+            'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay,magnetopay'],
             'fee_menu' => ['nullable', Rule::in(array_keys($this->feeMenuOptionsExcludingBased($feeMenus)))],
         ]);
 

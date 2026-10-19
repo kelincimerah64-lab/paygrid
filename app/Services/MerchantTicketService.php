@@ -15,6 +15,19 @@ class MerchantTicketService
 {
     public const DEPARTMENTS = ['cs', 'tech', 'finance'];
 
+    /**
+     * Separate from DEPARTMENTS on purpose - that constant also drives the
+     * "Manual Tickets" default (no filter) listing in DepartmentTicketController,
+     * and 'general' tickets get their own dedicated CS Pusat menu/queue instead
+     * of being mixed into that default view. See DepartmentTicketController's
+     * departmentsFor()/isKnownDepartment().
+     */
+    public const SIMPLE_DEPARTMENT = 'general';
+
+    public const GENERAL_CATEGORIES = [
+        'general' => 'Permintaan Bantuan',
+    ];
+
     public const CS_CATEGORIES = [
         'settlement' => 'Settlement',
         'transaction' => 'Cek Transaksi',
@@ -53,6 +66,7 @@ class MerchantTicketService
         'cs' => 'CS',
         'tech' => 'Tech Support',
         'finance' => 'Finance',
+        'general' => 'Tiket Toko',
     ];
 
     /**
@@ -269,6 +283,7 @@ class MerchantTicketService
         return match ($department) {
             'tech' => self::TECH_CATEGORIES,
             'finance' => self::FINANCE_CATEGORIES,
+            'general' => self::GENERAL_CATEGORIES,
             default => self::CS_CATEGORIES,
         };
     }

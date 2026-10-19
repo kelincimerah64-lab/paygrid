@@ -21,6 +21,7 @@ use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
 use App\Services\TelegramBotMonitoringService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -72,19 +73,27 @@ class MaController extends Controller
                 $m->volume_trx = (int) ($amounts->volume ?? 0);
             });
         }
+        $adminUsersByMerchant = collect();
         if ($page === 'stores') {
-            $activity = $this->storeActivityByMerchant($merchants->pluck('id'));
+            $activity = $this->cachedAnalytics('stores-activity', $filters, fn () => $this->storeActivityByMerchant($merchants->pluck('id')));
             $merchants->each(function ($m) use ($activity) {
-                $row = $activity->get($m->id);
-                $m->activity_trx_total = (int) ($row?->trx_total ?? 0);
-                $m->activity_volume_success = (int) ($row?->volume_success ?? 0);
-                $m->activity_last_transaction_at = $row?->last_transaction_at ? CarbonImmutable::parse($row->last_transaction_at) : null;
+                $row = $activity[$m->id] ?? null;
+                $m->activity_trx_total = (int) ($row['trx_total'] ?? 0);
+                $m->activity_volume_success = (int) ($row['volume_success'] ?? 0);
+                $m->activity_last_transaction_at = ! empty($row['last_transaction_at']) ? CarbonImmutable::parse($row['last_transaction_at']) : null;
             });
+
+            $adminUsersByMerchant = User::query()
+                ->where('role', 'admin')
+                ->where('is_hidden', false)
+                ->whereIn('merchant_id', $merchants->pluck('id'))
+                ->get()
+                ->keyBy('merchant_id');
         }
 
         $overviewMerchants = $page === 'overview' ? $this->merchants($dataFilters)->get() : null;
         $overviewDailySeries = $page === 'overview'
-            ? $this->cachedAnalytics('overview-daily-series', $dataFilters, fn () => $this->dailyMetricSeries($overviewMerchants->pluck('id'), 30))
+            ? $this->cachedAnalytics('overview-daily-series', $dataFilters, fn () => $this->dailyMetricSeries($overviewMerchants->pluck('id'), 60))
             : null;
         $overviewQuickStats = $overviewDailySeries ? $this->overviewQuickStats($overviewDailySeries) : null;
         $overviewDisbursement = $overviewDailySeries ? $this->overviewDisbursement($overviewDailySeries) : null;
@@ -118,16 +127,18 @@ class MaController extends Controller
             'merchants' => $merchants,
             'registrations' => $page === 'approval' ? $this->registrations($filters)->get() : collect(),
             'transactions' => $page === 'report' && $filters['report_view'] !== 'withdrawal' ? $this->transactions($dataFilters)->simplePaginate(25)->withQueryString() : null,
-            'selectedStoreStats' => $page === 'report' && $filters['report_view'] !== 'withdrawal' ? $this->selectedStoreStats($dataFilters) : null,
+            'selectedStoreStats' => $page === 'report' && $filters['report_view'] !== 'withdrawal' ? $this->cachedAnalytics('report-store-stats', $dataFilters, fn () => $this->selectedStoreStats($dataFilters), 15) : null,
             'withdrawals' => $page === 'report' && $filters['report_view'] === 'withdrawal' ? $this->withdrawals($dataFilters)->simplePaginate(25)->withQueryString() : null,
-            'selectedStoreWithdrawalStats' => $page === 'report' && $filters['report_view'] === 'withdrawal' ? $this->selectedStoreWithdrawalStats($dataFilters) : null,
+            'selectedStoreWithdrawalStats' => $page === 'report' && $filters['report_view'] === 'withdrawal' ? $this->cachedAnalytics('report-store-withdrawal-stats', $dataFilters, fn () => $this->selectedStoreWithdrawalStats($dataFilters), 15) : null,
             'summary' => match ($page) {
                 'overview' => $this->cachedAnalytics('overview-summary', $dataFilters, fn () => $this->summary($dataFilters)),
                 'fee' => $this->summary($dataFilters),
                 default => [],
             },
             'reportAgents' => $page === 'report'
-                ? ($filters['report_view'] === 'withdrawal' ? $this->reportAgentsWithdrawal($dataFilters) : $this->reportAgents($dataFilters))
+                ? ($filters['report_view'] === 'withdrawal'
+                    ? $this->cachedAnalytics('report-agents-withdrawal', $dataFilters, fn () => $this->reportAgentsWithdrawal($dataFilters), 15)
+                    : $this->cachedAnalytics('report-agents', $dataFilters, fn () => $this->reportAgents($dataFilters), 15))
                 : collect(),
             'topMerchants' => $overviewTopMerchants,
             'topPaymentSources' => $page === 'overview'
@@ -165,6 +176,7 @@ class MaController extends Controller
             'groupedMerchantsForAnalytics' => in_array($page, ['analytics', 'report'], true)
                 ? $this->cachedAnalytics('grouped-merchants', [], fn () => $this->groupedMerchantsForAnalytics())
                 : collect(),
+            'adminUsersByMerchant' => $adminUsersByMerchant,
             'feeMenus' => $feeMenus,
             'onboardingLinks' => $page === 'create-store'
                 ? AgentOnboardingLink::query()->when($this->currentMaId() !== null, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $this->currentMaId()))->with('agent', 'registration')->latest()->limit(20)->get()
@@ -354,7 +366,7 @@ class MaController extends Controller
             'admin_email.*' => ['required', 'email', 'max:160', 'distinct', 'unique:users,email'],
             'cs_email' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:80'],
-            'gateway' => ['required', 'in:hilogate,artageto,alpha,kingspay'],
+            'gateway' => ['required', 'in:hilogate,artageto,alpha,kingspay,magnetopay'],
             'merchant_type' => ['required', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
             'merchant_id' => ['nullable', 'string', 'max:160'],
@@ -410,6 +422,69 @@ class MaController extends Controller
         $admins->each(fn ($admin) => $audit->record('ma.merchant_admin_created', $admin, null, $admin->only(['email', 'role', 'merchant_id'])));
 
         return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admins->pluck('email')->implode(', ').' / '.config('paygrid.demo_password').'.');
+    }
+
+    public function insentifForm(): View
+    {
+        $maId = $this->currentMaId();
+        $merchants = Merchant::query()
+            ->when($maId, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $maId))
+            ->orderBy('name')
+            ->get(['id', 'name', 'slug']);
+
+        return view('paygrid.ma-insentif', [
+            'roleLabel' => 'MA',
+            'menus' => app(\App\Services\Navigation\MenuBuilder::class)->ma(),
+            'active' => 'insentif',
+            'merchants' => $merchants,
+            'defaultMonth' => now('Asia/Jakarta')->format('Y-m'),
+        ]);
+    }
+
+    /**
+     * Reuses feeAmountsByMerchant()'s exact fee_ma formula (already the
+     * source of the Overview "Fee MA" KPI) so the PDF recap can never drift
+     * from what the dashboard already shows for the same stores/period.
+     */
+    public function insentifPdf(Request $request): Response
+    {
+        $data = $request->validate([
+            'store_ids' => ['required', 'array', 'min:1'],
+            'store_ids.*' => ['integer'],
+            'month' => ['required', 'date_format:Y-m'],
+        ]);
+
+        $maId = $this->currentMaId();
+        $merchants = Merchant::query()
+            ->whereIn('id', $data['store_ids'])
+            ->when($maId, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $maId))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+        abort_if($merchants->isEmpty(), 404);
+
+        $month = CarbonImmutable::createFromFormat('Y-m', $data['month'], 'Asia/Jakarta');
+        $filters = array_merge($this->blankFilters(), [
+            'store_ids' => $merchants->pluck('id')->all(),
+            'from' => $month->startOfMonth()->toDateString(),
+            'to' => $month->endOfMonth()->toDateString(),
+        ]);
+
+        $feeRows = $this->feeAmountsByMerchant($filters)->keyBy('merchant_id');
+        $rows = $merchants->map(fn ($m) => [
+            'name' => $m->name,
+            'volume' => (int) ($feeRows->get($m->id)->volume ?? 0),
+            'fee' => (int) round((float) ($feeRows->get($m->id)->ma_fee ?? 0)),
+        ]);
+
+        $pdf = Pdf::loadView('paygrid.insentif-pdf', [
+            'roleLabel' => 'MA',
+            'recipientName' => $request->user()->name ?? 'MA',
+            'monthLabel' => $month->format('F Y'),
+            'rows' => $rows,
+            'total' => $rows->sum('fee'),
+        ]);
+
+        return $pdf->download('insentif-ma-'.$month->format('Y-m').'.pdf');
     }
 
     /**
@@ -507,8 +582,9 @@ class MaController extends Controller
         $maRates = (array) ($agent->ma->fee_menu_rates ?? []);
         $data = $request->validate([
             'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null), new FeeMenuRatesAboveReference('agent', $maRates, 'Based Fee MA')],
+            'disbursement_fee_fixed' => ['nullable', 'integer', 'min:0'],
         ]);
-        $before = $agent->only(['fee_menu_rates']);
+        $before = $agent->only(['fee_menu_rates', 'disbursement_fee_fixed']);
         $agent->forceFill($data)->save();
         $feeSync->resyncAgent($agent);
         $audit->record('ma.agent_fee_updated', $agent, $before, $agent->only(array_keys($before)));
@@ -1065,12 +1141,14 @@ class MaController extends Controller
             });
     }
 
-    private function cachedAnalytics(string $key, array $filters, \Closure $callback): array
+    private function cachedAnalytics(string $key, array $filters, \Closure $callback, int $ttl = 180): array
     {
         // 'to' for relative periods (e.g. "this_month") resolves to now() fresh on
         // every request, which would make almost every request a unique cache key.
-        // Bucket from/to to the nearest 3-minute window (matching the TTL below) so
-        // requests landing in the same window actually share a cached result.
+        // Bucket from/to to the nearest 3-minute window so requests landing in the
+        // same window can still share a cached result even when $ttl is shorter
+        // (a shorter TTL just means the entry expires - and gets recomputed -
+        // before the bucket rolls over; harmless, not a bug).
         $bucketed = $filters;
         foreach (['from', 'to'] as $field) {
             if (! empty($bucketed[$field])) {
@@ -1084,7 +1162,7 @@ class MaController extends Controller
         // serialize()/unserialize() round-trip does not reliably reconstruct
         // Collections of stdClass query rows, producing "incomplete object"
         // data once a cache entry is read back warm.
-        return Cache::remember($cacheKey, 180, fn () => json_decode(json_encode($callback()), true));
+        return Cache::remember($cacheKey, $ttl, fn () => json_decode(json_encode($callback()), true));
     }
 
     /**

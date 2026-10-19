@@ -16,6 +16,7 @@ use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -86,7 +87,7 @@ class SuperadminController extends Controller
             'agents' => $agents,
             'users' => $users,
             'timerMinutes' => (int) PaygridSetting::value('ticket_pending_minutes', '40'),
-            'summary' => $this->summary(),
+            'summary' => $page === 'dashboard-fee' ? $this->summary() : [],
             'filters' => compact('search', 'type', 'status', 'role', 'maId', 'agentId'),
             'feeMenus' => $feeMenus,
             'feeMenuRows' => FeeMenu::query()->orderBy('sort_order')->get(),
@@ -332,17 +333,23 @@ class SuperadminController extends Controller
 
     private function summary(): array
     {
-        $row = TopupRequest::query()
-            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as total")
-            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as success_volume")
-            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN fee_amount ELSE 0 END), 0) as fee_total")
-            ->first();
+        // Lifetime aggregate over the whole topup_requests table (500k+ rows and
+        // growing) - only needed on the dashboard-fee tab, so the caller gates
+        // this, and the result is cached since it's identical for every
+        // superadmin viewing that tab at the same time.
+        return Cache::remember('superadmin:dashboard-summary', 60, function () {
+            $row = TopupRequest::query()
+                ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as total")
+                ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as success_volume")
+                ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN fee_amount ELSE 0 END), 0) as fee_total")
+                ->first();
 
-        return [
-            'total' => (int) $row->total,
-            'success_volume' => (int) $row->success_volume,
-            'fee_total' => (int) $row->fee_total,
-        ];
+            return [
+                'total' => (int) $row->total,
+                'success_volume' => (int) $row->success_volume,
+                'fee_total' => (int) $row->fee_total,
+            ];
+        });
     }
 
     private function menus(): array

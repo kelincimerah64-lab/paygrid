@@ -28,6 +28,7 @@ class MerchantTicket extends Model
         'last_message_at',
         'closed_at',
         'closed_by_user_id',
+        'internal_note',
         'wa_active_message_id',
         'wa_active_chat_id',
         'wa_reminder_stage',

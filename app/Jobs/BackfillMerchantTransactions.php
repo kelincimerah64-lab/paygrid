@@ -250,7 +250,7 @@ class BackfillMerchantTransactions implements ShouldQueue
 
     private function pullTransactions(GatewayClientInterface $client, Merchant $merchant, array $filters): array
     {
-        if ($merchant->gateway !== 'hilogate') {
+        if (! in_array($merchant->gateway, ['hilogate', 'magnetopay'], true)) {
             return $client->pullTransactions($merchant, $filters);
         }
 
@@ -266,7 +266,7 @@ class BackfillMerchantTransactions implements ShouldQueue
      */
     private function modesToTry(Merchant $merchant): array
     {
-        if ($merchant->gateway !== 'hilogate') {
+        if (! in_array($merchant->gateway, ['hilogate', 'magnetopay'], true)) {
             return [null];
         }
 

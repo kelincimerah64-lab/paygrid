@@ -62,7 +62,7 @@ class MerchantRegistrationWorkflowController extends Controller
         $request->merge(['fee_menu_rates' => $rates]);
         $agentRates = (array) ($registration->agent?->fee_menu_rates ?? []);
         $data = $request->validate([
-            'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay'],
+            'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay,magnetopay'],
             'merchant_type' => ['nullable', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
             'admin_email' => ['required', 'email', 'max:160'],

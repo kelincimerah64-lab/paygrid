@@ -41,6 +41,58 @@ class MerchantTicketController extends Controller
         ]);
     }
 
+    /**
+     * Simplified create flow: just a description + attachments, no
+     * category/department wizard - lives alongside index()/store() rather
+     * than replacing them, so the original wizard stays intact and reachable
+     * if it's ever needed again (it's currently just unlinked from the
+     * merchant Admin/CS menus - see MenuBuilder::merchantAdmin()/merchantCs()).
+     * Reuses the exact same MerchantTicket/MerchantTicketMessage model, the
+     * existing chat thread view (show()), and MerchantTicketService::create()
+     * - just with a fixed 'general' department/category so it never qualifies
+     * for pilot approval or WhatsApp-group notification (see
+     * MerchantTicketService::PILOT_APPROVAL_CATEGORIES).
+     */
+    public function createSimple(Request $request, Merchant $merchant, MenuBuilder $menus): View
+    {
+        abort_unless($merchant->general_ticket_enabled, 404);
+
+        return view('paygrid.merchant-ticket-simple-create', [
+            'roleLabel' => $merchant->name.' - Tickets',
+            'merchant' => $merchant,
+            'menus' => $this->menusFor($request, $merchant, $menus),
+            'active' => $this->activeFor($request),
+            'tickets' => MerchantTicket::query()
+                ->where('merchant_id', $merchant->id)
+                ->where('department', MerchantTicketService::SIMPLE_DEPARTMENT)
+                ->latest('last_message_at')
+                ->paginate(config('paygrid.reports.default_page_size', 50))
+                ->withQueryString(),
+        ]);
+    }
+
+    public function storeSimple(Request $request, Merchant $merchant, MerchantTicketService $tickets, AuditLogService $audit): RedirectResponse
+    {
+        abort_unless($merchant->general_ticket_enabled, 404);
+
+        $validated = $request->validate([
+            'description' => ['required', 'string', 'max:2000'],
+            'attachments' => ['nullable', 'array', 'max:5'],
+            'attachments.*' => ['mimes:jpg,jpeg,png,pdf,mp4', 'max:10240'],
+        ]);
+
+        $data = [
+            'department' => MerchantTicketService::SIMPLE_DEPARTMENT,
+            'category' => MerchantTicketService::SIMPLE_DEPARTMENT,
+            'description' => $validated['description'],
+        ];
+
+        $ticket = $tickets->create($merchant, $request->user(), $data, $request->file('attachments', []));
+        $audit->record('merchant_ticket.created', $ticket, null, $ticket->only(['merchant_id', 'department', 'category', 'ticket_no']));
+
+        return redirect()->route('merchant.tickets.show', [$merchant, $ticket])->with('status', 'Tiket berhasil dibuat: '.$ticket->ticket_no);
+    }
+
     public function store(Request $request, Merchant $merchant, MerchantTicketService $tickets, AuditLogService $audit): RedirectResponse
     {
         abort_unless($merchant->general_ticket_enabled, 404);
@@ -89,6 +141,16 @@ class MerchantTicketController extends Controller
 
         $tickets->markViewed($ticket, $request->user());
 
+        if ($ticket->department === MerchantTicketService::SIMPLE_DEPARTMENT) {
+            return view('paygrid.merchant-ticket-show-toko', [
+                'roleLabel' => $merchant->name.' - Tickets',
+                'merchant' => $merchant,
+                'menus' => $this->menusFor($request, $merchant, $menus),
+                'active' => $this->activeFor($request),
+                'ticket' => $ticket->load('claimedBy'),
+            ]);
+        }
+
         return view('paygrid.merchant-ticket-show', [
             'roleLabel' => $merchant->name.' - Tickets',
             'merchant' => $merchant,
@@ -118,6 +180,7 @@ class MerchantTicketController extends Controller
     {
         abort_unless($merchant->general_ticket_enabled, 404);
         abort_unless((int) $ticket->merchant_id === (int) $merchant->id, 404);
+        abort_if($ticket->department === MerchantTicketService::SIMPLE_DEPARTMENT, 404);
         abort_if($ticket->status === 'closed', 422, 'Tiket sudah ditutup.');
 
         $data = $request->validate(['body' => ['required', 'string', 'max:2000']]);
@@ -130,6 +193,7 @@ class MerchantTicketController extends Controller
     {
         abort_unless($merchant->general_ticket_enabled, 404);
         abort_unless((int) $ticket->merchant_id === (int) $merchant->id, 404);
+        abort_if($ticket->department === MerchantTicketService::SIMPLE_DEPARTMENT, 404);
         abort_unless($message->merchant_ticket_id === $ticket->id && ! $message->is_internal, 404);
 
         $data = $request->validate(['body' => ['required', 'string', 'max:2000']]);
@@ -138,7 +202,7 @@ class MerchantTicketController extends Controller
         return back()->with('status', 'Balasan diperbarui.');
     }
 
-    public function attachment(Merchant $merchant, MerchantTicket $ticket, int $index): StreamedResponse
+    public function attachment(Request $request, Merchant $merchant, MerchantTicket $ticket, int $index): StreamedResponse
     {
         abort_unless($merchant->general_ticket_enabled, 404);
         abort_unless((int) $ticket->merchant_id === (int) $merchant->id, 404);
@@ -147,6 +211,11 @@ class MerchantTicketController extends Controller
         abort_unless($attachment && isset($attachment['path']), 404);
         abort_unless(Storage::disk($attachment['disk'])->exists($attachment['path']), 404);
 
-        return Storage::disk($attachment['disk'])->download($attachment['path'], $attachment['name'] ?? basename($attachment['path']));
+        $disk = Storage::disk($attachment['disk']);
+        $name = $attachment['name'] ?? basename($attachment['path']);
+
+        return $request->boolean('download')
+            ? $disk->download($attachment['path'], $name)
+            : $disk->response($attachment['path'], $name);
     }
 }

@@ -17,8 +17,9 @@ use Illuminate\Support\Facades\Log;
  * Hilogate's /api/v1/withdrawals has no date filter and returns a merchant's
  * full history newest-first, so this pages through it only until it reaches a
  * withdrawal id already stored locally - the normal case is a 1-page, mostly
- * no-op run. Only Hilogate merchants have this endpoint; other gateways are
- * skipped until/unless they expose an equivalent.
+ * no-op run. Only Hilogate (and its magnetopay white-label) merchants have
+ * this endpoint; other gateways are skipped until/unless they expose an
+ * equivalent.
  */
 class SyncMerchantWithdrawals implements ShouldQueue
 {
@@ -34,7 +35,7 @@ class SyncMerchantWithdrawals implements ShouldQueue
     {
         $merchant = Merchant::query()->find($this->merchantId);
 
-        if (! $merchant || $merchant->gateway !== 'hilogate' || ! $merchant->merchant_id) {
+        if (! $merchant || ! in_array($merchant->gateway, ['hilogate', 'magnetopay'], true) || ! $merchant->merchant_id) {
             return;
         }
 
@@ -59,7 +60,7 @@ class SyncMerchantWithdrawals implements ShouldQueue
                         ['gateway_withdrawal_id' => $row['id']],
                         [
                             'merchant_id' => $merchant->id,
-                            'gateway' => 'hilogate',
+                            'gateway' => $merchant->gateway,
                             'ref_id' => $row['ref_id'] ?? null,
                             'status' => $row['status'] ?? 'UNKNOWN',
                             'amount' => (int) ($row['amount'] ?? 0),

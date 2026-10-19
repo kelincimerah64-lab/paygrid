@@ -90,7 +90,7 @@
         <div class="ma-flow-head">
             <div>
                 <h2>Transaction Flow</h2>
-                <span class="muted">Today vs Kemarin (WIB)</span>
+                <span class="muted" id="ma-flow-subtitle">Today vs Kemarin (WIB)</span>
             </div>
             <div class="ma-flow-controls">
                 <div class="ma-tabs" data-flow-metric-group><button class="btn compact-btn active" type="button" data-flow-metric="volume">Volume</button><button class="btn compact-btn" type="button" data-flow-metric="withdrawal">Withdrawal</button><button class="btn compact-btn" type="button" data-flow-metric="pending_amount">Pending Amount</button><button class="btn compact-btn" type="button" data-flow-metric="pending_trx">Pending TRX</button></div>
@@ -340,7 +340,7 @@
         <div class="table-wrap"><table class="table qris-table ma-store-list-table"><thead><tr><th>Toko</th><th>Merchant</th><th>Agen</th><th>Tipe</th><th>Fee</th><th>Aktivitas</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
         @forelse($merchants as $m)
             @php
-                $adminUser = \App\Models\User::query()->where('merchant_id', $m->id)->where('role', 'admin')->where('is_hidden', false)->first();
+                $adminUser = $adminUsersByMerchant->get($m->id);
                 $detailRows = [
                     'Nama Toko' => $m->name,
                     'Slug' => $m->slug,
@@ -406,12 +406,13 @@
         <tr><td><strong>{{ $a->name }}</strong><br><span class="muted">{{ $a->code }}</span></td><td>{{ $a->email ?: '-' }}</td><td>{{ $a->contact ?: '-' }}</td><td>{{ $feeMenus->ratesSummary($a->fee_menu_rates ?? [], 'agent') }}</td><td><span class="badge {{ $a->is_active ? 'ok' : 'danger' }}">{{ $a->is_active ? 'Active' : 'Suspended' }}</span></td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-fee-{{ $a->id }}">Edit Fee</button>
         <div class="approval-modal" id="agent-fee-{{ $a->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Edit Fee Agen</h2><p class="muted" style="margin:4px 0 0">{{ $a->name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><form method="post" action="{{ route('ma.agents.fee.update', $a) }}" class="form-grid pad">@csrf
             @include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $a->fee_menu_rates ?? []])
+            <label>Disbursement Fee (Rp)<input type="number" name="disbursement_fee_fixed" min="0" step="1" value="{{ $a->disbursement_fee_fixed }}" placeholder="1900"></label>
             <div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
     @endforeach</tbody></table></div></section>
 @endif
 
 @if($active === 'create-store')
-    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Toko</h2></div><form method="post" action="{{ route('ma.create-store.store') }}" class="pad" id="create-store-form">@csrf<div class="form-grid create-store-grid"><label>Nama Toko<input name="name" required></label><label>Username<input name="username"></label><label>Engine Name<input name="engine_name"></label><label>Agen<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label><label>Email PIC<div class="multi-field" data-multi-field="pic_email"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="pic@domain.com"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="pic_email"></label><label>Telegram PIC<div class="multi-field" data-multi-field="pic_telegram"><div class="multi-field-row"><input type="text" class="multi-field-input" placeholder="@usernamepic"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="pic_telegram"></label><label>WhatsApp PIC<div class="multi-field" data-multi-field="pic_whatsapp"><div class="multi-field-row"><input type="text" class="multi-field-input" placeholder="0812xxxxxxx"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="pic_whatsapp"></label><label>Email Admin<div class="multi-field" data-multi-field="admin_email" data-mode="array"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="admin@domain.com" required><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div></label><label>Email CS<div class="multi-field" data-multi-field="cs_email"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="cs@domain.com"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="cs_email"></label><label>Nomor Kontak<input name="phone"></label><label>Server<select name="gateway"><option value="hilogate">hilogate</option><option value="artageto">artageto</option></select></label><label>Merchant ID<input name="merchant_id" placeholder="Kosongkan jika belum real"></label><label>Merchant Key<input name="merchant_key" placeholder="Kosongkan jika belum real"></label><label>Callback URL<input name="transaction_callback_url" value="{{ url('/api/callbacks/hilogate/transaction') }}"></label><label>Withdrawal Callback<input name="withdrawal_callback_url" value="{{ url('/api/callbacks/hilogate/withdrawal') }}"></label><label>API IP Whitelist<div class="multi-field" data-multi-field="api_ip_whitelist"><div class="multi-field-row"><input type="text" class="multi-field-input" value="15.232.137.74" placeholder="103.10.20.30"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="api_ip_whitelist"></label>
+    <section class="card qris-panel section"><div class="qris-toolbar"><h2>Create Toko</h2></div><form method="post" action="{{ route('ma.create-store.store') }}" class="pad" id="create-store-form">@csrf<div class="form-grid create-store-grid"><label>Nama Toko<input name="name" required></label><label>Username<input name="username"></label><label>Engine Name<input name="engine_name"></label><label>Agen<select name="agent_id" required>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label><label>Email PIC<div class="multi-field" data-multi-field="pic_email"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="pic@domain.com"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="pic_email"></label><label>Telegram PIC<div class="multi-field" data-multi-field="pic_telegram"><div class="multi-field-row"><input type="text" class="multi-field-input" placeholder="@usernamepic"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="pic_telegram"></label><label>WhatsApp PIC<div class="multi-field" data-multi-field="pic_whatsapp"><div class="multi-field-row"><input type="text" class="multi-field-input" placeholder="0812xxxxxxx"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="pic_whatsapp"></label><label>Email Admin<div class="multi-field" data-multi-field="admin_email" data-mode="array"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="admin@domain.com" required><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div></label><label>Email CS<div class="multi-field" data-multi-field="cs_email"><div class="multi-field-row"><input type="email" class="multi-field-input" placeholder="cs@domain.com"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="cs_email"></label><label>Nomor Kontak<input name="phone"></label><label>Server<select name="gateway"><option value="hilogate">hilogate</option><option value="artageto">artageto</option><option value="magnetopay">magnetopay</option></select></label><label>Merchant ID<input name="merchant_id" placeholder="Kosongkan jika belum real"></label><label>Merchant Key<input name="merchant_key" placeholder="Kosongkan jika belum real"></label><label>Callback URL<input name="transaction_callback_url" value="{{ url('/api/callbacks/hilogate/transaction') }}"></label><label>Withdrawal Callback<input name="withdrawal_callback_url" value="{{ url('/api/callbacks/hilogate/withdrawal') }}"></label><label>API IP Whitelist<div class="multi-field" data-multi-field="api_ip_whitelist"><div class="multi-field-row"><input type="text" class="multi-field-input" value="15.232.137.74" placeholder="103.10.20.30"><button type="button" class="multi-field-toggle" data-action="add">+</button></div></div><input type="hidden" name="api_ip_whitelist"></label>
         <label>Tipe Toko<select name="merchant_type" id="create-store-type" onchange="paygridToggleEngineType(this, 'create-store-engine-type')"><option value="cm">CM</option><option value="script">Engine</option></select></label>
         <label>Engine Type<select name="engine_type" id="create-store-engine-type" disabled><option value="sc">Script</option><option value="api">API</option></select></label>
         @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus])
@@ -738,6 +739,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 pending_trx: ['todayPendingTrx', 'yesterdayPendingTrx'],
             };
             const metricLabel = { volume: 'Volume', withdrawal: 'Withdrawal', pending_amount: 'Pending Amount', pending_trx: 'Pending TRX' };
+            const flowSubtitle = document.getElementById('ma-flow-subtitle');
             let metric = 'volume';
             let range = '1d';
 
@@ -758,13 +760,15 @@ document.addEventListener('DOMContentLoaded', () => {
             function renderFlow() {
                 if (range === '7d' || range === 'month') {
                     const field = dailyField[metric];
-                    const take = range === '7d' ? 7 : dailySeries.length;
-                    const slice = dailySeries.slice(-take);
-                    flowChart.data.labels = slice.map((row) => row.date);
-                    flowChart.data.datasets[0].data = slice.map((row) => row[field] ?? 0);
+                    const periodLen = range === '7d' ? 7 : 30;
+                    const currentSlice = dailySeries.slice(-periodLen);
+                    const previousSlice = dailySeries.slice(-periodLen * 2, -periodLen);
+                    flowChart.data.labels = currentSlice.map((row) => row.date);
+                    flowChart.data.datasets[0].data = currentSlice.map((row) => row[field] ?? 0);
                     flowChart.data.datasets[0].label = metricLabel[metric];
-                    flowChart.data.datasets[1].data = [];
-                    flowChart.data.datasets[1].label = '';
+                    flowChart.data.datasets[1].data = previousSlice.map((row) => row[field] ?? 0);
+                    flowChart.data.datasets[1].label = metricLabel[metric] + (range === '7d' ? ' (Minggu Lalu)' : ' (Bulan Lalu)');
+                    flowSubtitle.textContent = range === '7d' ? 'Minggu Ini vs Minggu Lalu (WIB)' : 'Bulan Ini vs Bulan Lalu (WIB)';
                 } else {
                     const currentHour = Number.isInteger(hourly.currentHour) ? hourly.currentHour : 23;
                     const [todayKey, yesterdayKey] = hourlyField[metric];
@@ -776,6 +780,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     flowChart.data.datasets[0].label = 'Hari ini';
                     flowChart.data.datasets[1].data = yesterday.slice(0, currentHour + 1);
                     flowChart.data.datasets[1].label = 'Kemarin';
+                    flowSubtitle.textContent = 'Today vs Kemarin (WIB)';
                 }
                 flowChart.update();
             }

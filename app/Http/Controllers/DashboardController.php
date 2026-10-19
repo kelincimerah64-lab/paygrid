@@ -155,6 +155,73 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function agentInsentifForm(MenuBuilder $menus): View
+    {
+        $agent = $this->currentAgent();
+        $merchants = Merchant::query()->where('agent_id', $agent->id)->orderBy('name')->get(['id', 'name', 'slug']);
+
+        return view('paygrid.agent-insentif', [
+            'roleLabel' => $agent->name,
+            'menus' => $menus->agent(),
+            'active' => 'insentif',
+            'agent' => $agent,
+            'merchants' => $merchants,
+            'defaultMonth' => CarbonImmutable::now('Asia/Jakarta')->format('Y-m'),
+        ]);
+    }
+
+    /**
+     * Mirrors agentFee()'s exact fee formula (merchant_mdr_percent -
+     * agent_fee_percent) so this PDF recap can never drift from what the
+     * agent's own Fee page already shows for the same stores/period.
+     */
+    public function agentInsentifPdf(Request $request): \Illuminate\Http\Response
+    {
+        $agent = $this->currentAgent();
+        $data = $request->validate([
+            'store_ids' => ['required', 'array', 'min:1'],
+            'store_ids.*' => ['integer'],
+            'month' => ['required', 'date_format:Y-m'],
+        ]);
+
+        $merchants = Merchant::query()
+            ->where('agent_id', $agent->id)
+            ->whereIn('id', $data['store_ids'])
+            ->orderBy('name')
+            ->get(['id', 'name', 'merchant_mdr_percent', 'agent_fee_percent']);
+        abort_if($merchants->isEmpty(), 404);
+
+        $month = CarbonImmutable::createFromFormat('Y-m', $data['month'], 'Asia/Jakarta');
+        $volumes = TopupRequest::query()
+            ->whereIn('merchant_id', $merchants->pluck('id'))
+            ->where('status', 'success')
+            ->where('submitted_at', '>=', $month->startOfMonth()->utc())
+            ->where('submitted_at', '<=', $month->endOfMonth()->utc())
+            ->selectRaw('merchant_id, COALESCE(SUM(amount), 0) as volume')
+            ->groupBy('merchant_id')
+            ->pluck('volume', 'merchant_id');
+
+        $rows = $merchants->map(function ($m) use ($volumes) {
+            $volume = (int) ($volumes[$m->id] ?? 0);
+
+            return [
+                'name' => $m->name,
+                'volume' => $volume,
+                'fee' => (int) round($volume * ($m->merchant_mdr_percent - $m->agent_fee_percent) / 100),
+            ];
+        });
+
+        $pdf = Pdf::loadView('paygrid.insentif-pdf', [
+            'roleLabel' => 'Agen',
+            'recipientName' => $agent->name,
+            'monthLabel' => $month->format('F Y'),
+            'rows' => $rows,
+            'total' => $rows->sum('fee'),
+        ]);
+
+        return $pdf->download('insentif-agen-'.$month->format('Y-m').'.pdf');
+    }
+
     public function agentSimple(string $page, MenuBuilder $menus): View
     {
         $agent = $this->currentAgent();
@@ -455,12 +522,25 @@ class DashboardController extends Controller
             'period' => $period,
             'requests' => $requests,
             'tickets' => $tickets,
-            'ticketStats' => [
-                'total' => (int) SupportTicket::query()->where('merchant_id', $merchant->id)->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('created_at', [$rangeStart, $rangeEnd]))->count(),
-                'open' => (int) SupportTicket::query()->where('merchant_id', $merchant->id)->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('created_at', [$rangeStart, $rangeEnd]))->whereIn('status', ['not_started', 'open', 'in_progress'])->count(),
-                'done' => (int) SupportTicket::query()->where('merchant_id', $merchant->id)->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('created_at', [$rangeStart, $rangeEnd]))->where('status', 'done')->count(),
-            ],
+            'ticketStats' => $this->supportTicketStats($merchant, $rangeStart, $rangeEnd),
         ]);
+    }
+
+    private function supportTicketStats(Merchant $merchant, $rangeStart, $rangeEnd): array
+    {
+        $row = SupportTicket::query()
+            ->where('merchant_id', $merchant->id)
+            ->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('created_at', [$rangeStart, $rangeEnd]))
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(CASE WHEN status IN ('not_started', 'open', 'in_progress') THEN 1 ELSE 0 END) as open")
+            ->selectRaw("SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done")
+            ->first();
+
+        return [
+            'total' => (int) $row->total,
+            'open' => (int) $row->open,
+            'done' => (int) $row->done,
+        ];
     }
 
     private function transactionBaseQuery(Merchant $merchant, ?string $from, ?string $to, string $search): \Illuminate\Database\Eloquent\Builder

@@ -26,6 +26,7 @@ class Agent extends Model
         'default_agent_fee_percent',
         'fee_menu',
         'fee_menu_rates',
+        'disbursement_fee_fixed',
         'is_active',
     ];
 

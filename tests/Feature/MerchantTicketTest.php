@@ -531,6 +531,69 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->get(route('merchant.tickets.attachment', [$merchant, $ticket, 2]))->assertNotFound();
     }
 
+    public function test_cs_pusat_can_view_ticket_attachment_without_merchant_scope(): void
+    {
+        Storage::fake('local');
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+        $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
+
+        $this->actingAs($admin)->post(route('merchant.tickets.simple.store', $merchant), [
+            'description' => 'Butuh bantuan, ada bukti.',
+            'attachments' => [UploadedFile::fake()->image('bukti.jpg')],
+        ])->assertRedirect();
+
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+        $this->assertCount(1, $ticket->attachments);
+
+        $this->actingAs($csPusat)->get(route('dept-tickets.attachment', [$ticket, 0]))->assertOk();
+        $this->actingAs($csPusat)->get(route('dept-tickets.attachment', [$ticket, 1]))->assertNotFound();
+    }
+
+    public function test_toko_ticket_has_no_chat_and_note_is_visible_to_merchant_once_filled(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+        $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
+
+        $this->actingAs($admin)->post(route('merchant.tickets.simple.store', $merchant), [
+            'description' => 'Butuh bantuan.',
+        ])->assertRedirect();
+        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+
+        // No chat: reply endpoints are blocked for both sides on a toko ticket.
+        $this->actingAs($admin)->post(route('merchant.tickets.reply', [$merchant, $ticket]), ['body' => 'halo'])
+            ->assertNotFound();
+        $this->actingAs($csPusat)->post(route('dept-tickets.reply', $ticket), ['body' => 'halo'])
+            ->assertNotFound();
+
+        // Merchant doesn't see the note yet.
+        $this->actingAs($admin)->get(route('merchant.tickets.show', [$merchant, $ticket]))
+            ->assertOk()->assertDontSee('Catatan Dari Tim Support');
+
+        $this->actingAs($csPusat)->post(route('dept-tickets.status', $ticket), [
+            'status' => 'closed',
+            'note' => 'Sudah dicek, saldo masuk.',
+        ])->assertRedirect();
+
+        $ticket->refresh();
+        $this->assertSame('closed', $ticket->status);
+        $this->assertSame('Sudah dicek, saldo masuk.', $ticket->internal_note);
+        $this->assertSame($csPusat->id, $ticket->claimed_by_user_id);
+
+        $this->actingAs($admin)->get(route('merchant.tickets.show', [$merchant, $ticket]))
+            ->assertOk()->assertSee('Sudah dicek, saldo masuk.')->assertSee('CS Pusat');
+
+        // Reopen keeps the note and flips status back.
+        $this->actingAs($csPusat)->post(route('dept-tickets.status', $ticket), [
+            'status' => 'in_progress',
+            'note' => $ticket->internal_note,
+        ])->assertRedirect();
+        $this->assertSame('in_progress', $ticket->fresh()->status);
+    }
+
     public function test_transaksi_card_stores_structured_metadata(): void
     {
         $this->seed();

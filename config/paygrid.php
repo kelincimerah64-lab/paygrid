@@ -23,6 +23,18 @@ return [
             'environment' => env('ARTAGETO_ENVIRONMENT', env('HILOGATE_ENVIRONMENT', 'production')),
             'timeout' => (int) env('ARTAGETO_TIMEOUT_SECONDS', 20),
         ],
+        // White-label of the same Hilogate backend on a different domain (UG
+        // Ultimate's reseller instance) - same merchant_id/secret_key and API
+        // shape as hilogate, only the host differs, so it's served by
+        // HilogateClient with this config block swapped in per-merchant.
+        'magnetopay' => [
+            'base_url' => rtrim((string) env('MAGNETOPAY_BASE_URL', 'https://app.magnetopay.com/api'), '/'),
+            'environment' => env('MAGNETOPAY_ENVIRONMENT', env('HILOGATE_ENVIRONMENT', 'production')),
+            'timeout' => (int) env('MAGNETOPAY_TIMEOUT_SECONDS', env('HILOGATE_TIMEOUT_SECONDS', 4)),
+            'ca_bundle' => env('MAGNETOPAY_CA_BUNDLE'),
+            'resolve_ip' => env('MAGNETOPAY_RESOLVE_IP'),
+            'pull_mode' => env('MAGNETOPAY_PULL_MODE', env('HILOGATE_PULL_MODE', 'qris')),
+        ],
     ],
     'topup' => [
         'minimum_amount' => (int) env('PAYGRID_TOPUP_MINIMUM_AMOUNT', 10000),

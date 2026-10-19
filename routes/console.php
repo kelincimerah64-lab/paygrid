@@ -14,7 +14,7 @@ Artisan::command('inspire', function () {
 Artisan::command('gateway:sync-transactions {--merchant=} {--from=} {--to=} {--max-pages=} {--page-size=} {--queue=default}', function (\App\Services\GatewaySyncDispatcher $dispatcher) {
     $query = Merchant::query()
         ->where('approval_status', 'approved')
-        ->whereIn('gateway', ['hilogate', 'artageto'])
+        ->whereIn('gateway', ['hilogate', 'artageto', 'magnetopay'])
         ->whereNotNull('merchant_id')
         ->whereNotNull('merchant_key')
         ->where(fn ($scope) => $scope
@@ -56,7 +56,7 @@ Artisan::command('gateway:sync-transactions {--merchant=} {--from=} {--to=} {--m
 Artisan::command('gateway:sync-withdrawals {--merchant=}', function () {
     $query = Merchant::query()
         ->where('approval_status', 'approved')
-        ->where('gateway', 'hilogate')
+        ->whereIn('gateway', ['hilogate', 'magnetopay'])
         ->whereNotNull('merchant_id')
         ->whereNotNull('merchant_key');
 
@@ -81,7 +81,7 @@ Artisan::command('gateway:sync-withdrawals {--merchant=}', function () {
 Artisan::command('gateway:sync-balances {--merchant=}', function (\App\Services\GatewayBalanceService $balances) {
     $query = Merchant::query()
         ->where('approval_status', 'approved')
-        ->whereIn('gateway', ['hilogate', 'artageto'])
+        ->whereIn('gateway', ['hilogate', 'artageto', 'magnetopay'])
         ->whereNotNull('merchant_id')
         ->whereNotNull('merchant_key');
 
@@ -114,7 +114,7 @@ Artisan::command('gateway:sync-balances {--merchant=}', function (\App\Services\
 Artisan::command('gateway:sync-settlements {--merchant=} {--status=} {--page-size=100}', function (\App\Services\MerchantSettlementService $settlements) {
     $query = Merchant::query()
         ->where('approval_status', 'approved')
-        ->where('gateway', 'hilogate')
+        ->whereIn('gateway', ['hilogate', 'magnetopay'])
         ->whereNotNull('merchant_id')
         ->whereNotNull('merchant_key');
 

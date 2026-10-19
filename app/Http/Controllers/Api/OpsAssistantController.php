@@ -44,7 +44,7 @@ class OpsAssistantController extends Controller
             'agent_name' => ['nullable', 'string', 'max:120'],
             'admin_email' => ['required', 'email', 'max:160', 'unique:users,email'],
             'cs_email' => ['nullable', 'email', 'max:255'],
-            'gateway' => ['nullable', Rule::in(['hilogate', 'artageto', 'alpha', 'kingspay'])],
+            'gateway' => ['nullable', Rule::in(['hilogate', 'artageto', 'alpha', 'kingspay', 'magnetopay'])],
             'merchant_type' => ['nullable', Rule::in(['cm', 'script'])],
             'engine_type' => ['nullable', Rule::in(['sc', 'api'])],
             'merchant_id' => ['nullable', 'string', 'max:160'],

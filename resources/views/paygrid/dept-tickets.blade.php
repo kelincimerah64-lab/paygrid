@@ -1,10 +1,10 @@
 @extends('layouts.paygrid')
 
 @php
-    $statusLabel = fn ($status) => App\Support\PayGridLabels::status($status);
+    $statusLabel = fn ($status) => match ($status) { 'open' => 'Belum Diproses', 'closed' => 'Selesai', default => App\Support\PayGridLabels::status($status) };
     $statusClass = fn ($status) => match ($status) {
         'closed' => 'ok',
-        'in_progress' => 'warn',
+        'in_progress', 'open' => 'warn',
         default => 'danger',
     };
     $deptLabel = fn ($dept) => app(App\Services\MerchantTicketService::class)->departmentLabel($dept);
@@ -32,12 +32,13 @@
             <option value="cs" @selected($departmentFilter === 'cs')>CS</option>
             <option value="tech" @selected($departmentFilter === 'tech')>Tech Support</option>
             <option value="finance" @selected($departmentFilter === 'finance')>Finance</option>
+            <option value="general" @selected($departmentFilter === 'general')>Tiket Toko</option>
         </select>
         <select name="status">
             <option value="all" @selected($status === 'all')>Semua status</option>
-            <option value="open" @selected($status === 'open')>Open</option>
-            <option value="in_progress" @selected($status === 'in_progress')>In Progress</option>
-            <option value="closed" @selected($status === 'closed')>Closed</option>
+            <option value="open" @selected($status === 'open')>Belum Diproses</option>
+            <option value="in_progress" @selected($status === 'in_progress')>Diproses</option>
+            <option value="closed" @selected($status === 'closed')>Selesai</option>
         </select>
         <button class="btn primary">Cari</button>
         <a class="btn" href="{{ route('dept-tickets.index') }}">Reset</a>
@@ -45,27 +46,22 @@
 </form>
 
 <section class="card qris-panel section">
-    <div class="table-wrap">
-        <table class="table qris-table dept-ticket-list-table">
-            <thead>
-                <tr><th>Toko</th><th>Ticket</th><th>Tujuan</th><th>Menu</th><th>Update Terakhir</th><th>Status</th><th></th></tr>
-            </thead>
-            <tbody>
-            @forelse($tickets as $ticket)
-                <tr>
-                    <td><strong>{{ $ticket->merchant?->name ?: '-' }}</strong></td>
-                    <td>{{ $ticket->ticket_no }}</td>
-                    <td>{{ $deptLabel($ticket->department) }}</td>
-                    <td><span class="truncate ref-line">{{ $categoryLabel($ticket) }}</span></td>
-                    <td><span class="muted">{{ $ticket->last_message_at?->timezone('Asia/Jakarta')->format('d M Y H:i') ?? '-' }}</span></td>
-                    <td><span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span></td>
-                    <td><a class="btn compact-btn" href="{{ route('dept-tickets.show', $ticket) }}">Buka</a></td>
-                </tr>
-            @empty
-                <tr><td colspan="7" class="empty">Tidak ada tiket.</td></tr>
-            @endforelse
-            </tbody>
-        </table>
+    <div class="ticket-list">
+        @forelse($tickets as $ticket)
+            <a class="ticket-list-row" href="{{ route('dept-tickets.show', $ticket) }}">
+                <div class="ticket-list-icon" aria-hidden="true">{{ strtoupper(mb_substr($ticket->merchant?->name ?: '-', 0, 1)) }}</div>
+                <div class="ticket-list-main">
+                    <div class="ticket-list-no">{{ $ticket->ticket_no }} &middot; {{ $ticket->merchant?->name ?: '-' }}</div>
+                    <div class="ticket-list-sub"><span>{{ $deptLabel($ticket->department) }}</span><span>&middot;</span><span class="truncate ref-line">{{ $categoryLabel($ticket) }}</span></div>
+                </div>
+                <div class="ticket-list-meta">
+                    <span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span>
+                    <span class="ticket-list-time">{{ $ticket->last_message_at?->timezone('Asia/Jakarta')->format('d M Y H:i') ?? '-' }}</span>
+                </div>
+            </a>
+        @empty
+            <div class="ticket-list-empty">Tidak ada tiket.</div>
+        @endforelse
     </div>
     <div class="qris-pagination pad">
         <div class="pager-summary">Showing {{ $tickets->firstItem() ?? 0 }} to {{ $tickets->lastItem() ?? 0 }}</div>

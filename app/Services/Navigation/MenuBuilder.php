@@ -5,6 +5,7 @@ namespace App\Services\Navigation;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
 use App\Models\SupportTicket;
+use Illuminate\Support\Facades\Cache;
 
 class MenuBuilder
 {
@@ -29,6 +30,7 @@ class MenuBuilder
             ['key' => 'fee', 'label' => 'Fee', 'url' => route('ma.fee')],
             ['key' => 'approval', 'label' => 'Request Approval', 'url' => route('ma.approvals')],
             ['key' => 'mapping', 'label' => 'Mapping Agen', 'url' => route('ma.mapping')],
+            ['key' => 'insentif', 'label' => 'Form Insentif', 'url' => route('ma.insentif')],
             ['key' => 'stores', 'label' => 'List Toko', 'url' => route('ma.stores')],
             ['key' => 'agents', 'label' => 'Agen', 'url' => route('ma.agents')],
             ['key' => 'create-store', 'label' => 'Create Toko', 'url' => route('ma.create-store')],
@@ -45,6 +47,7 @@ class MenuBuilder
         return [
             ['key' => 'overview', 'label' => 'Overview', 'url' => route('agent.overview')],
             ['key' => 'fee', 'label' => 'Fee', 'url' => route('agent.fee')],
+            ['key' => 'insentif', 'label' => 'Form Insentif', 'url' => route('agent.insentif')],
             ['key' => 'create-store', 'label' => 'Create Toko', 'url' => route('agent.create-store')],
             ['key' => 'status-request', 'label' => 'Status Request', 'url' => route('agent.requests')],
             ['key' => 'monitor', 'label' => 'Monitor CS', 'url' => route('cs-scope.index')],
@@ -69,12 +72,19 @@ class MenuBuilder
 
     public function centerSupport(): array
     {
-        $pendingAuto = SupportTicket::query()->whereNotNull('submitted_to_center_at')->whereNull('center_updated_at')->count();
-        $openManual = MerchantTicket::query()->whereIn('status', ['open', 'in_progress'])->count();
+        // This menu is rebuilt on every CS Pusat page nav (it's the sidebar),
+        // so these 3 badge counts would otherwise re-run on every click -
+        // cached briefly so a burst of navigation shares one count.
+        [$pendingAuto, $openManual, $openSupport] = Cache::remember('center-support:sidebar-badges', 10, fn () => [
+            SupportTicket::query()->whereNotNull('submitted_to_center_at')->whereNull('center_updated_at')->count(),
+            MerchantTicket::query()->where('department', '!=', 'general')->whereIn('status', ['open', 'in_progress'])->count(),
+            MerchantTicket::query()->where('department', 'general')->whereIn('status', ['open', 'in_progress'])->count(),
+        ]);
 
         return [
             ['key' => 'tickets', 'label' => 'Tickets', 'url' => route('center-support.tickets'), 'badge' => $pendingAuto ?: null],
             ['key' => 'manual-tickets', 'label' => 'Manual Tickets', 'url' => route('dept-tickets.index'), 'badge' => $openManual ?: null],
+            ['key' => 'merchant-support', 'label' => 'Tiket Toko', 'url' => route('dept-tickets.index', ['department' => 'general']), 'badge' => $openSupport ?: null],
             ['key' => 'bot-monitoring', 'label' => 'Monitoring Bot Telegram', 'url' => route('center-support.bot-monitoring')],
         ];
     }
@@ -95,7 +105,7 @@ class MenuBuilder
         }
 
         if ($merchant->general_ticket_enabled) {
-            $menu[] = ['key' => 'support-ticket', 'label' => 'Create Ticket', 'url' => route('merchant.tickets.index', $merchant)];
+            $menu[] = ['key' => 'support-ticket', 'label' => 'Create Ticket', 'url' => route('merchant.tickets.simple.create', $merchant)];
         }
 
         return $menu;
@@ -129,7 +139,7 @@ class MenuBuilder
         $menu[] = ['key' => 'cs', 'label' => 'Toko CS', 'url' => route('merchant.cs.tickets', $merchant)];
 
         if ($merchant->general_ticket_enabled) {
-            $menu[] = ['key' => 'support-ticket', 'label' => 'Create Ticket', 'url' => route('merchant.tickets.index', $merchant)];
+            $menu[] = ['key' => 'support-ticket', 'label' => 'Create Ticket', 'url' => route('merchant.tickets.simple.create', $merchant)];
         }
 
         return $menu;

@@ -94,7 +94,7 @@ class SyncMerchantTransactions implements ShouldQueue
                 $rollups->rebuildMerchantDay($merchant, $date, $merchant->gateway.'_pull');
             }
 
-            if (in_array($merchant->gateway, ['hilogate', 'artageto'], true)) {
+            if (in_array($merchant->gateway, ['hilogate', 'artageto', 'magnetopay'], true)) {
                 try {
                     $balances->refresh($merchant);
                 } catch (\Throwable $exception) {
@@ -228,7 +228,7 @@ class SyncMerchantTransactions implements ShouldQueue
 
     private function pullTransactions(GatewayClientInterface $client, Merchant $merchant, array $filters): array
     {
-        if ($merchant->gateway !== 'hilogate') {
+        if (! in_array($merchant->gateway, ['hilogate', 'magnetopay'], true)) {
             return $client->pullTransactions($merchant, $filters);
         }
 
@@ -246,7 +246,7 @@ class SyncMerchantTransactions implements ShouldQueue
      */
     private function modesToTry(Merchant $merchant, ?string $requestedMode): array
     {
-        if ($merchant->gateway !== 'hilogate') {
+        if (! in_array($merchant->gateway, ['hilogate', 'magnetopay'], true)) {
             return [null];
         }
 

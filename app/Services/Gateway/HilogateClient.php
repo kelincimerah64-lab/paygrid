@@ -55,7 +55,7 @@ class HilogateClient implements GatewayClientInterface
 
     public function pullTransactions(Merchant $merchant, array $filters = []): array
     {
-        $mode = (string) ($filters['pull_mode'] ?? config('paygrid.gateway.hilogate.pull_mode', 'qris'));
+        $mode = (string) ($filters['pull_mode'] ?? config('paygrid.gateway.'.$this->configKey($merchant).'.pull_mode', 'qris'));
         $path = $mode === 'transactions'
             ? '/api/v1/transactions'
             : '/api/v1/merchants/'.urlencode((string) $merchant->merchant_id).'/qris';
@@ -178,26 +178,40 @@ class HilogateClient implements GatewayClientInterface
         return array_values(array_filter(array_map('trim', preg_split('/[\n,]+/', (string) $value))));
     }
 
+    /**
+     * UG Ultimate's merchants run on a white-label of this same Hilogate
+     * backend at a different domain (app.magnetopay.com) - same
+     * merchant_id/secret_key and API shape, so they're still served by this
+     * client, just reading the 'magnetopay' config block instead of
+     * 'hilogate' for the handful of settings that differ (host, timeout,
+     * ca_bundle, resolve_ip, pull_mode).
+     */
+    private function configKey(Merchant $merchant): string
+    {
+        return $merchant->gateway === 'magnetopay' ? 'magnetopay' : 'hilogate';
+    }
+
     private function request(Merchant $merchant, string $method, string $path, array $data = []): Response
     {
-        $secret = (string) ($merchant->merchant_key ?: config('paygrid.gateway.hilogate.secret_key'));
-        $merchantId = (string) ($merchant->merchant_id ?: config('paygrid.gateway.hilogate.merchant_id'));
+        $key = $this->configKey($merchant);
+        $secret = (string) ($merchant->merchant_key ?: config("paygrid.gateway.{$key}.secret_key"));
+        $merchantId = (string) ($merchant->merchant_id ?: config("paygrid.gateway.{$key}.merchant_id"));
 
         if ($merchantId === '' || $secret === '') {
             throw new \RuntimeException('Credential Hilogate belum dikonfigurasi.');
         }
 
         $bodyString = $method === 'POST' ? json_encode($data, JSON_THROW_ON_ERROR) : '';
-        $baseUrl = (string) config('paygrid.gateway.hilogate.base_url');
+        $baseUrl = (string) config("paygrid.gateway.{$key}.base_url");
         $host = Str::endsWith($baseUrl, '/api') ? Str::beforeLast($baseUrl, '/api') : $baseUrl;
-        $request = Http::timeout((int) config('paygrid.gateway.hilogate.timeout', 4))
+        $request = Http::timeout((int) config("paygrid.gateway.{$key}.timeout", 4))
             ->retry(2, 500)
             ->acceptJson()
-            ->withOptions($this->curlOptions())
+            ->withOptions($this->curlOptions($key, $host))
             ->withHeaders([
                 'X-Merchant-ID' => $merchantId,
                 'X-Signature' => md5($path.$bodyString.$secret),
-                'X-Environment' => config('paygrid.gateway.hilogate.environment', 'sandbox'),
+                'X-Environment' => config("paygrid.gateway.{$key}.environment", 'sandbox'),
                 'X-Request-ID' => $merchant->slug.'-'.Str::uuid(),
             ]);
 
@@ -206,13 +220,14 @@ class HilogateClient implements GatewayClientInterface
             : $request->get($host.$path, $data)->throw();
     }
 
-    private function curlOptions(): array
+    private function curlOptions(string $key = 'hilogate', ?string $host = null): array
     {
-        $options = ['verify' => config('paygrid.gateway.hilogate.ca_bundle') ?: true];
-        $resolveIp = (string) config('paygrid.gateway.hilogate.resolve_ip');
+        $options = ['verify' => config("paygrid.gateway.{$key}.ca_bundle") ?: true];
+        $resolveIp = (string) config("paygrid.gateway.{$key}.resolve_ip");
 
         if ($resolveIp !== '') {
-            $options['curl'] = [CURLOPT_RESOLVE => ['app.hilogate.com:443:'.$resolveIp]];
+            $hostname = parse_url($host ?? (string) config("paygrid.gateway.{$key}.base_url"), PHP_URL_HOST) ?: 'app.hilogate.com';
+            $options['curl'] = [CURLOPT_RESOLVE => [$hostname.':443:'.$resolveIp]];
         }
 
         return $options;
