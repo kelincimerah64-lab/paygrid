@@ -120,6 +120,27 @@ class PayGridRoutingTest extends TestCase
             ->assertRedirect('/portal/tiktok5000/cs/tickets');
     }
 
+    /**
+     * Regression for a real bug: this app's live-polling JS (data-live-root)
+     * keeps firing background requests on a timer in any tab left open. One of
+     * those hitting a protected route right after a previous session was
+     * invalidated (e.g. mid logout -> login as a different role) gets its URL
+     * stored as url.intended by the auth middleware - and redirect()->intended()
+     * would then land the newly logged-in MA on whatever page a DIFFERENT
+     * role's tab happened to be polling, instead of the MA's own overview.
+     */
+    public function test_ma_login_ignores_stale_intended_url_from_another_role(): void
+    {
+        $this->seed();
+
+        $this->withSession(['url.intended' => route('center-support.tickets')])
+            ->post('/login', [
+                'email' => 'michael@paygrid.local',
+                'password' => config('paygrid.demo_password'),
+            ])
+            ->assertRedirect(route('ma.overview'));
+    }
+
     public function test_script_merchant_cannot_open_cm_only_route(): void
     {
         $this->seed();

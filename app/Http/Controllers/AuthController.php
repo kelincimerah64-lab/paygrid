@@ -16,7 +16,9 @@ class AuthController extends Controller
 {
     public function create(): View|RedirectResponse
     {
-        return Auth::check() ? redirect()->intended($this->homeFor(Auth::user()->role)) : view('paygrid.login');
+        // See the comment in store() - intended() is deliberately avoided here
+        // too, for the same stale-url.intended-from-background-polling reason.
+        return Auth::check() ? redirect($this->homeFor(Auth::user()->role)) : view('paygrid.login');
     }
 
     public function store(Request $request): RedirectResponse
@@ -84,11 +86,15 @@ class AuthController extends Controller
 
         $this->auditAuth('auth.login_success', $request->user(), $request);
 
-        if (in_array($request->user()->role, ['cs', 'finance', 'admin', 'boss', 'readonly_admin', 'readonly_cs'], true)) {
-            return redirect($this->homeFor($request->user()->role));
-        }
-
-        return redirect()->intended($this->homeFor($request->user()->role));
+        // Deliberately not redirect()->intended(): this app's live-polling JS
+        // (data-live-root, paygrid-live.js) keeps background requests firing on
+        // a timer in any tab left open. If one of those hits a protected route
+        // right after a previous session was invalidated (e.g. mid logout ->
+        // login as a different role), Laravel's auth middleware stores that
+        // stale URL as url.intended - and intended() would then land the newly
+        // logged-in user on the PREVIOUS role's page instead of their own.
+        // Always sending to the role's own home sidesteps that entirely.
+        return redirect($this->homeFor($request->user()->role));
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -100,6 +106,7 @@ class AuthController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+        $request->session()->forget('url.intended');
 
         return redirect()->route('login');
     }
