@@ -14,6 +14,7 @@ use App\Rules\FeeMenuRatesAboveReference;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
+use App\Services\Telegram\TelegramBroadcaster;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -24,9 +25,9 @@ use Illuminate\View\View;
 
 class SuperadminController extends Controller
 {
-    public function page(FeeMenuCatalog $feeMenus, string $page = 'dashboard-fee'): View
+    public function page(FeeMenuCatalog $feeMenus, TelegramBroadcaster $telegram, string $page = 'dashboard-fee'): View
     {
-        abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'fee-menu-settings', 'timer-ticket', 'accounts'], true), 404);
+        abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'fee-menu-settings', 'timer-ticket', 'accounts', 'broadcast-telegram'], true), 404);
 
         $search = trim((string) request('q', ''));
         $type = (string) request('type', 'all');
@@ -80,6 +81,7 @@ class SuperadminController extends Controller
                 'fee-menu-settings' => 'Pengaturan Menu Fee',
                 'timer-ticket' => 'Timer Ticket',
                 'accounts' => 'Daftar Account',
+                'broadcast-telegram' => 'Broadcast Telegram',
                 default => 'Dashboard Fee',
             },
             'merchants' => $merchants,
@@ -91,6 +93,8 @@ class SuperadminController extends Controller
             'filters' => compact('search', 'type', 'status', 'role', 'maId', 'agentId'),
             'feeMenus' => $feeMenus,
             'feeMenuRows' => FeeMenu::query()->orderBy('sort_order')->get(),
+            'telegramGroups' => $telegram->groups(),
+            'telegramConfigured' => $telegram->isConfigured(),
         ]);
     }
 
@@ -242,6 +246,32 @@ class SuperadminController extends Controller
         return back()->with('status', 'Timer ticket berhasil disimpan.');
     }
 
+    public function sendTelegramBroadcast(Request $request, TelegramBroadcaster $telegram, AuditLogService $audit): RedirectResponse
+    {
+        $groups = collect($telegram->groups())->keyBy('chat_id');
+        abort_unless($telegram->isConfigured(), 422, 'Broadcast Telegram belum dikonfigurasi.');
+
+        $data = $request->validate([
+            'message' => ['required', 'string', 'max:4096'],
+            'chat_ids' => ['required', 'array', 'min:1'],
+            'chat_ids.*' => ['required', 'string', 'distinct', Rule::in($groups->keys()->all())],
+        ]);
+
+        $results = [];
+        foreach ($data['chat_ids'] as $chatId) {
+            $results[$groups[$chatId]['name']] = $telegram->send($chatId, $data['message']);
+        }
+
+        $audit->record('telegram.broadcast_sent', $request->user(), null, [
+            'message' => $data['message'],
+            'results' => $results,
+        ]);
+
+        $summary = collect($results)->map(fn (bool $sent, string $name) => $name.': '.($sent ? 'terkirim' : 'gagal'))->implode(', ');
+
+        return back()->with('status', 'Broadcast Telegram - '.$summary.'.');
+    }
+
     public function resetAccount(Request $request, User $user, AuditLogService $audit): RedirectResponse
     {
         $data = $request->validate(['password' => ['nullable', 'string', 'min:6', 'max:120']]);
@@ -359,6 +389,7 @@ class SuperadminController extends Controller
             ['key' => 'ma', 'label' => 'MA', 'url' => route('superadmin.page', 'ma')],
             ['key' => 'timer-ticket', 'label' => 'Timer Ticket', 'url' => route('superadmin.page', 'timer-ticket')],
             ['key' => 'accounts', 'label' => 'Daftar Account', 'url' => route('superadmin.page', 'accounts')],
+            ['key' => 'broadcast-telegram', 'label' => 'Broadcast Telegram', 'url' => route('superadmin.page', 'broadcast-telegram')],
         ];
     }
 

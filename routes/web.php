@@ -115,6 +115,7 @@ Route::post('/superadmin/merchant-fee/{merchant}', [SuperadminController::class,
 Route::post('/superadmin/ma-fee/{user}', [SuperadminController::class, 'updateMaFee'])->middleware('throttle:dashboard-writes')->name('superadmin.ma-fee.update');
 Route::post('/superadmin/merchant-group', [SuperadminController::class, 'storeAgent'])->middleware('throttle:dashboard-writes')->name('superadmin.agent.store');
 Route::post('/superadmin/timer-ticket', [SuperadminController::class, 'updateTimer'])->middleware('throttle:dashboard-writes')->name('superadmin.timer-ticket.update');
+Route::post('/superadmin/broadcast-telegram', [SuperadminController::class, 'sendTelegramBroadcast'])->middleware('throttle:dashboard-writes')->name('superadmin.broadcast-telegram.send');
 Route::post('/superadmin/accounts/{user}/reset', [SuperadminController::class, 'resetAccount'])->middleware('throttle:dashboard-writes')->name('superadmin.accounts.reset');
 Route::post('/superadmin/fee-menus', [SuperadminController::class, 'storeFeeMenu'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.store');
 Route::post('/superadmin/fee-menus/settings', [SuperadminController::class, 'updateFeeMenuSettings'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.settings');

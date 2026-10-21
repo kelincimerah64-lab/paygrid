@@ -142,4 +142,8 @@ return [
         'approval_group_id' => env('PAYGRID_WHATSAPP_APPROVAL_GROUP_ID'),
         'reminder_minutes' => (int) env('PAYGRID_WHATSAPP_REMINDER_MINUTES', 10),
     ],
+    'telegram_broadcast' => [
+        'bot_token' => env('TELEGRAM_BROADCAST_BOT_TOKEN'),
+        'groups' => env('TELEGRAM_BROADCAST_GROUPS'),
+    ],
 ];
