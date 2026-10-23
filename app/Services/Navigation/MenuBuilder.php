@@ -81,12 +81,19 @@ class MenuBuilder
             MerchantTicket::query()->where('department', 'general')->whereIn('status', ['open', 'in_progress'])->count(),
         ]);
 
-        return [
+        $menu = [
             ['key' => 'tickets', 'label' => 'Tickets', 'url' => route('center-support.tickets'), 'badge' => $pendingAuto ?: null],
             ['key' => 'manual-tickets', 'label' => 'Manual Tickets', 'url' => route('dept-tickets.index'), 'badge' => $openManual ?: null],
             ['key' => 'merchant-support', 'label' => 'Tiket Toko', 'url' => route('dept-tickets.index', ['department' => 'general']), 'badge' => $openSupport ?: null],
             ['key' => 'bot-monitoring', 'label' => 'Monitoring Bot Telegram', 'url' => route('center-support.bot-monitoring')],
         ];
+
+        // MA/superadmin also open CS Pusat pages, but broadcast is CS Pusat only.
+        if (auth()->user()?->role === 'cs_pusat') {
+            $menu[] = ['key' => 'broadcast-telegram', 'label' => 'Broadcast Telegram', 'url' => route('center-support.broadcast')];
+        }
+
+        return $menu;
     }
 
     public function merchantCs(Merchant $merchant): array

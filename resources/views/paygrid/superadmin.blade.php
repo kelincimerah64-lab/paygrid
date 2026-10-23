@@ -253,26 +253,6 @@
     </section>
 @endif
 
-@if($active === 'broadcast-telegram')
-    <section class="card pad section" style="max-width:640px">
-        <h2>Broadcast Telegram</h2>
-        <div class="sub">Kirim satu pesan teks ke grup Telegram yang dipilih.</div>
-        @unless($telegramConfigured)
-            <div class="section"><span class="badge danger">Belum dikonfigurasi. Isi TELEGRAM_BROADCAST_BOT_TOKEN dan TELEGRAM_BROADCAST_GROUPS di .env.</span></div>
-        @endunless
-        <form method="post" action="{{ route('superadmin.broadcast-telegram.send') }}" class="section" onsubmit="return confirm('Kirim broadcast ke grup yang dipilih?')">
-            @csrf
-            <label>Pesan<textarea name="message" rows="6" maxlength="4096" required style="width:100%">{{ old('message') }}</textarea></label>
-            <div class="section">
-                @foreach($telegramGroups as $group)
-                    <label style="display:block"><input type="checkbox" name="chat_ids[]" value="{{ $group['chat_id'] }}" @checked(! old('chat_ids') || in_array($group['chat_id'], old('chat_ids', []), true))> {{ $group['name'] }}</label>
-                @endforeach
-            </div>
-            <button class="btn primary section" @disabled(! $telegramConfigured)>Kirim Broadcast</button>
-        </form>
-    </section>
-@endif
-
 @if($active === 'accounts')
     <section class="card qris-panel section">
         <div class="qris-toolbar"><h2>Daftar Account User</h2></div>

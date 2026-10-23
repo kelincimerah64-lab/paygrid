@@ -21,6 +21,7 @@ use App\Http\Controllers\MaController;
 use App\Http\Controllers\MaAssistantController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\SuperadminController;
+use App\Http\Controllers\TelegramBroadcastController;
 use App\Http\Controllers\TelegramCsMonitorController;
 use Illuminate\Support\Facades\Route;
 
@@ -115,7 +116,6 @@ Route::post('/superadmin/merchant-fee/{merchant}', [SuperadminController::class,
 Route::post('/superadmin/ma-fee/{user}', [SuperadminController::class, 'updateMaFee'])->middleware('throttle:dashboard-writes')->name('superadmin.ma-fee.update');
 Route::post('/superadmin/merchant-group', [SuperadminController::class, 'storeAgent'])->middleware('throttle:dashboard-writes')->name('superadmin.agent.store');
 Route::post('/superadmin/timer-ticket', [SuperadminController::class, 'updateTimer'])->middleware('throttle:dashboard-writes')->name('superadmin.timer-ticket.update');
-Route::post('/superadmin/broadcast-telegram', [SuperadminController::class, 'sendTelegramBroadcast'])->middleware('throttle:dashboard-writes')->name('superadmin.broadcast-telegram.send');
 Route::post('/superadmin/accounts/{user}/reset', [SuperadminController::class, 'resetAccount'])->middleware('throttle:dashboard-writes')->name('superadmin.accounts.reset');
 Route::post('/superadmin/fee-menus', [SuperadminController::class, 'storeFeeMenu'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.store');
 Route::post('/superadmin/fee-menus/settings', [SuperadminController::class, 'updateFeeMenuSettings'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.settings');
@@ -218,6 +218,12 @@ Route::get('/dept-support/tickets/{ticket}', [DepartmentTicketController::class,
 Route::get('/dept-support/tickets/{ticket}/attachment/{index}', [DepartmentTicketController::class, 'attachment'])->whereNumber('index')->name('dept-tickets.attachment');
 Route::post('/dept-support/tickets/{ticket}/reply', [DepartmentTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('dept-tickets.reply');
 Route::post('/dept-support/tickets/{ticket}/status', [DepartmentTicketController::class, 'updateStatus'])->middleware('throttle:dashboard-writes')->name('dept-tickets.status');
+});
+
+Route::middleware(['auth', 'role:cs_pusat'])->group(function () {
+Route::get('/cs-pusat/broadcast-telegram', [TelegramBroadcastController::class, 'index'])->name('center-support.broadcast');
+Route::post('/cs-pusat/broadcast-telegram', [TelegramBroadcastController::class, 'send'])->middleware('throttle:dashboard-writes')->name('center-support.broadcast.send');
+Route::delete('/cs-pusat/broadcast-telegram/{broadcastMessage}', [TelegramBroadcastController::class, 'destroy'])->middleware('throttle:dashboard-writes')->name('center-support.broadcast.destroy');
 });
 
 Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
