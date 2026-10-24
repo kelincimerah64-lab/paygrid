@@ -88,6 +88,13 @@ class BotTeleWebhookTest extends TestCase
             ->values();
     }
 
+    private function assertPromptAndReplyDeleted(int $promptId, int $replyId): void
+    {
+        $deleted = $this->sent('deleteMessage')->filter(fn (array $p): bool => $p['chat_id'] === self::TECH_CHAT)->pluck('message_id')->all();
+        $this->assertContains($promptId, $deleted);
+        $this->assertContains($replyId, $deleted);
+    }
+
     /** Runs /support -> category -> description and returns the created ticket. */
     private function openTicket(string $callback = 'ticket_api', string $description = 'Callback gagal'): BotTicket
     {
@@ -278,6 +285,28 @@ class BotTeleWebhookTest extends TestCase
         $this->assertSame([301, 303], $deleted);
     }
 
+    public function test_reject_deletes_ticket_cards_but_keeps_the_row(): void
+    {
+        $ticket = $this->openTicket();
+        $card = (int) $ticket->cs_group_message_id;
+        $ticket->update(['open_reminder_message_ids' => '9001|9002']);
+
+        $this->click('reject_'.$ticket->ticket_id, self::TECH, self::TECH_CHAT, 9002);
+
+        $ticket->refresh();
+        $this->assertSame('REJECTED', $ticket->status);
+        $this->assertSame('Rejected by Tech User', $ticket->last_update);
+
+        $deleted = $this->sent('deleteMessage');
+        $techDeleted = $deleted->filter(fn (array $p): bool => $p['chat_id'] === self::TECH_CHAT)->pluck('message_id')->sort()->values()->all();
+        $this->assertSame([$card, 9001, 9002], $techDeleted);
+        $this->assertTrue($deleted->contains(fn (array $p): bool => $p['chat_id'] === self::MERCHANT_CHAT && $p['message_id'] === (int) $ticket->merchant_message_id));
+
+        // A rejected ticket can no longer be taken.
+        $this->click('take_'.$ticket->ticket_id, self::TECH, self::TECH_CHAT, $card);
+        $this->assertSame('REJECTED', $ticket->refresh()->status);
+    }
+
     public function test_send_update_saves_last_update_and_edits_merchant_card_in_merchant_chat(): void
     {
         $ticket = $this->openTicket();
@@ -288,8 +317,10 @@ class BotTeleWebhookTest extends TestCase
         $this->click('update_'.$ticket->ticket_id, self::TECH, self::TECH_CHAT, $card);
         $this->assertSame('WAITING_CS_UPDATE', BotSession::for(self::TECH, self::TECH_CHAT)->state);
         $this->assertStringContainsString('Silakan ketik update', $this->sent('sendMessage')->last()['text']);
+        $promptId = $this->nextMessageId;
 
-        $this->message('Sedang cek upstream', self::TECH, self::TECH_CHAT);
+        $replyId = $this->message('Sedang cek upstream', self::TECH, self::TECH_CHAT);
+        $this->assertPromptAndReplyDeleted($promptId, $replyId);
 
         $ticket->refresh();
         $this->assertSame('Sedang cek upstream', $ticket->last_update);
@@ -310,9 +341,11 @@ class BotTeleWebhookTest extends TestCase
 
         $this->click('failed_'.$ticket->ticket_id, self::TECH, self::TECH_CHAT, $card);
         $this->assertSame('WAITING_FAILED_REASON', BotSession::for(self::TECH, self::TECH_CHAT)->state);
+        $promptId = $this->nextMessageId;
 
         $this->at('2026-10-23 11:00:00');
-        $this->message('Butuh tindakan provider', self::TECH, self::TECH_CHAT);
+        $replyId = $this->message('Butuh tindakan provider', self::TECH, self::TECH_CHAT);
+        $this->assertPromptAndReplyDeleted($promptId, $replyId);
 
         $ticket->refresh();
         $this->assertSame('FAILED', $ticket->status);

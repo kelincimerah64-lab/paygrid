@@ -48,7 +48,7 @@ class TicketCards
 
     public static function takeKeyboard(string $ticketId): array
     {
-        return [[['text' => 'Take Ticket', 'callback_data' => 'take_'.$ticketId]]];
+        return [[['text' => 'Take Ticket', 'callback_data' => 'take_'.$ticketId], ['text' => 'Reject', 'callback_data' => 'reject_'.$ticketId]]];
     }
 
     public static function startKeyboard(string $ticketId): array

@@ -98,6 +98,8 @@ Each item below was decided on purpose. Check them before cutover.
 7. **Telegram failures do not stop the flow.** In n8n, one failed Telegram node stopped everything after it, except the four "Delete Support *" nodes. Here every Telegram call is logged and the flow continues, so the database always moves forward.
 8. **Take is atomic.** A conditional `UPDATE … WHERE status = 'OPEN'` means two technicians clicking at the same moment cannot both get the ticket.
 9. **The webhook checks `X-Telegram-Bot-Api-Secret-Token`.** n8n had no such check.
+10. **Send Update and Failed clean up after themselves.** Once the technician's text is handled, the "Silakan ketik …" prompt and the technician's reply are deleted, so only the ticket card stays, the same as after a ticket is created. The prompt id is kept in `bot_sessions.support_prompt_message_id`.
+11. **New: Reject button next to Take Ticket.** Any technician can reject an OPEN ticket (spam, duplicate, test). The bot deletes the ticket's card in the tech group, its reminder cards, the clicked card and the merchant's card. The row stays in `bot_tickets` with status `REJECTED` and `last_update` "Rejected by …", so it is kept as a log. It uses the same conditional update as Take, so a ticket cannot be both taken and rejected.
 
 These behaviours are kept as they were in n8n:
 

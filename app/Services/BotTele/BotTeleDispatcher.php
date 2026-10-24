@@ -78,6 +78,7 @@ class BotTeleDispatcher
         match ($match['route']) {
             'ticket_dashboard', 'ticket_api', 'ticket_whitelist', 'ticket_other', 'ticket_create_user' => $this->support->chooseCategory($u, $match['route']),
             'take' => $this->tickets->take($u, $ticketId),
+            'reject' => $this->tickets->reject($u, $ticketId),
             'progress' => $this->tickets->startInvestigation($u, $ticketId),
             'update' => $this->tickets->askUpdate($u, $ticketId),
             'resolve' => $this->tickets->resolve($u, $ticketId),

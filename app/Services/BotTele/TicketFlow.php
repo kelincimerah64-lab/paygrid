@@ -55,6 +55,33 @@ class TicketFlow extends Flow
         }
     }
 
+    /**
+     * Not in n8n: drops an OPEN ticket (spam, duplicate, test). Every card of it is deleted from Telegram,
+     * while the row stays in the database as REJECTED for the log.
+     */
+    public function reject(array $u, string $ticketId): void
+    {
+        $now = BotTime::nowString();
+        // Same conditional update as take(), so a ticket cannot be rejected and taken at once.
+        $rejected = BotTicket::query()->where('ticket_id', $ticketId)->where('status', 'OPEN')->update([
+            'status' => 'REJECTED',
+            'last_update' => 'Rejected by '.$this->displayName($u),
+            'completed_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $ticket = BotTicket::findByTicketId($ticketId);
+        if (! $rejected || ! $ticket) {
+            return;
+        }
+
+        $this->telegram->deleteMessage($u['chat_id'], $u['message_id']);
+        foreach (array_diff(array_filter([(int) $ticket->cs_group_message_id, ...$this->reminderIds($ticket)]), [(int) $u['message_id']]) as $messageId) {
+            $this->telegram->deleteMessage($this->techChatId(), $messageId);
+        }
+        $this->telegram->deleteMessage($ticket->source_chat_id, $ticket->merchant_message_id);
+    }
+
     /** "Extract Progress Ticket ID" -> "Status ASSIGNED" -> "IF - Correct Assigned CS" -> "GS - Update ON_PROGRESS" */
     public function startInvestigation(array $u, string $ticketId): void
     {
@@ -95,6 +122,7 @@ class TicketFlow extends Flow
         $this->telegram->editMessageText($ticket->source_chat_id, $ticket->merchant_message_id, $this->cards->merchantUpdate($ticket, $text));
         $session->delete();
         $this->telegram->editMessageText($session->resolve_chat_id, $session->resolve_message_id, $this->cards->clickedUpdate($ticket, $text), TicketCards::actionKeyboard($ticket->ticket_id));
+        $this->deletePromptAndReply($u, $session);
     }
 
     /** "Extract Resolve Ticket ID" -> "ON_PROGRESS" -> "IF - Resolve By Assigned CS" -> "Build Direct Resolution" */
@@ -149,6 +177,7 @@ class TicketFlow extends Flow
         $this->telegram->editMessageText($ticket->source_chat_id, $ticket->merchant_message_id, $this->cards->merchantFailed($ticket, $reason));
         $session->delete();
         $this->telegram->editMessageText($session->resolve_chat_id, $session->resolve_message_id, $this->cards->clickedFailed($ticket, $reason), []);
+        $this->deletePromptAndReply($u, $session);
     }
 
     /** "Extract PIC Progress Ticket ID" -> "IF - PIC Can Take Over?" -> "GS - PIC Take Over Ticket" */
@@ -262,14 +291,23 @@ class TicketFlow extends Flow
             return;
         }
 
-        $this->rememberPending($u, $ticket, $state, $category);
-        $this->telegram->sendMessage($u['chat_id'], $prompt($ticket));
+        $session = $this->rememberPending($u, $ticket, $state, $category);
+        $promptId = $this->telegram->sendMessage($u['chat_id'], $prompt($ticket));
+        // Kept so the prompt can be deleted with the technician's reply, leaving only the ticket card.
+        $session->update(['support_prompt_message_id' => $promptId]);
+    }
+
+    /** Clears the "please type ..." prompt and the technician's reply once the answer is handled. */
+    private function deletePromptAndReply(array $u, BotSession $session): void
+    {
+        $this->telegram->deleteMessage($u['chat_id'], $session->support_prompt_message_id);
+        $this->telegram->deleteMessage($u['chat_id'], $u['message_id']);
     }
 
     /** The next text this user sends in this chat answers the prompt; resolve_* points at the clicked card. */
-    private function rememberPending(array $u, BotTicket $ticket, string $state, string $category): void
+    private function rememberPending(array $u, BotTicket $ticket, string $state, string $category): BotSession
     {
-        BotSession::upsertFor($u['user_id'], $u['chat_id'], [
+        return BotSession::upsertFor($u['user_id'], $u['chat_id'], [
             'state' => $state,
             'category' => $category,
             'temp_ticket_id' => $ticket->ticket_id,

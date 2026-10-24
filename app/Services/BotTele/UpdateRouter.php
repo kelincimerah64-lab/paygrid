@@ -23,6 +23,7 @@ class UpdateRouter
         ['ipapprove', 'prefix', 'ipapprove_'],
         ['ipreject', 'prefix', 'ipreject_'],
         ['ticket_create_user', 'equals', 'ticket_create_user'],
+        ['reject', 'prefix', 'reject_'],
     ];
 
     /** @return 'support'|'checkticket'|'absen'|'default'|null */
