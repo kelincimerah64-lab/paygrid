@@ -32,4 +32,16 @@ trait UsesBotTeleDatabase
             'bottele.automation_since' => null,
         ]);
     }
+
+    /** Inserts bot tickets given sheet-style rows: a header row of column names, then value rows. */
+    protected function seedBotTickets(array $rows): void
+    {
+        $header = array_shift($rows);
+
+        foreach ($rows as $row) {
+            DB::connection('bottele')->table('bot_tickets')->insert(
+                collect(array_combine($header, $row))->map(fn ($value) => $value === '' ? null : $value)->all()
+            );
+        }
+    }
 }

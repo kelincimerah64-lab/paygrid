@@ -6,57 +6,16 @@ use App\Models\JiraTicketSync;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Tests\Concerns\UsesBotTeleDatabase;
 use Tests\TestCase;
 
 class JiraSyncTest extends TestCase
 {
     use RefreshDatabase;
-
-    /**
-     * Throwaway RSA key generated solely for this test suite - see
-     * TelegramBotMonitoringServiceTest for the same key/rationale.
-     */
-    private function fakePrivateKeyPem(): string
-    {
-        return <<<'PEM'
-        -----BEGIN PRIVATE KEY-----
-        MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDZMFIuEPtiGZwE
-        7E/q0Djb4TtHWbJJUN/eJhbYAc3gOXYPE3btFzEBvDBdG3ck7KOGRYkcSbAy9lvN
-        a6kKFia3IsA1V8PXJWkNYSsdJDjPSgPlp9WiwNMXr8v6RTv8wzTqUPrtfhdWVkaf
-        UZED+AdR5fQu/8tRZf/eBDORJeF0Zx5eqBYhn5xp/8N4c2X18DQvOkuVqhsxHgWN
-        CLk+iKdtpybqB6O51asnlpPuiVDSDhq2nOGWBRkOXjZVMSTGl03FSazhLzmrMJzQ
-        s4I+pIuauhmdFs7hAsYciA5w7OjQYH+j+kGWbjwDqzGWneoomXr85s/oidwSuVk7
-        TQm6AvYXAgMBAAECggEAY0rBj1jpLECsAN4ubRnznKZ8TNLXfMgyCKQeNnOgtP1g
-        GWVbLeo31+S6sZ5QWnurCMQ6ekm/+ZSChMfO+JMG8Ru8hsaQfIgYXmsJZGG+bRoX
-        7QLNWwJPn1kZ5lmHord1thf+l9vY/HomAEkwhIF8izcXavM7dwOsNcpy7s1EJMv1
-        uUPSuJ2vZaMx31nV4n6+aPHW/i9kThxa4qF4scahsBvBEhaYdWhRRDoG1htzUwtP
-        5UEOuCcFv3zAOY4OLx8HAXmMoWktMVz2tmi0wv1fIqMMma/k3JOYPxwfGPId1vRn
-        twz3MfYGKyzsdGi21mLBmhgqIvRpwf8G/xwooGK7pQKBgQD9z2H4Eb/71W4ETOv9
-        0/9qFojIIHnhTt+16AnJuMmWx84RFjyv/HOM9aL8x4fVspF5nhaDGdih2OusX59l
-        9dcfETZJJx/HtUDmmx8EV7IUBDWQGIP9DhrMwidCikxg+BJzGJII+57QE8p7zqG7
-        MpKZ6+VG/p+TM8t+a7hdQpjjkwKBgQDbEAyEIxGxRe1DwGPj78e58jUvmpMvro2l
-        G+ZHPYkjU/Fd22rKNub2lVhHuko6SfWZl+UnzdRZYoOrHN/99M9j5EPed0rlP6JG
-        LXNqVYJcUIIo6xRa5EketPukni6yYLrHLHypR23H0hmgdu/L3zipod43CXbuN3IT
-        63a4OjD97QKBgQCyhvbwWPvjleLG35x3dHEKHEOmEUHpu2McPtTzsSkLCAvodO3H
-        FBnrIrS8fVUMeYheNVa8bKe2YDCVlMU4IM5qKd83YW+3N8Uo8B/HHDBEaBmM+9GL
-        ZCpxsHeRFFpZMuU3VCcUbnjs/57DqzqTxCTeY9FoOJ3iGuKeUALkhn2oRQKBgDzm
-        AkS9pw58HRCHrH1STFjSD50TQLWxtejfj63gWn56uI/aDp72klCchfUywa3gn6k6
-        Q9dD7jOHIolwNojYBMuFSqTOzwBaJ1eRDRPTf7EAJJ8RcxAthHJH5+kEnIC0SVhT
-        crhwhgFV1A/64IDxpkPqHud39xsUSN9mxxNCAhqlAoGAJJ0PZdoDGhWk6oVlIbpb
-        bGxRGXQQheZbr39t4KlJVJNGd5RBDMYm4wTz2annRDgD2d1Q95EsNQ9U1oRqMY/1
-        BozSWFbm8tudlvyCgXyNS7dGNFlLuoUPuP7X/CbyqhUF3gC0gID70ijgM3BJeuTQ
-        CmO344btHTQmoNeDMYCcTE4=
-        -----END PRIVATE KEY-----
-        PEM;
-    }
+    use UsesBotTeleDatabase;
 
     private function configure(): void
     {
-        config()->set('paygrid.telegram_bot_monitoring.spreadsheet_id', 'sheet-123');
-        config()->set('paygrid.telegram_bot_monitoring.sheet_range', 'A:X');
-        config()->set('paygrid.telegram_bot_monitoring.service_account_email', 'bot@test.iam.gserviceaccount.com');
-        config()->set('paygrid.telegram_bot_monitoring.service_account_private_key', $this->fakePrivateKeyPem());
-
         config()->set('paygrid.jira_sync.base_url', 'https://inacash-team.test');
         config()->set('paygrid.jira_sync.email', 'bot@inacash.test');
         config()->set('paygrid.jira_sync.api_token', 'fake-jira-token');
@@ -67,9 +26,9 @@ class JiraSyncTest extends TestCase
 
     private function fakeSheet(array $rows): void
     {
+        $this->seedBotTickets($rows);
+
         Http::fake([
-            'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'fake-token', 'expires_in' => 3600]),
-            'https://sheets.googleapis.com/v4/spreadsheets/sheet-123/values/A:X' => Http::response(['values' => $rows]),
             'https://inacash-team.test/rest/api/3/issue' => Http::response(['key' => 'TIC-100']),
             'https://inacash-team.test/rest/api/3/issue/*/transitions' => function ($request) {
                 if ($request->method() === 'GET') {
@@ -165,7 +124,7 @@ class JiraSyncTest extends TestCase
             ->assertOk()->assertJson(['created' => 0, 'transitioned' => 1]);
 
         $this->assertSame('In Progress', JiraTicketSync::query()->where('ticket_id', 'T-3')->value('last_synced_status'));
-        Http::assertSentCount(4); // oauth + sheets + 1 GET transitions + 1 POST transitions
+        Http::assertSentCount(2); // 1 GET transitions + 1 POST transitions
     }
 
     public function test_a_brand_new_resolved_ticket_walks_two_hops_to_done(): void

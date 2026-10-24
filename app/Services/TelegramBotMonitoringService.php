@@ -4,18 +4,21 @@ namespace App\Services;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class TelegramBotMonitoringService
 {
-    private const TOKEN_CACHE_KEY = 'telegram-bot-sheet:access-token';
-
-    private const DATA_CACHE_KEY = 'telegram-bot-sheet:rows';
-
     private const TERMINAL_STATUSES = ['RESOLVED', 'FAILED'];
+
+    // The first 24 columns of the old "Tickets" sheet (range A:X), in sheet order.
+    private const COLUMNS = [
+        'ticket_id', 'created_at', 'source_chat_id', 'source_chat_title', 'requester_user_id', 'requester_name',
+        'requester_username', 'category', 'description', 'status', 'assigned_user_id', 'assigned_name',
+        'cs_group_message_id', 'merchant_message_id', 'attachment_file_id', 'has_attachment', 'assigned_at', 'started_at',
+        'pickup_minutes', 'investigation_lag_minutes', 'handling_minutes', 'total_resolution_minutes', 'last_update', 'last_open_reminder_at',
+    ];
 
     public function data(array $filters, bool $forceRefresh = false): array
     {
@@ -29,7 +32,7 @@ class TelegramBotMonitoringService
                 'categories' => [],
                 'statuses' => [],
                 'assignees' => [],
-                'error' => 'Gagal mengambil data dari Google Sheets. Coba refresh kembali.',
+                'error' => 'Gagal mengambil data tiket bot. Coba refresh kembali.',
             ];
         }
 
@@ -74,83 +77,28 @@ class TelegramBotMonitoringService
             && $ticket['created_at']->diffInMinutes(CarbonImmutable::now()) >= $threshold)->values();
     }
 
+    /**
+     * Reads the bot's own database (written by Laravel since the n8n cutover) in the shape the
+     * Google Sheet used to return: a header row followed by value rows, so normalize() is unchanged.
+     * Not cached ($forceRefresh is kept for callers): the table is small and new tickets must show at once.
+     */
     private function fetchRows(bool $forceRefresh): ?array
     {
-        if ($forceRefresh) {
-            Cache::forget(self::DATA_CACHE_KEY);
-        }
-
-        $ttl = (int) config('paygrid.telegram_bot_monitoring.cache_ttl_seconds', 45);
-
         try {
-            return Cache::remember(self::DATA_CACHE_KEY, $ttl, function () {
-                $spreadsheetId = config('paygrid.telegram_bot_monitoring.spreadsheet_id');
-                $range = config('paygrid.telegram_bot_monitoring.sheet_range');
-                $token = $this->accessToken();
+            $rows = DB::connection('bottele')->table('bot_tickets')->orderBy('id')->get(self::COLUMNS)
+                ->map(function (object $ticket): array {
+                    $ticket->has_attachment = $ticket->has_attachment ? 'TRUE' : 'FALSE';
 
-                $response = Http::withToken($token)
-                    ->timeout(10)
-                    ->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$range}");
-
-                if (! $response->successful()) {
-                    throw new \RuntimeException('Sheets API returned '.$response->status());
-                }
-
-                return $response->json('values') ?? [];
-            });
+                    return array_values((array) $ticket);
+                })
+                ->all();
         } catch (Throwable $e) {
             Log::warning('telegram_bot_monitoring.fetch_failed', ['message' => $e->getMessage()]);
-            Cache::forget(self::DATA_CACHE_KEY);
 
             return null;
         }
-    }
 
-    private function accessToken(): string
-    {
-        return Cache::remember(self::TOKEN_CACHE_KEY, 3300, function () {
-            $email = config('paygrid.telegram_bot_monitoring.service_account_email');
-            $privateKey = str_replace('\\n', "\n", (string) config('paygrid.telegram_bot_monitoring.service_account_private_key'));
-
-            if (! $email || ! $privateKey) {
-                throw new \RuntimeException('Google service account credentials are not configured.');
-            }
-
-            $now = time();
-            $header = $this->base64UrlEncode(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
-            $claims = $this->base64UrlEncode(json_encode([
-                'iss' => $email,
-                'scope' => 'https://www.googleapis.com/auth/spreadsheets.readonly',
-                'aud' => 'https://oauth2.googleapis.com/token',
-                'iat' => $now,
-                'exp' => $now + 3600,
-            ]));
-
-            $signature = '';
-            $signed = openssl_sign("{$header}.{$claims}", $signature, $privateKey, OPENSSL_ALGO_SHA256);
-
-            if (! $signed) {
-                throw new \RuntimeException('Failed to sign Google service account JWT.');
-            }
-
-            $jwt = "{$header}.{$claims}.".$this->base64UrlEncode($signature);
-
-            $response = Http::asForm()->timeout(10)->post('https://oauth2.googleapis.com/token', [
-                'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-                'assertion' => $jwt,
-            ]);
-
-            if (! $response->successful()) {
-                throw new \RuntimeException('Failed to obtain Google OAuth2 token: '.$response->status());
-            }
-
-            return (string) $response->json('access_token');
-        });
-    }
-
-    private function base64UrlEncode(string $value): string
-    {
-        return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+        return [self::COLUMNS, ...$rows];
     }
 
     private function normalize(array $rows): Collection
