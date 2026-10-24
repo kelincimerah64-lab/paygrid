@@ -8,6 +8,7 @@ use App\Models\MerchantTicket;
 use App\Models\MerchantTicketMessage;
 use App\Models\User;
 use App\Services\AuditLogService;
+use App\Services\BotTele\IpWhitelistBridge;
 use App\Services\MerchantTicketService;
 use App\Services\Navigation\MenuBuilder;
 use Illuminate\Http\RedirectResponse;
@@ -165,6 +166,7 @@ class MaWaTicketController extends Controller
             'approval_completed_at' => now(),
         ])->save();
         $audit->record('wa_ticket.approved', $ticket, $before, $ticket->only(['approval_status', 'approval_by']));
+        $this->syncBotTicket($ticket);
 
         NotifyWaTicketLink::dispatch($ticket->id, 'approved', (string) config('paygrid.whatsapp.handling_group_id'));
 
@@ -187,6 +189,7 @@ class MaWaTicketController extends Controller
             'closed_at' => now(),
         ])->save();
         $audit->record('wa_ticket.rejected', $ticket, $before, $ticket->only(['approval_status', 'approval_by', 'status']));
+        $this->syncBotTicket($ticket);
 
         NotifyWaTicketLink::dispatch($ticket->id, 'rejected', '');
 
@@ -316,5 +319,22 @@ class MaWaTicketController extends Controller
             ->where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'name', 'role']);
+    }
+
+    /**
+     * A web IP Whitelist ticket may also have a WhatsApp poll and a Telegram bot ticket; deciding here
+     * closes those too. The bot DB is separate, so an outage there must not break the dashboard action.
+     */
+    private function syncBotTicket(MerchantTicket $ticket): void
+    {
+        if (! $ticket->bot_ticket_id) {
+            return;
+        }
+
+        try {
+            app(IpWhitelistBridge::class)->syncFromDashboard($ticket);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 }

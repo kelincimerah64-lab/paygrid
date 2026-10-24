@@ -4,14 +4,19 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MerchantTicket;
-use App\Models\MerchantTicketMessage;
+use App\Services\MerchantTicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+/**
+ * @deprecated Called by the n8n "PayGrid - IP Whitelist WA Approval" workflow, which is inactive
+ * and replaced by App\Services\BotTele\IpWhitelistBridge. Kept until it is confirmed nothing
+ * else calls it; the logic now lives in MerchantTicketService::applyExternalApproval().
+ */
 class N8nTicketApprovalController extends Controller
 {
-    public function update(Request $request, string $ticketNo): JsonResponse
+    public function update(Request $request, string $ticketNo, MerchantTicketService $tickets): JsonResponse
     {
         $token = (string) config('services.n8n.callback_token');
         $provided = (string) $request->bearerToken();
@@ -26,27 +31,7 @@ class N8nTicketApprovalController extends Controller
             'approved_by' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $isRejected = $data['status'] === 'rejected';
-
-        $ticket->forceFill([
-            'approval_status' => $data['status'],
-            'approval_by' => $data['approved_by'] ?? null,
-            'approval_note' => $isRejected ? ($data['note'] ?? null) : null,
-            'approval_completed_at' => now(),
-            'status' => $isRejected ? 'closed' : $ticket->status,
-            'closed_at' => $isRejected ? now() : $ticket->closed_at,
-        ])->save();
-
-        $summary = $isRejected
-            ? 'Permintaan IP Whitelist ditolak via WhatsApp'.($data['approved_by'] ?? null ? ' oleh '.$data['approved_by'] : '').'. Alasan: '.($data['note'] ?? '-')
-            : 'Permintaan IP Whitelist disetujui via WhatsApp'.($data['approved_by'] ?? null ? ' oleh '.$data['approved_by'] : '').'.';
-
-        MerchantTicketMessage::query()->create([
-            'merchant_ticket_id' => $ticket->id,
-            'user_id' => null,
-            'is_staff' => true,
-            'body' => $summary,
-        ]);
+        $tickets->applyExternalApproval($ticket, $data['status'], $data['approved_by'] ?? null, $data['note'] ?? null);
 
         return response()->json(['ok' => true]);
     }

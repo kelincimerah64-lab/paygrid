@@ -64,6 +64,24 @@ return [
             ]) : [],
         ],
 
+        // Telegram support bot (Bot_Tele) lives on its own MySQL server, separate
+        // from the main PayGrid database. Driver is overridable so tests can use sqlite.
+        'bottele' => [
+            'driver' => env('BOTTELE_DB_DRIVER', 'mysql'),
+            'host' => env('BOTTELE_DB_HOST', '127.0.0.1'),
+            'port' => env('BOTTELE_DB_PORT', '3306'),
+            'database' => env('BOTTELE_DB_DATABASE', 'bottele'),
+            'username' => env('BOTTELE_DB_USERNAME', ''),
+            'password' => env('BOTTELE_DB_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'foreign_key_constraints' => true,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

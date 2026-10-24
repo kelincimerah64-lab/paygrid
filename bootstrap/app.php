@@ -58,6 +58,20 @@ return Application::configure(basePath: dirname(__DIR__))
             ->hourly()
             ->withoutOverlapping(10)
             ->runInBackground();
+
+        // Telegram support bot timers, ported 1:1 from the n8n Schedule Trigger workflows.
+        // Each is a no-op until BOTTELE_* is configured.
+        foreach ([
+            'bottele:check-open-ticket-reminders',
+            'bottele:check-auto-assign-escalation',
+            'bottele:check-pic-expiry',
+            'bottele:check-attendance-expiry',
+        ] as $botTeleCommand) {
+            $schedule->command($botTeleCommand)
+                ->everyMinute()
+                ->withoutOverlapping(2)
+                ->runInBackground();
+        }
     })
     ->withMiddleware(function (Middleware $middleware): void {
         // Restricted to Cloudflare's published edge ranges (cloudflare.com/ips) -

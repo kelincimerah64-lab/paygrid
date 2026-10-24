@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Events\MerchantTicketMessageSent;
 use App\Jobs\NotifyWaTicketLink;
+use App\Jobs\SendIpWhitelistWaPoll;
+use App\Services\BotTele\WahaClient;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
 use App\Models\MerchantTicketMessage;
@@ -334,7 +336,47 @@ class MerchantTicketService
             NotifyWaTicketLink::dispatch($ticket->id, 'created', (string) config('paygrid.whatsapp.approval_group_id'));
         }
 
+        // IP Whitelist also gets a WhatsApp approval poll and a Telegram support bot ticket, once WAHA is set up.
+        if ($needsApproval && $ticket->category === 'ip_whitelist' && app(WahaClient::class)->configured()) {
+            SendIpWhitelistWaPoll::dispatch($ticket->id);
+        }
+
         return $ticket;
+    }
+
+    /**
+     * Records an approval decided outside the dashboard (WhatsApp poll). Returns false when the
+     * ticket is no longer waiting, so whichever of poll and dashboard decides first wins.
+     */
+    public function applyExternalApproval(MerchantTicket $ticket, string $status, ?string $approvedBy, ?string $note = null): bool
+    {
+        if ($ticket->approval_status !== 'waiting') {
+            return false;
+        }
+
+        $isRejected = $status === 'rejected';
+
+        $ticket->forceFill([
+            'approval_status' => $status,
+            'approval_by' => $approvedBy,
+            'approval_note' => $isRejected ? $note : null,
+            'approval_completed_at' => now(),
+            'status' => $isRejected ? 'closed' : $ticket->status,
+            'closed_at' => $isRejected ? now() : $ticket->closed_at,
+        ])->save();
+
+        $summary = $isRejected
+            ? 'Permintaan IP Whitelist ditolak via WhatsApp'.($approvedBy ? ' oleh '.$approvedBy : '').'. Alasan: '.($note ?? '-')
+            : 'Permintaan IP Whitelist disetujui via WhatsApp'.($approvedBy ? ' oleh '.$approvedBy : '').'.';
+
+        MerchantTicketMessage::query()->create([
+            'merchant_ticket_id' => $ticket->id,
+            'user_id' => null,
+            'is_staff' => true,
+            'body' => $summary,
+        ]);
+
+        return true;
     }
 
     private function storeAttachments(Merchant $merchant, array $attachments): array
