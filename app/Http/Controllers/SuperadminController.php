@@ -9,8 +9,6 @@ use App\Models\PaygridSetting;
 use App\Models\TopupRequest;
 use App\Models\User;
 use App\Rules\ExactlyOneFeeMenuFilled;
-use App\Rules\FeeMenuRatesAboveFloor;
-use App\Rules\FeeMenuRatesAboveReference;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
@@ -149,7 +147,7 @@ class SuperadminController extends Controller
         $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'ma');
         $request->merge(['fee_menu_rates' => $rates]);
         $data = $request->validate([
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('ma', null)],
+            'fee_menu_rates' => ['array'],
         ]);
         $before = $user->only(['fee_menu_rates']);
         $user->forceFill($data)->save();
@@ -164,13 +162,12 @@ class SuperadminController extends Controller
         $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
         $agent = $merchant->agent()->with('ma')->firstOrFail();
-        $agentRates = (array) ($agent->fee_menu_rates ?? []);
         $data = $request->validate([
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled(), new FeeMenuRatesAboveReference('merchant', $agentRates, 'Based Fee Agent')],
+            'fee_menu_rates' => [new ExactlyOneFeeMenuFilled()],
         ]);
         $data['fee_menu'] = array_key_first(array_filter($rates));
         $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
-        $data = array_merge($data, $feeSync->snapshotFor($agent, $data['fee_menu'], $rates[$data['fee_menu']]));
+        $data = array_merge($data, $feeSync->snapshotFor($agent, $data['fee_menu'], $rates[$data['fee_menu']], $merchant));
         $before = $merchant->only(array_keys($data));
         $merchant->forceFill($data)->save();
         $audit->record('superadmin.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($data)));
@@ -183,7 +180,6 @@ class SuperadminController extends Controller
         $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
         $typeCategory = $feeMenus->typeCategory((string) $request->input('connection_type'));
         $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'agent')]);
-        $maRates = (array) (User::find($request->input('ma_user_id'))?->fee_menu_rates ?? []);
         $data = $request->validate([
             'ma_user_id' => ['nullable', 'exists:users,id'],
             'code' => ['nullable', 'string', 'max:40', 'unique:agents,code'],
@@ -192,7 +188,7 @@ class SuperadminController extends Controller
             'contact' => ['nullable', 'string', 'max:80'],
             'connection_type' => ['required', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('agent', null), new FeeMenuRatesAboveReference('agent', $maRates, 'Based Fee MA')],
+            'fee_menu_rates' => ['array'],
             'is_active' => ['required', 'boolean'],
         ]);
         abort_if(config('paygrid.gateway.hilogate.agent_create_enabled'), 423, 'Create merchant group ke HG masih dinonaktifkan.');
@@ -287,15 +283,12 @@ class SuperadminController extends Controller
             if (! $menu) {
                 continue;
             }
-            $before = $menu->only(['label', 'ma_enabled', 'ma_floor', 'agent_enabled', 'agent_floor', 'merchant_enabled', 'merchant_floor']);
+            $before = $menu->only(['label', 'ma_enabled', 'agent_enabled', 'merchant_enabled']);
             $menu->forceFill([
                 'label' => $settings['label'],
                 'ma_enabled' => (bool) ($settings['ma_enabled'] ?? false),
-                'ma_floor' => (float) str_replace(',', '.', (string) ($settings['ma_floor'] ?? 0)),
                 'agent_enabled' => (bool) ($settings['agent_enabled'] ?? false),
-                'agent_floor' => (float) str_replace(',', '.', (string) ($settings['agent_floor'] ?? 0)),
                 'merchant_enabled' => (bool) ($settings['merchant_enabled'] ?? false),
-                'merchant_floor' => (float) str_replace(',', '.', (string) ($settings['merchant_floor'] ?? 0)),
             ])->save();
             $audit->record('superadmin.fee_menu_settings_updated', $menu, $before, $menu->only(array_keys($before)));
         }
@@ -327,7 +320,7 @@ class SuperadminController extends Controller
             'contact' => ['nullable', 'string', 'max:80'],
             'is_active' => ['required', 'boolean'],
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:6', 'max:120'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('ma', null)],
+            'fee_menu_rates' => ['array'],
         ]);
     }
 

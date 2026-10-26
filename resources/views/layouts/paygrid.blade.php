@@ -314,7 +314,6 @@
         .fee-rate-label { font-size:10px; line-height:1.15; color:#33415a; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
         .fee-rate-label small { display:block; font-weight:500; color:var(--muted); }
         .fee-rate-input { width:100%; box-sizing:border-box; padding:4px 6px; font-size:12px; min-width:0; }
-        .fee-rate-row .field-hint { font-size:9px; color:var(--danger); line-height:1.1; }
         .ticket-table { min-width:0; table-layout:fixed; }
         .ticket-table th:nth-child(1) { width:9%; }
         .ticket-table th:nth-child(2) { width:24%; }
@@ -1133,12 +1132,9 @@
             .fee-menu-settings-table { min-width:0; }
             .fee-menu-settings-table td:nth-child(1)::before { content:'Menu'; }
             .fee-menu-settings-table td:nth-child(2)::before { content:'MA Aktif'; }
-            .fee-menu-settings-table td:nth-child(3)::before { content:'MA Floor %'; }
-            .fee-menu-settings-table td:nth-child(4)::before { content:'Agent Aktif'; }
-            .fee-menu-settings-table td:nth-child(5)::before { content:'Agent Floor %'; }
-            .fee-menu-settings-table td:nth-child(6)::before { content:'Toko Aktif'; }
-            .fee-menu-settings-table td:nth-child(7)::before { content:'Toko Floor %'; }
-            .fee-menu-settings-table td:nth-child(8)::before { content:'Hapus'; }
+            .fee-menu-settings-table td:nth-child(3)::before { content:'Agent Aktif'; }
+            .fee-menu-settings-table td:nth-child(4)::before { content:'Toko Aktif'; }
+            .fee-menu-settings-table td:nth-child(5)::before { content:'Hapus'; }
             .agent-store-table td:nth-child(1)::before { content:'Toko'; }
             .agent-store-table td:nth-child(2)::before { content:'Merchant ID'; }
             .agent-store-table td:nth-child(3)::before { content:'Grup / Agen'; }

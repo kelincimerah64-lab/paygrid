@@ -169,7 +169,7 @@
     </section>
 @elseif($active === 'status-request')
     @php($canResubmit = fn ($registration) => in_array($registration->status, ['draft', 'pending_agent'], true) || ($registration->status === 'rejected' && $registration->revision_count < \App\Http\Controllers\MerchantRegistrationWorkflowController::MAX_REVISIONS))
-    @php($hasBulkSelectable = $registrations->contains(fn ($registration) => $canResubmit($registration)))
+    @php($storeFeeMenus = app(\App\Services\FeeMenuCatalog::class)->optionsFor('merchant'))
     <section class="card agent-filter-card">
         <form class="agent-filter-grid" method="get">
             <label class="agent-filter-search"><span>Pencarian</span><input class="search" name="q" value="{{ $requestFilters['q'] ?? '' }}" placeholder="Cari toko, merchant ID, atau token request"></label>
@@ -178,20 +178,37 @@
             <label><span>Sampai tanggal</span><input type="date" name="to" value="{{ $requestFilters['to'] ?? '' }}"></label>
             <div class="agent-filter-actions"><button class="btn primary">Terapkan Filter</button><a class="btn" href="{{ route('agent.requests') }}">Reset</a><a class="btn ghost" href="{{ route('agent.export') }}">Export CSV</a></div>
         </form>
-        <form method="post" action="{{ route('agent.requests.bulk') }}">@csrf
-        @if($hasBulkSelectable)
-            <div class="agent-bulk-bar"><div><strong>Bulk Action</strong><span>Pilih request pending, lalu kirim ke MA untuk proses approval.</span></div><div class="actions"><input type="hidden" name="action" value="submit"><button class="btn primary">Submit Selected ke MA</button></div></div>
-        @endif
         <div class="table-wrap">
         <table class="table qris-table agent-request-table">
             <thead><tr><th>Nama Toko</th><th>Merchant ID</th><th>Tanggal Request</th><th>User Finance</th><th>User CS</th><th>Status Approval</th><th>Detail</th><th>Action</th></tr></thead>
             <tbody>
             @foreach($registrations as $registration)
                 @php($regDetailRows = $registration->detailRows())
-                <tr><td>@if($canResubmit($registration))<input type="checkbox" name="registration_ids[]" value="{{ $registration->id }}">@endif {{ $registration->store_name }}</td><td><span class="truncate" style="display:block; max-width:190px">{{ $registration->merchant?->merchant_id ?: 'Pending MA' }}</span></td><td>{{ $registration->created_at->timezone('Asia/Jakarta')->format('d M y') }}</td><td>FIN-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['finance_email'] ?? 'Menunggu approval' }}</span></td><td>CS-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['cs_email'] ?? 'Menunggu approval' }}</span></td><td><span class="badge {{ $statusClass($registration->status) }}">{{ ucfirst(str_replace('_', ' ', $registration->status)) }}</span>@if($registration->status === 'rejected')<br><span class="muted">Revisi {{ $registration->revision_count }}/{{ \App\Http\Controllers\MerchantRegistrationWorkflowController::MAX_REVISIONS }}</span>@endif</td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-reg-detail-{{ $registration->id }}">Detail</button>
+                @php($regPayload = (array) ($registration->payload ?? []))
+                <tr><td>{{ $registration->store_name }}</td><td><span class="truncate" style="display:block; max-width:190px">{{ $registration->merchant?->merchant_id ?: 'Pending MA' }}</span></td><td>{{ $registration->created_at->timezone('Asia/Jakarta')->format('d M y') }}</td><td>FIN-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['finance_email'] ?? 'Menunggu approval' }}</span></td><td>CS-{{ strtoupper(substr($registration->token, 0, 8)) }}<br><span class="muted">{{ $registration->payload['cs_email'] ?? 'Menunggu approval' }}</span></td><td><span class="badge {{ $statusClass($registration->status) }}">{{ ucfirst(str_replace('_', ' ', $registration->status)) }}</span>@if($registration->status === 'rejected')<br><span class="muted">Revisi {{ $registration->revision_count }}/{{ \App\Http\Controllers\MerchantRegistrationWorkflowController::MAX_REVISIONS }}</span>@endif</td><td><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="agent-reg-detail-{{ $registration->id }}">Detail</button>
                 <a class="btn compact-btn" href="{{ route('agent.requests.pdf', $registration) }}" target="_blank" rel="noopener">PDF</a>
                 <div class="approval-modal" id="agent-reg-detail-{{ $registration->id }}" hidden><div class="approval-modal-card"><div class="qris-toolbar"><div><h2>Detail Request Toko</h2><p class="muted" style="margin:4px 0 0">{{ $registration->store_name }}</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div><div class="approval-detail-grid">@foreach($regDetailRows as $label => $value)<div class="fee-pill"><span>{{ $label }}</span><strong class="truncate">{{ $value ?: '-' }}</strong></div>@endforeach</div></div></div></td>
-                <td>@if($registration->status === 'pending_agent')<button class="btn primary" formaction="{{ route('api.merchant-registration.submit', $registration) }}" formmethod="post">Submit MA</button><button class="btn danger" formaction="{{ route('agent.requests.delete', $registration) }}" formmethod="post" name="_method" value="delete">Delete</button>@elseif($registration->status === 'pending_ma')<span class="badge warn">Terkirim MA</span>@elseif($registration->status === 'rejected' && $canResubmit($registration))<button class="btn primary" formaction="{{ route('api.merchant-registration.submit', $registration) }}" formmethod="post">Submit Ulang</button>@elseif($registration->status === 'rejected')<span class="muted">Batas revisi tercapai</span>@else<span class="muted">-</span>@endif</td></tr>
+                <td>
+                @if($canResubmit($registration))
+                    <button class="btn primary approval-detail-open" type="button" data-approval-detail="agent-reg-submit-{{ $registration->id }}">{{ $registration->status === 'rejected' ? 'Isi Fee & Submit Ulang' : 'Isi Fee & Submit MA' }}</button>
+                    <div class="approval-modal" id="agent-reg-submit-{{ $registration->id }}" hidden><div class="approval-modal-card">
+                        <div class="qris-toolbar"><div><h2>Fee Toko &amp; Fee Agen</h2><p class="muted" style="margin:4px 0 0">{{ $registration->store_name }}. Fee toko dari form bisa direvisi. Fee agen diisi bebas.</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
+                        <form method="post" action="{{ route('api.merchant-registration.submit', $registration) }}" class="approve-fee-form" style="margin-top:12px">
+                            @csrf
+                            <label>Menu Fee<select id="agent-fee-menu-{{ $registration->id }}" name="fee_menu" required><option value="">Pilih menu</option>@foreach($storeFeeMenus as $menuKey => $menu)<option value="{{ $menuKey }}" @selected(($regPayload['fee_menu'] ?? null) === $menuKey)>{{ $menu['label'] }}</option>@endforeach</select></label>
+                            <label>Fee Toko %<input id="agent-store-fee-{{ $registration->id }}" name="merchant_mdr_percent" inputmode="decimal" value="{{ $regPayload['merchant_mdr_percent'] ?? '' }}" required></label>
+                            <label>Fee Agen %<input id="agent-agent-fee-{{ $registration->id }}" name="agent_fee_percent" inputmode="decimal" value="{{ $regPayload['agent_fee_percent'] ?? '' }}" required></label>
+                            <button class="btn primary compact-btn" style="width:100%; margin:8px 0">Submit ke MA</button>
+                        </form>
+                    </div></div>
+                @endif
+                @if($registration->status === 'pending_agent')
+                    <form method="post" action="{{ route('agent.requests.delete', $registration) }}" style="display:inline">@csrf @method('DELETE')<button class="btn danger">Delete</button></form>
+                @elseif($registration->status === 'pending_ma')<span class="badge warn">Terkirim MA</span>
+                @elseif($registration->status === 'rejected' && ! $canResubmit($registration))<span class="muted">Batas revisi tercapai</span>
+                @elseif(! $canResubmit($registration))<span class="muted">-</span>
+                @endif
+                </td></tr>
             @endforeach
             @foreach($merchants as $merchant)
                 <tr><td>{{ $merchant->name }}</td><td><span class="truncate" style="display:block; max-width:190px">{{ $merchant->merchant_id }}</span></td><td>-</td><td>-</td><td>-</td><td><span class="badge ok">Approved</span></td><td>-</td><td>-</td></tr>
@@ -199,7 +216,6 @@
             </tbody>
         </table>
         </div>
-        </form>
     </section>
 @elseif(in_array($active, ['create-store', 'new-store']))
     @php($latestLink = session('onboarding_link') ?: (($onboardingLinks ?? collect())->firstWhere('status', 'active') ? route('merchant-registration.token-form', ($onboardingLinks ?? collect())->firstWhere('status', 'active')) : ''))

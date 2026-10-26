@@ -284,7 +284,6 @@
             $cashbackTrxAgent = $merchant?->cashback_trx_agent_amount ?? ($payload['cashback_trx_agent_amount'] ?? 0);
             $requestMenuOptions = $feeMenus->optionsFor('merchant');
             $requestFeeMenu = $merchant?->fee_menu ?? $payload['fee_menu'] ?? null;
-            $requestRates = $merchant?->fee_menu_rates ?? ($payload['fee_menu_rates'] ?? []);
             $detailRows = $r->detailRowsForMa();
         @endphp
         <tr>
@@ -311,7 +310,10 @@
                         @if(($r->merchant_type ?: ($payload['merchant_type'] ?? null)) === 'script')
                             <label>Engine Type<select name="engine_type" required><option value="">Pilih Engine Type</option><option value="sc" @selected(($payload['engine_type'] ?? null) === 'sc')>Script</option><option value="api" @selected(($payload['engine_type'] ?? null) === 'api')>API</option></select></label>
                         @endif
-                        @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'currentRates' => $requestRates])
+                        <label>Menu Fee<select id="ma-fee-menu-{{ $r->id }}" name="fee_menu" required><option value="">Pilih menu</option>@foreach($requestMenuOptions as $menuKey => $menu)<option value="{{ $menuKey }}" @selected($requestFeeMenu === $menuKey)>{{ $menu['label'] }}</option>@endforeach</select></label>
+                        <label>Fee Toko %<input id="ma-store-fee-{{ $r->id }}" name="merchant_mdr_percent" inputmode="decimal" value="{{ $payload['merchant_mdr_percent'] ?? '' }}" required></label>
+                        <div class="fee-pill"><span>Fee Agen (diisi agen)</span><strong>{{ isset($payload['agent_fee_percent']) ? $pct($payload['agent_fee_percent']) : 'Belum diisi agen' }}</strong></div>
+                        <label>Fee MA %<input id="ma-ma-fee-{{ $r->id }}" name="ma_fee_percent" inputmode="decimal" value="{{ $payload['ma_fee_percent'] ?? '' }}" required></label>
                         <input type="hidden" name="payin_fee_percent" value="{{ $payinFee }}">
                         <input type="hidden" name="cashback_agent_percent" value="{{ $cashbackAgentFee }}">
                         <input type="hidden" name="cashback_trx_toko_amount" value="{{ $cashbackTrxToko }}">
@@ -583,18 +585,6 @@ if (createStoreForm) {
         PayGridMultiField.collect(createStoreForm);
     });
 }
-function paygridWarnBelowFloor(input) {
-    var floor = parseFloat(input.getAttribute('data-floor'));
-    var value = parseFloat(String(input.value).replace(',', '.'));
-    var hint = input.parentElement.querySelector('.field-hint');
-    if (!hint) return;
-    hint.hidden = !(value > 0 && !isNaN(floor) && value < floor);
-}
-document.addEventListener('input', function (e) {
-    if (e.target.matches && e.target.matches('[data-floor]')) {
-        paygridWarnBelowFloor(e.target);
-    }
-});
 function paygridPaginateTable(table, perPage) {
     if (table.dataset.maPaginated) return;
     table.dataset.maPaginated = '1';

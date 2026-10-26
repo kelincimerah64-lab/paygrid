@@ -3,7 +3,6 @@
 @php
     $money = fn ($value) => 'Rp '.number_format((int) $value, 0, ',', '.');
     $pct = fn ($value) => number_format((float) $value, 3, ',', '.').'%';
-    $pctInput = fn ($value) => number_format((float) $value, 2, '.', '');
 @endphp
 
 @section('content')
@@ -199,8 +198,8 @@
     </section>
 
     <section class="card qris-panel section">
-        <div class="qris-toolbar"><h2>Floor &amp; Status Menu per Role</h2></div>
-        <div class="sub">Floor 0 = default (bebas, tanpa batas minimal). Menu yang dinonaktifkan untuk sebuah role tidak akan muncul di form role tersebut.</div>
+        <div class="qris-toolbar"><h2>Status Menu per Role</h2></div>
+        <div class="sub">Fee bebas diisi, tanpa batas minimal. Menu yang dinonaktifkan untuk sebuah role tidak akan muncul di form role tersebut.</div>
         <form id="fee-menu-settings-form" method="post" action="{{ route('superadmin.fee-menus.settings') }}" class="section">
             @csrf
             <div class="table-wrap fee-menu-wrap">
@@ -208,9 +207,9 @@
                     <thead>
                         <tr>
                             <th>Menu</th>
-                            <th>MA Aktif</th><th>MA Floor %</th>
-                            <th>Agent Aktif</th><th>Agent Floor %</th>
-                            <th>Toko Aktif</th><th>Toko Floor %</th>
+                            <th>MA Aktif</th>
+                            <th>Agent Aktif</th>
+                            <th>Toko Aktif</th>
                             <th>Hapus</th>
                         </tr>
                     </thead>
@@ -219,11 +218,8 @@
                         <tr>
                             <td><input type="text" name="menus[{{ $menu->id }}][label]" value="{{ $menu->label }}" required maxlength="80"><br><span class="muted">{{ $menu->key }}</span></td>
                             <td><input type="checkbox" name="menus[{{ $menu->id }}][ma_enabled]" value="1" @checked($menu->ma_enabled)></td>
-                            <td><input type="text" inputmode="decimal" name="menus[{{ $menu->id }}][ma_floor]" value="{{ $pctInput($menu->ma_floor) }}"></td>
                             <td><input type="checkbox" name="menus[{{ $menu->id }}][agent_enabled]" value="1" @checked($menu->agent_enabled)></td>
-                            <td><input type="text" inputmode="decimal" name="menus[{{ $menu->id }}][agent_floor]" value="{{ $pctInput($menu->agent_floor) }}"></td>
                             <td><input type="checkbox" name="menus[{{ $menu->id }}][merchant_enabled]" value="1" @checked($menu->merchant_enabled)></td>
-                            <td><input type="text" inputmode="decimal" name="menus[{{ $menu->id }}][merchant_floor]" value="{{ $pctInput($menu->merchant_floor) }}"></td>
                             <td><button type="submit" form="delete-fee-menu-{{ $menu->id }}" class="btn danger compact-btn" onclick="return confirm('Hapus menu {{ $menu->label }}?')">Hapus</button></td>
                         </tr>
                     @endforeach
@@ -273,18 +269,6 @@
         engineType.style.display = isEngine ? '' : 'none';
         engineType.disabled = !isEngine;
     }
-    function paygridWarnBelowFloor(input) {
-        var floor = parseFloat(input.getAttribute('data-floor'));
-        var value = parseFloat(String(input.value).replace(',', '.'));
-        var hint = input.parentElement.querySelector('.field-hint');
-        if (!hint) return;
-        hint.hidden = !(value > 0 && !isNaN(floor) && value < floor);
-    }
-    document.addEventListener('input', function (e) {
-        if (e.target.matches && e.target.matches('[data-floor]')) {
-            paygridWarnBelowFloor(e.target);
-        }
-    });
 </script>
 @endpush
 @endif

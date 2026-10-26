@@ -16,10 +16,11 @@ class FeeMenuCatalog
     }
 
     /**
-     * Menus and their per-role floor/enabled state are managed by superadmin
-     * (see App\Models\FeeMenu). Cached per-request only, cleared via
-     * clearCache() after any write - there's no cm/engine split anymore, so
-     * $typeCategory is accepted for call-site compatibility but unused.
+     * Menus and their per-role enabled state are managed by superadmin
+     * (see App\Models\FeeMenu). Rates are free-form: there is no minimum.
+     * Cached per-request only, cleared via clearCache() after any write -
+     * there's no cm/engine split anymore, so $typeCategory is accepted for
+     * call-site compatibility but unused.
      */
     public function optionsFor(string $role, ?string $typeCategory = null): array
     {
@@ -32,7 +33,7 @@ class FeeMenuCatalog
             ->orderBy('sort_order')
             ->get()
             ->mapWithKeys(fn (FeeMenu $menu) => [
-                $menu->key => ['label' => $menu->label, 'floor' => (float) $menu->{"{$role}_floor"}],
+                $menu->key => ['label' => $menu->label],
             ])
             ->all();
     }
@@ -40,13 +41,6 @@ class FeeMenuCatalog
     public static function clearCache(): void
     {
         self::$cache = [];
-    }
-
-    public function floor(string $role, ?string $typeCategory, string $menuKey): ?float
-    {
-        $option = $this->optionsFor($role, $typeCategory)[$menuKey] ?? null;
-
-        return $option === null ? null : (float) $option['floor'];
     }
 
     public function settlementMethod(string $menuKey): string

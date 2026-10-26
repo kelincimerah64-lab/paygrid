@@ -8,9 +8,6 @@ use App\Models\Agent;
 use App\Models\User;
 use App\Notifications\MerchantRegistrationSubmittedToMa;
 use App\Jobs\ProvisionMerchantOnGateway;
-use App\Rules\ExactlyOneFeeMenuFilled;
-use App\Rules\FeeMenuRatesAboveFloor;
-use App\Rules\FeeMenuRatesAboveReference;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
@@ -25,7 +22,7 @@ class MerchantRegistrationWorkflowController extends Controller
 {
     public const MAX_REVISIONS = 3;
 
-    public function submit(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse
+    public function submit(Request $request, MerchantRegistration $registration, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
     {
         if ($request->user()?->role === 'agent') {
             $agent = Agent::query()
@@ -37,11 +34,25 @@ class MerchantRegistrationWorkflowController extends Controller
         abort_unless(in_array($registration->status, ['draft', 'pending_agent', 'rejected'], true), 422);
         $wasRejected = $registration->status === 'rejected';
         abort_if($wasRejected && $registration->revision_count >= self::MAX_REVISIONS, 422);
-        $before = $registration->only(['status', 'submitted_to_ma_at', 'revision_count']);
+        // The agent confirms (or revises) the store fee from the form and sets its own fee for this store. No floor.
+        $this->normalizePercents($request, ['merchant_mdr_percent', 'agent_fee_percent']);
+        $data = $request->validate([
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('merchant')))],
+            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'agent_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+        ]);
+        $before = $registration->only(['status', 'submitted_to_ma_at', 'revision_count', 'payload']);
         $registration->update([
             'status' => 'pending_ma',
             'submitted_to_ma_at' => now(),
             'revision_count' => $wasRejected ? $registration->revision_count + 1 : $registration->revision_count,
+            'settlement_method' => $feeMenus->settlementMethod($data['fee_menu']),
+            'payload' => [
+                ...(array) ($registration->payload ?? []),
+                'fee_menu' => $data['fee_menu'],
+                'merchant_mdr_percent' => (float) $data['merchant_mdr_percent'],
+                'agent_fee_percent' => (float) $data['agent_fee_percent'],
+            ],
         ]);
         $ma = $registration->agent?->ma;
         if ($ma) {
@@ -58,21 +69,23 @@ class MerchantRegistrationWorkflowController extends Controller
         abort_unless(in_array($registration->status, ['pending_ma', 'pending_agent'], true), 422);
         $feeMenus = app(FeeMenuCatalog::class);
         $typeCategory = $feeMenus->typeCategory((string) ($request->input('merchant_type') ?? $registration->merchant_type));
-        $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
-        $request->merge(['fee_menu_rates' => $rates]);
-        $agentRates = (array) ($registration->agent?->fee_menu_rates ?? []);
+        // MA sees the store fee and the agent's fee, may revise the store fee, and sets its own fee. No floor.
+        $this->normalizePercents($request, ['merchant_mdr_percent', 'ma_fee_percent']);
         $data = $request->validate([
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay,magnetopay'],
             'merchant_type' => ['nullable', 'in:cm,script'],
             'engine_type' => [Rule::requiredIf($typeCategory === 'engine'), 'nullable', 'in:sc,api'],
             'admin_email' => ['required', 'email', 'max:160'],
-            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled(), new FeeMenuRatesAboveReference('merchant', $agentRates, 'Based Fee Agent')],
+            'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('merchant')))],
+            'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'payin_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'cashback_agent_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'cashback_trx_toko_amount' => ['nullable', 'integer', 'min:0'],
             'cashback_trx_agent_amount' => ['nullable', 'integer', 'min:0'],
         ]);
-        $activeMenu = array_key_first(array_filter($rates));
+        $activeMenu = $data['fee_menu'];
+        $rates = $feeMenus->normalizeRates([$activeMenu => $data['merchant_mdr_percent']], 'merchant');
 
         $existingAdmin = $registration->merchant_id
             ? User::query()->where('merchant_id', $registration->merchant_id)->where('role', 'admin')->first()
@@ -83,7 +96,17 @@ class MerchantRegistrationWorkflowController extends Controller
         abort_if($emailTaken, 422, 'Email admin sudah dipakai user lain.');
 
         $payload = (array) ($registration->payload ?? []);
-        $merchantMdr = (float) $rates[$activeMenu];
+        $merchantMdr = (float) $data['merchant_mdr_percent'];
+        $ownerAgent = $registration->agent_id ? Agent::query()->with('ma')->find($registration->agent_id) : null;
+        // Requests submitted before agents set their own fee fall back to the agent's rate for this menu.
+        $agentFee = (float) ($payload['agent_fee_percent'] ?? ($ownerAgent ? $feeSync->agentRateFor($ownerAgent, $activeMenu) : 0));
+        $payload = [
+            ...$payload,
+            'fee_menu' => $activeMenu,
+            'merchant_mdr_percent' => $merchantMdr,
+            'agent_fee_percent' => $agentFee,
+            'ma_fee_percent' => (float) $data['ma_fee_percent'],
+        ];
         $payin = (float) ($data['payin_fee_percent'] ?? $payload['payin_fee_percent'] ?? 0);
         $cashbackAgent = (float) ($data['cashback_agent_percent'] ?? $payload['cashback_agent_percent'] ?? 0);
         $cashbackTrxToko = (int) ($data['cashback_trx_toko_amount'] ?? $payload['cashback_trx_toko_amount'] ?? 0);
@@ -99,10 +122,6 @@ class MerchantRegistrationWorkflowController extends Controller
             ? Merchant::query()->findOrFail($registration->merchant_id)
             : new Merchant;
         $type = $data['merchant_type'] ?? $registration->merchant_type;
-        $ownerAgent = $registration->agent_id ? Agent::query()->with('ma')->find($registration->agent_id) : null;
-        $feeSnapshot = $ownerAgent
-            ? $feeSync->snapshotFor($ownerAgent, $activeMenu, $merchantMdr)
-            : ['merchant_mdr_percent' => $merchantMdr, 'agent_fee_percent' => 0.0, 'ma_fee_percent' => 0.0];
         $merchant->fill([
             'agent_id' => $registration->agent_id,
             'slug' => $slug,
@@ -127,13 +146,16 @@ class MerchantRegistrationWorkflowController extends Controller
             'cs_email' => $payload['cs_email'] ?? $merchant->cs_email,
             'cs_telegram' => $payload['cs_telegram'] ?? $merchant->cs_telegram,
             'fee_menu' => $activeMenu,
-            'fee_menu_rates' => $data['fee_menu_rates'],
+            'fee_menu_rates' => $rates,
             'settlement_method' => $settlementMethod,
             'payin_fee_percent' => $payin,
             'cashback_agent_percent' => $cashbackAgent,
             'cashback_trx_toko_amount' => $cashbackTrxToko,
             'cashback_trx_agent_amount' => $cashbackTrxAgent,
-            ...$feeSnapshot,
+            'merchant_mdr_percent' => $merchantMdr,
+            'agent_fee_percent' => $agentFee,
+            'ma_fee_percent' => (float) $data['ma_fee_percent'],
+            'fees_per_store' => true,
             'disbursement_fee_fixed' => (int) ($payload['disbursement_fee_fixed'] ?? $payload['withdrawal_fee'] ?? 0),
             'onboarding_payload' => $payload,
             'approved_at' => now(),
@@ -160,7 +182,7 @@ class MerchantRegistrationWorkflowController extends Controller
         }
 
         $before = $registration->only(['status', 'merchant_id', 'approved_at']);
-        $registration->update(['merchant_id' => $merchant->id, 'status' => 'approved', 'approved_at' => now()]);
+        $registration->update(['merchant_id' => $merchant->id, 'status' => 'approved', 'approved_at' => now(), 'payload' => $payload]);
         $audit->record('merchant_registration.approved', $registration, $before, $registration->only(array_keys($before)));
         $audit->record('merchant.created_from_registration', $merchant, null, $merchant->only(['agent_id', 'slug', 'name', 'gateway', 'merchant_type', 'approval_status']));
         if ($merchant->gateway === 'hilogate' && config('paygrid.gateway.hilogate.onboarding_email') && config('paygrid.gateway.hilogate.onboarding_password')) {
@@ -192,6 +214,16 @@ class MerchantRegistrationWorkflowController extends Controller
         ]);
 
         return $pdf->download('request-toko-'.Str::slug($registration->store_name).'-'.$registration->id.'.pdf');
+    }
+
+    /** Fee fields accept "1,5" as well as "1.5". */
+    private function normalizePercents(Request $request, array $fields): void
+    {
+        foreach ($fields as $field) {
+            if (is_string($request->input($field))) {
+                $request->merge([$field => str_replace(',', '.', trim($request->input($field)))]);
+            }
+        }
     }
 
     private function authorizeMaRegistration(Request $request, MerchantRegistration $registration): void

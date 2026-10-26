@@ -12,6 +12,10 @@ use App\Models\User;
  * per-menu fee_menu_rates tables on Merchant/Agent/User, since a merchant's
  * fee now depends on which menu it runs plus its own agent/MA's rate for
  * that same menu, not a single flat number per tier.
+ *
+ * Stores approved through the request flow carry their own agent/MA fee
+ * (merchants.fees_per_store); those are never overwritten from the agent's
+ * or MA's rates.
  */
 class FeeSyncService
 {
@@ -25,8 +29,13 @@ class FeeSyncService
         return $ma === null ? 0.0 : (float) (((array) ($ma->fee_menu_rates ?? []))[$menuKey] ?? 0);
     }
 
-    public function snapshotFor(Agent $agent, string $menuKey, float $merchantRate): array
+    /** $merchant: the store being edited, if any. A store with its own agent/MA fee only gets its MDR updated. */
+    public function snapshotFor(Agent $agent, string $menuKey, float $merchantRate, ?Merchant $merchant = null): array
     {
+        if ($merchant?->fees_per_store) {
+            return ['merchant_mdr_percent' => $merchantRate];
+        }
+
         return [
             'merchant_mdr_percent' => $merchantRate,
             'agent_fee_percent' => $this->agentRateFor($agent, $menuKey),
@@ -37,7 +46,7 @@ class FeeSyncService
     public function resyncAgent(Agent $agent): void
     {
         $rates = (array) ($agent->fee_menu_rates ?? []);
-        Merchant::query()->where('agent_id', $agent->id)->whereNotNull('fee_menu')
+        Merchant::query()->where('agent_id', $agent->id)->whereNotNull('fee_menu')->where('fees_per_store', false)
             ->get(['id', 'fee_menu'])
             ->groupBy('fee_menu')
             ->each(function ($group, $menuKey) use ($rates) {
@@ -50,7 +59,7 @@ class FeeSyncService
     {
         $rates = (array) ($ma->fee_menu_rates ?? []);
         $agentIds = Agent::query()->where('ma_user_id', $ma->id)->pluck('id');
-        Merchant::query()->whereIn('agent_id', $agentIds)->whereNotNull('fee_menu')
+        Merchant::query()->whereIn('agent_id', $agentIds)->whereNotNull('fee_menu')->where('fees_per_store', false)
             ->get(['id', 'fee_menu'])
             ->groupBy('fee_menu')
             ->each(function ($group, $menuKey) use ($rates) {

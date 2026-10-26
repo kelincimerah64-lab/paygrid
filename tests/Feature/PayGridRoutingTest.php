@@ -464,11 +464,8 @@ class PayGridRoutingTest extends TestCase
             $payload[$row->id] = [
                 'label' => $row->key === 'h_plus_1' ? 'Base H1 Renamed' : $row->label,
                 'ma_enabled' => '1',
-                'ma_floor' => (string) $row->ma_floor,
                 'agent_enabled' => $row->key === 'everyday' ? '0' : '1',
-                'agent_floor' => (string) $row->agent_floor,
                 'merchant_enabled' => '1',
-                'merchant_floor' => $row->key === 'same_day' ? '2.50' : (string) $row->merchant_floor,
             ];
         }
         $this->post(route('superadmin.fee-menus.settings'), ['menus' => $payload])
@@ -478,7 +475,6 @@ class PayGridRoutingTest extends TestCase
         FeeMenuCatalog::clearCache();
         $this->assertArrayNotHasKey('everyday', $feeMenus->optionsFor('agent'));
         $this->assertArrayHasKey('everyday', $feeMenus->optionsFor('merchant'));
-        $this->assertEqualsWithDelta(2.50, $feeMenus->floor('merchant', null, 'same_day'), 0.0001);
         $this->assertSame('Base H1 Renamed', FeeMenu::query()->where('key', 'h_plus_1')->firstOrFail()->label);
         $this->assertDatabaseHas('audit_logs', ['action' => 'superadmin.fee_menu_settings_updated']);
 
@@ -518,9 +514,20 @@ class PayGridRoutingTest extends TestCase
         $this->assertEqualsWithDelta(0.90, (float) $ma->refresh()->fee_menu_rates['h_plus_1'], 0.0001);
         $this->assertEqualsWithDelta(0.90, (float) $merchant->refresh()->ma_fee_percent, 0.0001);
 
+        // No floor anymore: any rate is accepted.
         $this->post(route('superadmin.ma-fee.update', $ma), [
             'fee_menu_rates' => ['h_plus_1' => '0.10'],
-        ])->assertSessionHasErrors('fee_menu_rates');
+        ])->assertSessionHasNoErrors();
+        $this->assertEqualsWithDelta(0.10, (float) $merchant->refresh()->ma_fee_percent, 0.0001);
+
+        // A store that got its own agent/MA fee at approval is left alone by the cascade.
+        $merchant->forceFill(['fees_per_store' => true, 'ma_fee_percent' => 0.55, 'agent_fee_percent' => 0.75])->save();
+        $this->post(route('superadmin.ma-fee.update', $ma), ['fee_menu_rates' => ['h_plus_1' => '0.20']])->assertSessionHasNoErrors();
+        $this->post(route('superadmin.merchant-fee.update', $merchant), ['fee_menu_rates' => ['h_plus_1' => '1.40']])->assertSessionHasNoErrors();
+        $merchant->refresh();
+        $this->assertEqualsWithDelta(0.55, (float) $merchant->ma_fee_percent, 0.0001);
+        $this->assertEqualsWithDelta(0.75, (float) $merchant->agent_fee_percent, 0.0001);
+        $this->assertEqualsWithDelta(1.40, (float) $merchant->merchant_mdr_percent, 0.0001);
     }
 
     public function test_merchant_admin_can_manage_users_settings_logs_and_is_scoped(): void
@@ -2120,19 +2127,39 @@ class PayGridRoutingTest extends TestCase
                 'cs_email' => 'cs-approval@paygrid.local',
                 'settlement_fee_percent' => 0.05,
                 'disbursement_fee_fixed' => 5000,
+                'fee_menu' => 'everyday',
+                'merchant_mdr_percent' => 1.5,
+                'agent_fee_percent' => 1.3,
             ],
         ]);
 
         $user = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
         $this->actingAs($user)
+            ->get(route('ma.approvals'))
+            ->assertOk()
+            ->assertSee('Fee Agen (diisi agen)')
+            ->assertSee('1,300%');
+
+        // MA revises the store fee and sets its own fee freely: lower than the agent's, no floor.
+        $this->actingAs($user)
             ->post(route('api.merchant-registration.approve', $registration), [
-                'fee_menu_rates' => ['everyday' => 1.2],
+                'fee_menu' => 'everyday',
+                'merchant_mdr_percent' => '1,2',
+                'ma_fee_percent' => '0.05',
                 'admin_email' => 'admin-approval@paygrid.local',
             ])
-            ->assertRedirect();
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('merchants', ['name' => 'Approval Test Store', 'approval_status' => 'approved']);
         $merchant = Merchant::query()->where('name', 'Approval Test Store')->firstOrFail();
+        $this->assertSame('everyday', $merchant->fee_menu);
+        $this->assertEqualsWithDelta(1.2, (float) $merchant->merchant_mdr_percent, 0.0001);
+        $this->assertEqualsWithDelta(1.2, (float) $merchant->fee_menu_rates['everyday'], 0.0001);
+        $this->assertEqualsWithDelta(1.3, (float) $merchant->agent_fee_percent, 0.0001);
+        $this->assertEqualsWithDelta(0.05, (float) $merchant->ma_fee_percent, 0.0001);
+        $this->assertTrue($merchant->fees_per_store);
+        $this->assertEqualsWithDelta(0.05, (float) $registration->refresh()->payload['ma_fee_percent'], 0.0001);
         $this->assertSame('hg-approval-id', $merchant->merchant_id);
         $this->assertSame('hg-approval-key', $merchant->merchant_key);
         $this->assertSame('pic-approval@paygrid.local', $merchant->pic_email);
@@ -2158,9 +2185,16 @@ class PayGridRoutingTest extends TestCase
             'status' => 'rejected',
         ]);
 
+        // The agent's fee is required: a submit without it does not reach MA.
+        $this->actingAs($agentUser)
+            ->post(route('api.merchant-registration.submit', $registration), ['fee_menu' => 'h_plus_1', 'merchant_mdr_percent' => '1.5'])
+            ->assertSessionHasErrors('agent_fee_percent');
+        $this->assertSame('rejected', $registration->refresh()->status);
+
+        $fees = ['fee_menu' => 'h_plus_1', 'merchant_mdr_percent' => '1.5', 'agent_fee_percent' => '0.01'];
         for ($i = 1; $i <= 3; $i++) {
             $this->actingAs($agentUser)
-                ->post(route('api.merchant-registration.submit', $registration))
+                ->post(route('api.merchant-registration.submit', $registration), $fees)
                 ->assertRedirect()->assertSessionHas('status');
             $registration->refresh();
             $this->assertSame('pending_ma', $registration->status);
@@ -2168,8 +2202,10 @@ class PayGridRoutingTest extends TestCase
             $registration->update(['status' => 'rejected']);
         }
 
+        $this->assertEqualsWithDelta(0.01, (float) $registration->payload['agent_fee_percent'], 0.0001);
+
         $this->actingAs($agentUser)
-            ->post(route('api.merchant-registration.submit', $registration))
+            ->post(route('api.merchant-registration.submit', $registration), $fees)
             ->assertStatus(422);
         $this->assertSame('rejected', $registration->refresh()->status);
         $this->assertSame(3, $registration->revision_count);
@@ -2343,6 +2379,16 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame('used', $link->refresh()->status);
         $this->assertSame($registration->id, $link->merchant_registration_id);
 
+        // Each request is submitted on its own with the agent's fee; there is no bulk submit anymore.
+        $this->actingAs($agentUser)->get(route('agent.requests'))
+            ->assertOk()
+            ->assertSee('Isi Fee &amp; Submit MA', false)
+            ->assertSee('name="agent_fee_percent"', false)
+            ->assertDontSee('Submit Selected ke MA');
+        $this->actingAs($agentUser)->post(route('agent.requests.bulk'), ['action' => 'submit', 'registration_ids' => [$registration->id]])
+            ->assertSessionHasErrors('action');
+        $this->assertSame('pending_agent', $registration->refresh()->status);
+
         $this->post(route('merchant-registration.token-store', $link), ['store_name' => 'Second Submit'])->assertGone();
 
         $this->actingAs($agentUser)->post(route('agent.onboarding-links.store'), [])->assertRedirect();
@@ -2366,7 +2412,7 @@ class PayGridRoutingTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'agent.merchant_registration_deleted']);
 
         $this->actingAs($agentUser)
-            ->post(route('api.merchant-registration.submit', $registration))
+            ->post(route('api.merchant-registration.submit', $registration), ['fee_menu' => 'h_plus_1', 'merchant_mdr_percent' => '1.5', 'agent_fee_percent' => '1.1'])
             ->assertRedirect()->assertSessionHas('status');
         $this->assertSame('pending_ma', $registration->refresh()->status);
         $this->assertDatabaseHas('notifications', ['notifiable_id' => $agent->ma_user_id]);

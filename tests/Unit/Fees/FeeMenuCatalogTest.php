@@ -20,25 +20,11 @@ class FeeMenuCatalogTest extends TestCase
         $this->assertSame('engine', $catalog->typeCategory(null));
     }
 
-    public function test_ma_floors_match_the_agreed_fee_scheme(): void
-    {
-        $catalog = new FeeMenuCatalog();
-
-        $this->assertEqualsWithDelta(0.80, $catalog->floor('ma', null, 'h_plus_1'), 0.0001);
-        $this->assertEqualsWithDelta(0.85, $catalog->floor('ma', null, 'everyday'), 0.0001);
-        $this->assertEqualsWithDelta(0.90, $catalog->floor('ma', null, 'same_day'), 0.0001);
-        $this->assertEqualsWithDelta(0.85, $catalog->floor('ma', null, 'h_plus_1_sc'), 0.0001);
-        $this->assertEqualsWithDelta(0.90, $catalog->floor('ma', null, 'everyday_sc'), 0.0001);
-        $this->assertEqualsWithDelta(0.95, $catalog->floor('ma', null, 'same_day_sc'), 0.0001);
-        $this->assertEqualsWithDelta(0.85, $catalog->floor('ma', null, 'everyday_api'), 0.0001);
-        $this->assertEqualsWithDelta(0.90, $catalog->floor('ma', null, 'same_day_api'), 0.0001);
-    }
-
     /**
-     * Agent and Merchant menus are free-form (no minimum) - only MA enforces a floor.
-     * Every menu key still exists so the rate table renders the same 8 menus everywhere.
+     * Every role sees the same menus with the same labels, and only a label: rates are free-form,
+     * no role has a minimum anymore.
      */
-    public function test_agent_and_merchant_menus_share_ma_labels_with_no_floor(): void
+    public function test_every_role_shares_ma_labels_and_has_no_floor(): void
     {
         $catalog = new FeeMenuCatalog();
 
@@ -47,17 +33,9 @@ class FeeMenuCatalogTest extends TestCase
 
             $this->assertSame(array_keys($catalog->optionsFor('ma')), array_keys($options));
             foreach ($options as $key => $option) {
-                $this->assertSame($catalog->optionsFor('ma')[$key]['label'], $option['label']);
-                $this->assertEqualsWithDelta(0.0, $option['floor'], 0.0001);
+                $this->assertSame(['label' => $catalog->optionsFor('ma')[$key]['label']], $option);
             }
         }
-    }
-
-    public function test_floor_returns_null_for_unknown_combination(): void
-    {
-        $catalog = new FeeMenuCatalog();
-
-        $this->assertNull($catalog->floor('merchant', null, 'not_a_real_menu'));
     }
 
     public function test_settlement_method_strips_engine_suffix(): void
