@@ -16,6 +16,10 @@ return [
     // Private chat of the PIC who gets auto-assign escalations (n8n hardcoded one person's id).
     'pic_escalation_chat_id' => env('BOTTELE_PIC_ESCALATION_CHAT_ID'),
 
+    // Tech Support leader, tagged on every open-ticket reminder.
+    'leader_user_id' => env('BOTTELE_LEADER_USER_ID'),
+    'leader_name' => env('BOTTELE_LEADER_NAME', 'Leader'),
+
     // Every bot timestamp is stored as Asia/Jakarta wall-clock time, like the Google Sheet it replaces.
     'timezone' => 'Asia/Jakarta',
 

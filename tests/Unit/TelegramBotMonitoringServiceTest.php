@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\TelegramBotMonitoringService;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\UsesBotTeleDatabase;
 use Tests\TestCase;
@@ -54,6 +55,22 @@ class TelegramBotMonitoringServiceTest extends TestCase
         $this->seedBotTickets([['ticket_id', 'created_at', 'status'], ['T-NEW', '2026-10-24 12:37:00', 'OPEN']]);
 
         $this->assertSame(['T-NEW'], array_column($service->data([])['tickets'], 'ticket_id'));
+    }
+
+    public function test_shifts_last_eight_hours_from_absen_and_list_on_shift_first(): void
+    {
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-26 12:00:00', 'Asia/Jakarta'));
+        $attendances = DB::connection('bottele')->table('bot_attendances');
+        $attendances->insert(['user_id' => 701, 'name' => 'Karim', 'status' => 'HADIR', 'check_in_at' => '2026-10-26 03:00:00', 'expires_at' => '2026-10-26 11:00:00']);
+        $attendances->insert(['user_id' => 702, 'name' => 'Tamara', 'status' => 'HADIR', 'check_in_at' => '2026-10-26 08:00:00', 'expires_at' => '2026-10-26 16:00:00', 'active_ticket_id' => 'HGT-9']);
+        $attendances->insert(['user_id' => 703, 'name' => 'Gummy', 'status' => 'TIDAK_HADIR', 'check_in_at' => '2026-10-25 20:00:00', 'expires_at' => '2026-10-26 04:00:00']);
+
+        $shifts = app(TelegramBotMonitoringService::class)->data([])['shifts'];
+
+        $this->assertSame(['Tamara', 'Karim', 'Gummy'], array_column($shifts, 'name'));
+        $this->assertSame([true, false, false], array_column($shifts, 'on_shift'));
+        $this->assertSame('2026-10-26 16:00', $shifts[0]['ends_at']->format('Y-m-d H:i'));
+        $this->assertSame('HGT-9', $shifts[0]['active_ticket_id']);
     }
 
     public function test_it_treats_negative_raw_seconds_as_missing_instead_of_a_negative_duration(): void

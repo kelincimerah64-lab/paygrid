@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\BotTele\BotTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,7 @@ class TelegramBotMonitoringService
                 'categories' => [],
                 'statuses' => [],
                 'assignees' => [],
+                'shifts' => $this->shifts(),
                 'error' => 'Gagal mengambil data tiket bot. Coba refresh kembali.',
             ];
         }
@@ -46,8 +48,43 @@ class TelegramBotMonitoringService
             'categories' => $all->pluck('category')->filter()->unique()->sort()->values()->all(),
             'statuses' => $all->pluck('status')->filter()->unique()->sort()->values()->all(),
             'assignees' => $all->pluck('assigned_name')->filter()->unique()->sort()->values()->all(),
+            'shifts' => $this->shifts(),
             'error' => null,
         ];
+    }
+
+    /**
+     * Tech Support shifts: one row per technician from their latest `absen`. A shift lasts 8 hours from
+     * check-in, so a technician is on shift while status is HADIR and expires_at is still ahead.
+     */
+    public function shifts(): array
+    {
+        try {
+            $rows = DB::connection('bottele')->table('bot_attendances')->get(['name', 'username', 'status', 'check_in_at', 'expires_at', 'active_ticket_id']);
+        } catch (Throwable $e) {
+            Log::warning('telegram_bot_monitoring.shifts_failed', ['message' => $e->getMessage()]);
+
+            return [];
+        }
+
+        $now = BotTime::now();
+
+        return $rows->map(function (object $tech) use ($now): array {
+            $checkIn = BotTime::parse($tech->check_in_at);
+            $end = BotTime::parse($tech->expires_at);
+
+            return [
+                'name' => $tech->name ?: '-',
+                'username' => $tech->username,
+                'check_in_at' => $checkIn,
+                'ends_at' => $end,
+                'on_shift' => $tech->status === 'HADIR' && $end !== null && $end->greaterThan($now),
+                'active_ticket_id' => $tech->active_ticket_id,
+            ];
+        })
+            ->sortBy([['on_shift', 'desc'], fn (array $a, array $b) => ($b['check_in_at']?->timestamp ?? 0) <=> ($a['check_in_at']?->timestamp ?? 0)])
+            ->values()
+            ->all();
     }
 
     public function pendingIpWhitelist(): Collection

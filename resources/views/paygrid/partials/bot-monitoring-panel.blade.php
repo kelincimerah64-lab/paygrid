@@ -24,7 +24,31 @@
     </section>
 @endif
 
-@php($botResolvedPct = ($bm['kpis']['total'] ?? 0) > 0 ? round((($bm['kpis']['resolved'] ?? 0) / $bm['kpis']['total']) * 100) : 0)
+@php($shifts = $bm['shifts'] ?? [])
+<section class="card qris-panel section">
+    <div class="qris-toolbar"><h2>Data Shift Tech Support</h2><span class="badge ok">{{ collect($shifts)->where('on_shift', true)->count() }} on shift</span></div>
+    <p class="muted" style="margin:0 0 8px">Shift dihitung 8 jam sejak teknisi kirim <strong>absen</strong> ke bot. Setelah 8 jam, teknisi otomatis tidak on shift.</p>
+    <div class="table-wrap">
+        <table class="table qris-table">
+            <thead><tr><th>Teknisi</th><th>Status</th><th>Mulai Shift</th><th>Selesai Shift</th><th>Tiket Dipegang</th></tr></thead>
+            <tbody>
+            @forelse($shifts as $shift)
+                <tr>
+                    <td><strong>{{ $shift['name'] }}</strong><br><span class="muted">{{ $shift['username'] ? '@'.$shift['username'] : '-' }}</span></td>
+                    <td><span class="badge {{ $shift['on_shift'] ? 'ok' : '' }}">{{ $shift['on_shift'] ? 'On shift' : 'Off' }}</span></td>
+                    <td>{{ $shift['check_in_at']?->format('d/m/y H.i') ? $shift['check_in_at']->format('d/m/y H.i').' WIB' : '-' }}</td>
+                    <td>{{ $shift['ends_at']?->format('d/m/y H.i') ? $shift['ends_at']->format('d/m/y H.i').' WIB' : '-' }}</td>
+                    <td>{{ $shift['on_shift'] && $shift['active_ticket_id'] ? $shift['active_ticket_id'] : '-' }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="5" class="empty">Belum ada teknisi yang absen ke bot.</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@php($botResolvedPct =($bm['kpis']['total'] ?? 0) > 0 ? round((($bm['kpis']['resolved'] ?? 0) / $bm['kpis']['total']) * 100) : 0)
 @php($botFailedPct = ($bm['kpis']['total'] ?? 0) > 0 ? round((($bm['kpis']['failed'] ?? 0) / $bm['kpis']['total']) * 100) : 0)
 @if($bm['error'])
     <section class="card pad section"><span class="badge danger">{{ $bm['error'] }}</span></section>

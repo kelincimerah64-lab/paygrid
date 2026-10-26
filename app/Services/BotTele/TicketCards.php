@@ -2,7 +2,9 @@
 
 namespace App\Services\BotTele;
 
+use App\Models\BotAttendance;
 use App\Models\BotTicket;
+use Illuminate\Support\Collection;
 
 /**
  * Every Telegram text the bot sends, copied from the n8n nodes. Ticket cards
@@ -257,7 +259,7 @@ class TicketCards
     }
 
     /** remind_tiket_mnt_v2 "HTTP Request": the OPEN reminder ladder card. */
-    public function openReminder(BotTicket $t, int $reminderNumber, int $waitingMinutes): string
+    public function openReminder(BotTicket $t, int $reminderNumber, int $waitingMinutes, Collection $onShift): string
     {
         $lines = [
             $reminderNumber === 3 ? '<b>FINAL REMINDER 3/3</b>' : '<b>REMINDER '.$reminderNumber.'/3</b>',
@@ -272,6 +274,14 @@ class TicketCards
         $lines[] = 'Issue : '.self::e($t->description);
         $lines[] = 'Status : '.self::OPEN;
         $lines[] = 'Waiting Time : '.$waitingMinutes.' Minutes';
+        // Not in n8n: tag everyone on shift (absen within 8 hours) and the leader, so the reminder notifies them.
+        $lines[] = 'Tech On Shift : '.($onShift->isEmpty()
+            ? 'belum ada yang absen'
+            : $onShift->map(fn (BotAttendance $tech): string => self::link($tech->user_id, $tech->name, 'Tech'))->implode(', '));
+        $leaderId = config('bottele.leader_user_id');
+        if ($leaderId !== null && $leaderId !== '') {
+            $lines[] = 'Leader : '.self::link($leaderId, config('bottele.leader_name'), 'Leader');
+        }
 
         return implode("\n", $lines);
     }

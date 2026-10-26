@@ -89,7 +89,7 @@ class BotTeleAutomationTest extends TestCase
         $first = $this->sent('sendMessage')->sole();
         $this->assertSame(self::TECH_CHAT, $first['chat_id']);
         $this->assertStringStartsWith("<b>REMINDER 1/3</b>\n<b>HGT-1</b>\nMerchant Group : Kingspay", $first['text']);
-        $this->assertStringEndsWith("Status : 🔴\nWaiting Time : 10 Minutes", $first['text']);
+        $this->assertStringEndsWith("Status : 🔴\nWaiting Time : 10 Minutes\nTech On Shift : belum ada yang absen", $first['text']);
         $this->assertSame('take_HGT-1', $first['reply_markup']['inline_keyboard'][0][0]['callback_data']);
 
         $this->at('09:19:00');
@@ -110,6 +110,25 @@ class BotTeleAutomationTest extends TestCase
         $this->assertSame(3, $ticket->refresh()->open_reminder_count);
         $this->assertStringStartsWith('<b>FINAL REMINDER 3/3</b>', $this->sent('sendMessage')->last()['text']);
         $this->assertCount(3, $this->sent('sendMessage'));
+    }
+
+    public function test_reminder_tags_technicians_on_shift_and_the_leader(): void
+    {
+        config(['bottele.leader_user_id' => '900', 'bottele.leader_name' => 'Gummy']);
+        $this->openTicket();
+        $this->technician(701);
+        $this->technician(702, ['active_ticket_id' => 'HGT-OTHER']);
+        // Checked in more than 8 hours ago, and one already marked off: neither is on shift.
+        $this->technician(703, ['expires_at' => '2026-10-23 09:05:00']);
+        $this->technician(704, ['status' => 'TIDAK_HADIR']);
+
+        $this->at('09:10:00');
+        $this->runBot('check-open-ticket-reminders');
+
+        $this->assertStringEndsWith(
+            "Tech On Shift : <a href=\"tg://user?id=701\">Tech 701</a>, <a href=\"tg://user?id=702\">Tech 702</a>\nLeader : <a href=\"tg://user?id=900\">Gummy</a>",
+            $this->sent('sendMessage')->sole()['text'],
+        );
     }
 
     public function test_ip_whitelist_reminder_shows_approver(): void

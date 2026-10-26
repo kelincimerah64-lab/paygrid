@@ -42,6 +42,7 @@ All bot timestamps are stored as **Asia/Jakarta wall-clock** `Y-m-d H:i:s`, the 
 | `BOTTELE_TECH_CHAT_ID` | Group that receives the ticket cards (n8n: the same `-1004445566939`) |
 | `BOTTELE_IP_APPROVAL_CHAT_ID` | Group that approves or rejects IP Whitelist requests (n8n: `-1004436542388`) |
 | `BOTTELE_PIC_ESCALATION_CHAT_ID` | Private chat of the PIC who receives escalations (n8n hardcoded one person's id). Escalation does nothing while this is empty. |
+| `BOTTELE_LEADER_USER_ID`, `BOTTELE_LEADER_NAME` | Tech Support leader, tagged on every open-ticket reminder. Not tagged while the id is empty. |
 | `BOTTELE_AUTOMATION_SINCE` | Optional. The scheduled ticket jobs skip tickets created before this time. |
 | `BOTTELE_WAHA_BASE_URL`, `BOTTELE_WAHA_API_KEY`, `BOTTELE_WAHA_SESSION` | WAHA server. Each falls back to `PAYGRID_WHATSAPP_*`. |
 | `BOTTELE_WAHA_IP_APPROVAL_GROUP_ID` | WhatsApp group for the web IP Whitelist poll. No poll is sent while this is empty. |
@@ -100,6 +101,9 @@ Each item below was decided on purpose. Check them before cutover.
 9. **The webhook checks `X-Telegram-Bot-Api-Secret-Token`.** n8n had no such check.
 10. **Send Update and Failed clean up after themselves.** Once the technician's text is handled, the "Silakan ketik …" prompt and the technician's reply are deleted, so only the ticket card stays, the same as after a ticket is created. The prompt id is kept in `bot_sessions.support_prompt_message_id`.
 11. **New: Reject button next to Take Ticket.** Any technician can reject an OPEN ticket (spam, duplicate, test). The bot deletes the ticket's card in the tech group, its reminder cards, the clicked card and the merchant's card. The row stays in `bot_tickets` with status `REJECTED` and `last_update` "Rejected by …", so it is kept as a log. It uses the same conditional update as Take, so a ticket cannot be both taken and rejected.
+12. **New: shift tags and shift table.** A technician is on shift for 8 hours after sending `absen` (status HADIR, `expires_at` ahead), the same rule auto-assign already used.
+    - Each 10/20/30-minute reminder ends with `Tech On Shift :` (a `tg://user` mention of everyone on shift, busy or not, or "belum ada yang absen") and `Leader :` (`BOTTELE_LEADER_USER_ID` / `BOTTELE_LEADER_NAME`, omitted while unset). The reminder is a new message, so the mentions notify them.
+    - The Monitoring Bot Telegram page (CS Pusat and MA) shows a "Data Shift Tech Support" table from `bot_attendances`: technician, On shift / Off, shift start and end, and the ticket they hold. On-shift technicians are listed first.
 
 These behaviours are kept as they were in n8n:
 

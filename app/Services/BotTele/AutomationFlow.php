@@ -170,7 +170,8 @@ class AutomationFlow extends Flow
         // cs_group_message_id is the single pointer to the ticket's live card in the tech group.
         $this->telegram->deleteMessage($this->techChatId(), $ticket->cs_group_message_id);
 
-        $messageId = $this->telegram->sendMessage($this->techChatId(), $this->cards->openReminder($ticket, $number, $waiting), TicketCards::takeKeyboard($ticket->ticket_id));
+        // A new message (not an edit), so the technicians on shift and the leader tagged in it get a notification.
+        $messageId = $this->telegram->sendMessage($this->techChatId(), $this->cards->openReminder($ticket, $number, $waiting, $this->onShiftTechnicians($now)), TicketCards::takeKeyboard($ticket->ticket_id));
 
         $ticket->update([
             'open_reminder_message_ids' => $messageId !== null ? (string) $messageId : null,
@@ -183,11 +184,7 @@ class AutomationFlow extends Flow
     /** "GS - Find HADIR Tech" -> "Code - Pick Random Available Tech" -> "GS - Auto Assign Ticket" and its two branches. */
     private function autoAssign(BotTicket $ticket, CarbonImmutable $now): bool
     {
-        $eligible = BotAttendance::query()->where('status', 'HADIR')->get()->filter(function (BotAttendance $tech) use ($now): bool {
-            $expiresAt = BotTime::parse($tech->expires_at);
-
-            return $expiresAt && $expiresAt->greaterThan($now) && trim((string) $tech->active_ticket_id) === '';
-        })->values();
+        $eligible = $this->onShiftTechnicians($now)->filter(fn (BotAttendance $tech): bool => trim((string) $tech->active_ticket_id) === '')->values();
 
         if ($eligible->isEmpty()) {
             return false;
@@ -229,6 +226,16 @@ class AutomationFlow extends Flow
         $ticket->update(['open_reminder_message_ids' => null, 'open_reminder_count' => 0, 'last_open_reminder_at' => null, 'updated_at' => $at]);
 
         return true;
+    }
+
+    /** @return Collection<int, BotAttendance> technicians on shift: their `absen` is still within its 8 hours. */
+    private function onShiftTechnicians(CarbonImmutable $now): Collection
+    {
+        return BotAttendance::query()->where('status', 'HADIR')->orderBy('id')->get()->filter(function (BotAttendance $tech) use ($now): bool {
+            $expiresAt = BotTime::parse($tech->expires_at);
+
+            return $expiresAt && $expiresAt->greaterThan($now);
+        })->values();
     }
 
     /** BOTTELE_AUTOMATION_SINCE, when set, keeps every scheduled job away from older (imported) tickets. */
