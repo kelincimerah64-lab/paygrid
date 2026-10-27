@@ -73,8 +73,7 @@ class DashboardController extends Controller
         $merchantIds = $merchants->pluck('id')->all();
         $ticketBase = SupportTicket::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->when($filters['from'] !== '', fn ($query) => $query->whereDate('created_at', '>=', $filters['from']))
-            ->when($filters['to'] !== '', fn ($query) => $query->whereDate('created_at', '<=', $filters['to']));
+            ->whereWibDateBetween('created_at', $filters['from'] ?: null, $filters['to'] ?: null);
         $ticketStats = [
             'total' => (clone $ticketBase)->count(),
             'open' => (clone $ticketBase)->whereIn('status', ['not_started', 'open', 'in_progress'])->count(),
@@ -240,8 +239,7 @@ class DashboardController extends Controller
                 ->orWhere('token', 'like', $requestFilters['q'].'%')
                 ->orWhereRelation('merchant', 'merchant_id', 'like', $requestFilters['q'].'%')))
             ->when($requestFilters['status'] !== 'all', fn ($query) => $query->where('status', $requestFilters['status']))
-            ->when($requestFilters['from'] !== '', fn ($query) => $query->whereDate('created_at', '>=', $requestFilters['from']))
-            ->when($requestFilters['to'] !== '', fn ($query) => $query->whereDate('created_at', '<=', $requestFilters['to']))
+            ->whereWibDateBetween('created_at', $requestFilters['from'] ?: null, $requestFilters['to'] ?: null)
             ->latest()
             ->get();
 
@@ -479,7 +477,7 @@ class DashboardController extends Controller
         $requests = TopupRequest::query()
             ->with('ticket')
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($from && $to, fn ($query) => $query->whereWibDateBetween('submitted_at', $from, $to))
             ->when($page === 'checklist', fn ($query) => $query->where('status', 'success'))
             ->when(request('status') && request('status') !== 'all', fn ($query) => request('status') === 'expired' ? $query->whereIn('status', ['expired', 'failed', 'rejected']) : $query->where('status', request('status')))
             ->when(request('processed') === 'checked', fn ($query) => $query->where('is_processed', true))
@@ -547,7 +545,7 @@ class DashboardController extends Controller
     {
         return TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($from && $to, fn ($query) => $query->whereWibDateBetween('submitted_at', $from, $to))
             ->when($search !== '', fn ($query) => $this->applyTransactionSearch($query, $search));
     }
 
@@ -642,7 +640,7 @@ class DashboardController extends Controller
 
         $transactions = TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($from && $to, fn ($query) => $query->whereWibDateBetween('submitted_at', $from, $to))
             ->when($status !== 'all', fn ($query) => $status === 'expired' ? $query->whereIn('status', ['expired', 'failed', 'rejected']) : $query->where('status', $status))
             ->when($search !== '', fn ($query) => $this->applyTransactionSearch($query, $search))
             ->latest('submitted_at')

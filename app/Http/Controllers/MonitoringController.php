@@ -15,8 +15,7 @@ class MonitoringController extends Controller
         $action = (string) request('action', '');
         $base = AuditLog::query()
             ->when($action !== '', fn ($query) => $query->where('action', $action))
-            ->when(request('from'), fn ($query, $from) => $query->whereDate('created_at', '>=', $from))
-            ->when(request('to'), fn ($query, $to) => $query->whereDate('created_at', '<=', $to))
+            ->whereWibDateBetween('created_at', request('from') ?: null, request('to') ?: null)
             ->when($search !== '', fn ($query) => $query->where(function ($nested) use ($search) {
                 $nested->where('action', 'like', "%{$search}%")
                     ->orWhere('target_type', 'like', "%{$search}%")
@@ -36,8 +35,7 @@ class MonitoringController extends Controller
         $base = GatewaySyncLog::query()
             ->when(request('gateway'), fn ($query, $gateway) => $query->where('gateway', $gateway))
             ->when(request('status'), fn ($query, $status) => $query->where('status', $status))
-            ->when(request('from'), fn ($query, $from) => $query->whereDate('created_at', '>=', $from))
-            ->when(request('to'), fn ($query, $to) => $query->whereDate('created_at', '<=', $to));
+            ->whereWibDateBetween('created_at', request('from') ?: null, request('to') ?: null);
 
         $logs = (clone $base)->with('merchant:id,slug,name')->latest()->paginate(config('paygrid.reports.default_page_size', 50))->withQueryString();
 

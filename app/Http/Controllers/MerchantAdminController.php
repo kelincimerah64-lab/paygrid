@@ -48,7 +48,7 @@ class MerchantAdminController extends Controller
         $requests = $needsTransactionData ? TopupRequest::query()
             ->with('ticket')
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($from && $to, fn ($query) => $query->whereWibDateBetween('submitted_at', $from, $to))
             ->when($page === 'checklist', fn ($query) => $query->where('status', 'success'))
             ->when($status !== 'all' && $page !== 'checklist', fn ($query) => $status === 'expired' ? $query->whereIn('status', ['expired', 'failed', 'rejected']) : $query->where('status', $status))
             ->when($processed === 'checked', fn ($query) => $query->where('is_processed', true))
@@ -183,7 +183,7 @@ class MerchantAdminController extends Controller
     {
         $row = TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($from && $to, fn ($query) => $query->whereWibDateBetween('submitted_at', $from, $to))
             ->when($search !== '', fn ($query) => $query->where(function ($nested) use ($search) {
                 $nested->where('payment_id', 'like', "{$search}%")
                     ->orWhere('gateway_ref_id', 'like', "{$search}%")

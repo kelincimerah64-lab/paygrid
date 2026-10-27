@@ -190,7 +190,7 @@ class MobileAppController extends Controller
         return TopupRequest::query()
             ->with('merchant:id,name')
             ->whereIn('merchant_id', $merchantIds)
-            ->when($from !== '' && $to !== '', fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($from !== '' && $to !== '', fn ($query) => $query->whereWibDateBetween('submitted_at', $from, $to))
             ->when($status !== 'all', fn ($query) => $status === 'expired'
                 ? $query->whereIn('status', ['expired', 'failed', 'rejected'])
                 : $query->where('status', $status))
@@ -201,7 +201,7 @@ class MobileAppController extends Controller
     {
         return MerchantWithdrawal::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->when($from !== '' && $to !== '', fn ($query) => $query->whereDate('gateway_created_at', '>=', $from)->whereDate('gateway_created_at', '<=', $to))
+            ->when($from !== '' && $to !== '', fn ($query) => $query->whereWibDateBetween('gateway_created_at', $from, $to))
             ->when($status !== 'all', fn ($query) => $query->where('status', strtoupper($status)))
             ->latest('gateway_created_at');
     }
@@ -210,7 +210,7 @@ class MobileAppController extends Controller
     {
         return SupportTicket::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->when($from !== '' && $to !== '', fn ($query) => $query->whereDate('created_at', '>=', $from)->whereDate('created_at', '<=', $to))
+            ->when($from !== '' && $to !== '', fn ($query) => $query->whereWibDateBetween('created_at', $from, $to))
             ->when($status !== 'all', fn ($query) => $status === 'open'
                 ? $query->whereIn('status', ['not_started', 'open', 'in_progress'])
                 : $query->where('status', $status))
@@ -221,7 +221,7 @@ class MobileAppController extends Controller
     {
         $row = TopupRequest::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->when($from !== '' && $to !== '', fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($from !== '' && $to !== '', fn ($query) => $query->whereWibDateBetween('submitted_at', $from, $to))
             ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as success_amount")
             ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending")
@@ -244,7 +244,7 @@ class MobileAppController extends Controller
     {
         $row = MerchantWithdrawal::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->when($from !== '' && $to !== '', fn ($query) => $query->whereDate('gateway_created_at', '>=', $from)->whereDate('gateway_created_at', '<=', $to))
+            ->when($from !== '' && $to !== '', fn ($query) => $query->whereWibDateBetween('gateway_created_at', $from, $to))
             ->selectRaw("SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN amount ELSE 0 END), 0) as completed_amount")
             ->selectRaw("SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) as pending")
@@ -267,7 +267,7 @@ class MobileAppController extends Controller
     {
         $query = SupportTicket::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->when($from !== '' && $to !== '', fn ($q) => $q->whereDate('created_at', '>=', $from)->whereDate('created_at', '<=', $to));
+            ->when($from !== '' && $to !== '', fn ($q) => $q->whereWibDateBetween('created_at', $from, $to));
 
         return [
             'total' => (clone $query)->count(),

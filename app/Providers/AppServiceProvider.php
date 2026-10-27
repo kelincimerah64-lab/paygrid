@@ -7,6 +7,7 @@ use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -43,6 +44,16 @@ class AppServiceProvider extends ServiceProvider
             $token = is_object($topup) ? ($topup->public_token ?? $topup->getKey()) : $topup;
 
             return Limit::perMinute(120)->by($request->ip().'|'.(string) $token);
+        });
+
+        // Date filters arrive as WIB calendar dates while datetime columns are stored in UTC, so a plain
+        // whereDate() files everything between 00:00 and 07:00 WIB under the previous day. This filters
+        // on the UTC instants of WIB midnight instead. Bounds are optional, like the filters themselves.
+        QueryBuilder::macro('whereWibDateBetween', function (string $column, ?string $from, ?string $to) {
+            /** @var QueryBuilder $this */
+            return $this
+                ->when($from, fn ($query) => $query->where($column, '>=', CarbonImmutable::parse($from, 'Asia/Jakarta')->startOfDay()->utc()))
+                ->when($to, fn ($query) => $query->where($column, '<=', CarbonImmutable::parse($to, 'Asia/Jakarta')->endOfDay()->utc()));
         });
 
         View::composer('layouts.paygrid', function ($view): void {
