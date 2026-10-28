@@ -70,7 +70,7 @@ class MerchantRegistrationWorkflowController extends Controller
         $feeMenus = app(FeeMenuCatalog::class);
         $typeCategory = $feeMenus->typeCategory((string) ($request->input('merchant_type') ?? $registration->merchant_type));
         // MA sees the store fee and the agent's fee, may revise the store fee, and sets its own fee. No floor.
-        $this->normalizePercents($request, ['merchant_mdr_percent', 'ma_fee_percent']);
+        $this->normalizePercents($request, ['merchant_mdr_percent', 'agent_fee_percent', 'ma_fee_percent']);
         $data = $request->validate([
             'gateway' => ['nullable', 'in:hilogate,alpha,artageto,kingspay,magnetopay'],
             'merchant_type' => ['nullable', 'in:cm,script'],
@@ -78,6 +78,7 @@ class MerchantRegistrationWorkflowController extends Controller
             'admin_email' => ['required', 'email', 'max:160'],
             'fee_menu' => ['required', Rule::in(array_keys($feeMenus->optionsFor('merchant')))],
             'merchant_mdr_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'agent_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'ma_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'payin_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'cashback_agent_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -98,8 +99,9 @@ class MerchantRegistrationWorkflowController extends Controller
         $payload = (array) ($registration->payload ?? []);
         $merchantMdr = (float) $data['merchant_mdr_percent'];
         $ownerAgent = $registration->agent_id ? Agent::query()->with('ma')->find($registration->agent_id) : null;
-        // Requests submitted before agents set their own fee fall back to the agent's rate for this menu.
-        $agentFee = (float) ($payload['agent_fee_percent'] ?? ($ownerAgent ? $feeSync->agentRateFor($ownerAgent, $activeMenu) : 0));
+        // MA may revise the agent's fee. Left empty, the agent's own entry is kept; requests submitted
+        // before agents set their own fee fall back to the agent's rate for this menu.
+        $agentFee = (float) ($data['agent_fee_percent'] ?? $payload['agent_fee_percent'] ?? ($ownerAgent ? $feeSync->agentRateFor($ownerAgent, $activeMenu) : 0));
         $payload = [
             ...$payload,
             'fee_menu' => $activeMenu,

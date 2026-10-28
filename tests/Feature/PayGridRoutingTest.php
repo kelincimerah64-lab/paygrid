@@ -2137,14 +2137,16 @@ class PayGridRoutingTest extends TestCase
         $this->actingAs($user)
             ->get(route('ma.approvals'))
             ->assertOk()
-            ->assertSee('Fee Agen (diisi agen)')
-            ->assertSee('1,300%');
+            // The agent's fee is an editable field, prefilled with what the agent entered.
+            ->assertSee('name="agent_fee_percent"', false)
+            ->assertSee('value="1.3"', false);
 
-        // MA revises the store fee and sets its own fee freely: lower than the agent's, no floor.
+        // MA revises the store fee and the agent's fee, and sets its own fee freely: no floor.
         $this->actingAs($user)
             ->post(route('api.merchant-registration.approve', $registration), [
                 'fee_menu' => 'everyday',
                 'merchant_mdr_percent' => '1,2',
+                'agent_fee_percent' => '0,9',
                 'ma_fee_percent' => '0.05',
                 'admin_email' => 'admin-approval@paygrid.local',
             ])
@@ -2156,7 +2158,8 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame('everyday', $merchant->fee_menu);
         $this->assertEqualsWithDelta(1.2, (float) $merchant->merchant_mdr_percent, 0.0001);
         $this->assertEqualsWithDelta(1.2, (float) $merchant->fee_menu_rates['everyday'], 0.0001);
-        $this->assertEqualsWithDelta(1.3, (float) $merchant->agent_fee_percent, 0.0001);
+        $this->assertEqualsWithDelta(0.9, (float) $merchant->agent_fee_percent, 0.0001);
+        $this->assertEqualsWithDelta(0.9, (float) $registration->refresh()->payload['agent_fee_percent'], 0.0001);
         $this->assertEqualsWithDelta(0.05, (float) $merchant->ma_fee_percent, 0.0001);
         $this->assertTrue($merchant->fees_per_store);
         $this->assertEqualsWithDelta(0.05, (float) $registration->refresh()->payload['ma_fee_percent'], 0.0001);

@@ -312,7 +312,7 @@
                         @endif
                         <label>Menu Fee<select id="ma-fee-menu-{{ $r->id }}" name="fee_menu" required><option value="">Pilih menu</option>@foreach($requestMenuOptions as $menuKey => $menu)<option value="{{ $menuKey }}" @selected($requestFeeMenu === $menuKey)>{{ $menu['label'] }}</option>@endforeach</select></label>
                         <label>Fee Toko %<input id="ma-store-fee-{{ $r->id }}" name="merchant_mdr_percent" inputmode="decimal" value="{{ $payload['merchant_mdr_percent'] ?? '' }}" required></label>
-                        <div class="fee-pill"><span>Fee Agen (diisi agen)</span><strong>{{ isset($payload['agent_fee_percent']) ? $pct($payload['agent_fee_percent']) : 'Belum diisi agen' }}</strong></div>
+                        <label>Fee Agen %<input id="ma-agent-fee-{{ $r->id }}" name="agent_fee_percent" inputmode="decimal" value="{{ $payload['agent_fee_percent'] ?? '' }}" placeholder="Fee Agen (diisi agen)"></label>
                         <label>Fee MA %<input id="ma-ma-fee-{{ $r->id }}" name="ma_fee_percent" inputmode="decimal" value="{{ $payload['ma_fee_percent'] ?? '' }}" required></label>
                         <input type="hidden" name="payin_fee_percent" value="{{ $payinFee }}">
                         <input type="hidden" name="cashback_agent_percent" value="{{ $cashbackAgentFee }}">
