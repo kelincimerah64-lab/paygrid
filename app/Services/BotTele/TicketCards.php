@@ -34,6 +34,7 @@ class TicketCards
         'Technical Issue' => "Technical Issue\nMohon jelaskan kendala teknis yang sedang dialami secara detail.\nSertakan jika tersedia:\nMerchant Name / Merchant ID\nDetail kendala\nError message / response code\nWaktu kejadian\nRequest ID / Transaction ID\nJika ada screenshot pendukung, kirim gambar beserta caption penjelasan.\nSemakin lengkap informasi, semakin cepat tim kami melakukan pengecekan.",
         'IP Whitelist / VPN' => "IP Whitelist / VPN\nMohon kirim detail permintaan IP Whitelist atau VPN secara lengkap.\nSertakan informasi berikut jika relevan:\nMerchant Name / Merchant ID\nIP Address\nEnvironment : Production / Development\nRequest : IP Whitelist / VPN\nDetail kebutuhan atau tujuan akses\nJika ada screenshot atau informasi pendukung, kirim beserta caption penjelasan.\nUntuk IP Whitelist, pastikan IP yang dikirim adalah Public Static IP.",
         'Others' => "Others\nMohon jelaskan kebutuhan atau kendala Anda secara detail.\nSertakan informasi berikut jika relevan:\nMerchant Name / Merchant ID\nDetail kebutuhan atau kendala\nWaktu kejadian\nInformasi pendukung lainnya\nJika ada screenshot, kirim gambar beserta caption penjelasan.\nSemakin lengkap informasi, semakin cepat tim kami melakukan pengecekan.",
+        'Reset Merchant Key' => "Reset Merchant Key\nPermintaan reset Merchant Key perlu approval sebelum diproses.\nMohon kirim detail berikut:\nMerchant Name / Merchant ID\nEnvironment : Production / Development\nAlasan reset Merchant Key\nPIC yang akan menerima Merchant Key baru\nJika ada screenshot atau informasi pendukung, kirim beserta caption penjelasan.",
         'Create User' => "CREATE USER\n\nKirim 4 baris saja, tanpa menulis judul:\n1. Nama Merchant\n2. Nama Grup Merchant\n3. User Email (pisahkan dengan koma jika lebih dari satu)\n4. Role (pisahkan dengan koma jika lebih dari satu)\n\nContoh:\nKingspay H+1\nKingspay\nadmin@kingspay.com, finance@kingspay.com\nMaster, Finance\n\nSemua role berlaku untuk semua email dalam tiket ini.",
     ];
 
@@ -44,7 +45,7 @@ class TicketCards
         return [
             [['text' => 'Merchant Details / User Role', 'callback_data' => 'ticket_dashboard'], ['text' => 'IP Whitelist / VPN', 'callback_data' => 'ticket_whitelist']],
             [['text' => 'Technical Issue', 'callback_data' => 'ticket_api'], ['text' => 'Others', 'callback_data' => 'ticket_other']],
-            [['text' => 'Create User', 'callback_data' => 'ticket_create_user']],
+            [['text' => 'Create User', 'callback_data' => 'ticket_create_user'], ['text' => 'Reset Merchant Key', 'callback_data' => 'ticket_reset_key']],
         ];
     }
 
@@ -268,7 +269,7 @@ class TicketCards
             'Category : '.self::e($t->category),
             'Reported By : '.self::link($t->requester_user_id, $t->requester_name, 'Requester'),
         ];
-        if ($t->category === SupportFlow::IP_WHITELIST) {
+        if (SupportFlow::needsApproval($t->category)) {
             $lines[] = 'Approved By : '.self::link($t->approval_by_user_id, $t->approval_by_name, 'Approver');
         }
         $lines[] = 'Issue : '.self::e($t->description);

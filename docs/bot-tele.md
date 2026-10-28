@@ -59,6 +59,7 @@ No token or chat id is hardcoded in the code.
 | `ticket_whitelist` | IP Whitelist / VPN | `WAITING_WHITELIST_DESCRIPTION` | `WAITING_APPROVAL` |
 | `ticket_other` | Others | `WAITING_OTHER_DESCRIPTION` | `OPEN` |
 | `ticket_create_user` | Create User | `WAITING_CREATE_USER_DETAILS` | `OPEN` (only after the 4-line format is valid) |
+| `ticket_reset_key` | Reset Merchant Key | `WAITING_RESET_KEY_DESCRIPTION` | `WAITING_APPROVAL` |
 
 Other session states:
 
@@ -104,6 +105,7 @@ Each item below was decided on purpose. Check them before cutover.
 12. **New: shift tags and shift table.** A technician is on shift for 8 hours after sending `absen` (status HADIR, `expires_at` ahead), the same rule auto-assign already used.
     - Each 10/20/30-minute reminder ends with `Tech On Shift :` (a `tg://user` mention of everyone on shift, busy or not, or "belum ada yang absen") and `Leader :` (`BOTTELE_LEADER_USER_ID` / `BOTTELE_LEADER_NAME`, omitted while unset). The reminder is a new message, so the mentions notify them.
     - The Monitoring Bot Telegram page (CS Pusat and MA) shows a "Data Shift Tech Support" table from `bot_attendances`: technician, On shift / Off, shift start and end, and the ticket they hold. On-shift technicians are listed first.
+13. **New: Reset Merchant Key category.** Not in n8n. It needs approval exactly like IP Whitelist (`SupportFlow::APPROVAL_CATEGORIES`): the card goes to the same approval group (`BOTTELE_IP_APPROVAL_CHAT_ID`) with Approve/Reject, and only an approved ticket reaches the tech queue. Photos are not forwarded, as for IP Whitelist. The web WhatsApp poll (`IpWhitelistBridge`) stays IP Whitelist only.
 
 These behaviours are kept as they were in n8n:
 

@@ -18,6 +18,7 @@ class SupportFlow extends Flow
         'ticket_whitelist' => ['WAITING_WHITELIST_DESCRIPTION', 'IP Whitelist / VPN'],
         'ticket_other' => ['WAITING_OTHER_DESCRIPTION', 'Others'],
         'ticket_create_user' => ['WAITING_CREATE_USER_DETAILS', 'Create User'],
+        'ticket_reset_key' => ['WAITING_RESET_KEY_DESCRIPTION', 'Reset Merchant Key'],
     ];
 
     public const DESCRIPTION_STATES = [
@@ -25,9 +26,20 @@ class SupportFlow extends Flow
         'WAITING_API_DESCRIPTION',
         'WAITING_WHITELIST_DESCRIPTION',
         'WAITING_OTHER_DESCRIPTION',
+        'WAITING_RESET_KEY_DESCRIPTION',
     ];
 
     public const IP_WHITELIST = 'IP Whitelist / VPN';
+
+    public const RESET_MERCHANT_KEY = 'Reset Merchant Key';
+
+    /** Categories that wait for Approve/Reject in the approval group before reaching the tech queue. */
+    public const APPROVAL_CATEGORIES = [self::IP_WHITELIST, self::RESET_MERCHANT_KEY];
+
+    public static function needsApproval(?string $category): bool
+    {
+        return in_array(trim((string) $category), self::APPROVAL_CATEGORIES, true);
+    }
 
     public function __construct(TelegramClient $telegram, TicketCards $cards, private CreateUserParser $createUser)
     {
@@ -96,7 +108,7 @@ class SupportFlow extends Flow
     {
         $fallback = array_column(array_slice(self::CATEGORIES, 0, 4), 1, 0);
         $category = $session->category ?: ($fallback[$session->state] ?? '-');
-        $isIpWhitelist = trim($category) === self::IP_WHITELIST;
+        $needsApproval = self::needsApproval($category);
         $now = BotTime::nowString();
 
         $ticket = BotTicket::query()->create([
@@ -111,9 +123,9 @@ class SupportFlow extends Flow
             'description' => $description,
             'attachment_file_id' => $this->nullable($u['photo_file_id']),
             'has_attachment' => (bool) $u['has_photo'],
-            'status' => $isIpWhitelist ? 'WAITING_APPROVAL' : 'OPEN',
-            'approval_status' => $isIpWhitelist ? 'WAITING_APPROVAL' : null,
-            'approval_requested_at' => $isIpWhitelist ? $now : null,
+            'status' => $needsApproval ? 'WAITING_APPROVAL' : 'OPEN',
+            'approval_status' => $needsApproval ? 'WAITING_APPROVAL' : null,
+            'approval_requested_at' => $needsApproval ? $now : null,
         ]);
 
         $merchantMessageId = $this->telegram->sendMessage($ticket->source_chat_id, $this->cards->merchantCreated($ticket));
@@ -127,7 +139,7 @@ class SupportFlow extends Flow
 
         $ticket->update(['merchant_message_id' => $merchantMessageId]);
 
-        if ($isIpWhitelist) {
+        if ($needsApproval) {
             $approvalMessageId = $this->telegram->sendMessage(
                 config('bottele.ip_approval_chat_id'),
                 $this->cards->ipApprovalRequest($ticket),

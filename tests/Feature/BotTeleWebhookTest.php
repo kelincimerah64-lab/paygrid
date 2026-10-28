@@ -140,6 +140,7 @@ class BotTeleWebhookTest extends TestCase
             'technical issue' => ['ticket_api', 'Technical Issue', 'OPEN'],
             'others' => ['ticket_other', 'Others', 'OPEN'],
             'ip whitelist' => ['ticket_whitelist', 'IP Whitelist / VPN', 'WAITING_APPROVAL'],
+            'reset merchant key' => ['ticket_reset_key', 'Reset Merchant Key', 'WAITING_APPROVAL'],
         ];
     }
 
@@ -398,6 +399,43 @@ class BotTeleWebhookTest extends TestCase
         $this->assertArrayNotHasKey('reply_markup', $approvalEdit);
     }
 
+    public function test_reset_merchant_key_waits_for_approval_like_ip_whitelist(): void
+    {
+        $ticket = $this->openTicket('ticket_reset_key', 'Reset key Kingspay, key bocor');
+        $approvalCard = (int) $ticket->approval_group_message_id;
+
+        // Goes to the approval group only, not to the tech queue.
+        $this->assertSame('WAITING_APPROVAL', $ticket->status);
+        $this->assertNull($ticket->cs_group_message_id);
+        $request = $this->sent('sendMessage')->last();
+        $this->assertSame(self::APPROVAL_CHAT, $request['chat_id']);
+        $this->assertStringContainsString('Category : Reset Merchant Key', $request['text']);
+        $this->assertSame('ipapprove_'.$ticket->ticket_id, $request['reply_markup']['inline_keyboard'][0][0]['callback_data']);
+
+        $this->click('ipapprove_'.$ticket->ticket_id, 801, self::APPROVAL_CHAT, $approvalCard);
+
+        $ticket->refresh();
+        $this->assertSame('OPEN', $ticket->status);
+        $this->assertSame('APPROVED', $ticket->approval_status);
+        $push = $this->sent('sendMessage')->last();
+        $this->assertSame(self::TECH_CHAT, $push['chat_id']);
+        $this->assertSame('take_'.$ticket->ticket_id, $push['reply_markup']['inline_keyboard'][0][0]['callback_data']);
+    }
+
+    public function test_reset_merchant_key_can_be_rejected_with_a_note(): void
+    {
+        $ticket = $this->openTicket('ticket_reset_key', 'Reset key Kingspay');
+        $approvalCard = (int) $ticket->approval_group_message_id;
+
+        $this->click('ipreject_'.$ticket->ticket_id, 801, self::APPROVAL_CHAT, $approvalCard);
+        $this->assertSame('Reset Merchant Key', BotSession::for(801, self::APPROVAL_CHAT)->category);
+        $this->message('Belum ada konfirmasi owner', 801, self::APPROVAL_CHAT);
+
+        $ticket->refresh();
+        $this->assertSame('REJECTED', $ticket->status);
+        $this->assertSame('Belum ada konfirmasi owner', $ticket->approval_note);
+    }
+
     public function test_pic_can_take_over_an_escalated_auto_assigned_ticket(): void
     {
         $ticket = BotTicket::query()->create([
@@ -475,6 +513,6 @@ final class TicketCardsKeyboardFixture
     public const MENU = [
         [['text' => 'Merchant Details / User Role', 'callback_data' => 'ticket_dashboard'], ['text' => 'IP Whitelist / VPN', 'callback_data' => 'ticket_whitelist']],
         [['text' => 'Technical Issue', 'callback_data' => 'ticket_api'], ['text' => 'Others', 'callback_data' => 'ticket_other']],
-        [['text' => 'Create User', 'callback_data' => 'ticket_create_user']],
+        [['text' => 'Create User', 'callback_data' => 'ticket_create_user'], ['text' => 'Reset Merchant Key', 'callback_data' => 'ticket_reset_key']],
     ];
 }

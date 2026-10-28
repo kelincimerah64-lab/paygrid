@@ -254,7 +254,7 @@ class TicketFlow extends Flow
             return;
         }
 
-        $this->rememberPending($u, $ticket, 'WAITING_IP_REJECTION_NOTE', SupportFlow::IP_WHITELIST);
+        $this->rememberPending($u, $ticket, 'WAITING_IP_REJECTION_NOTE', $ticket->category);
         $this->telegram->sendMessage($u['chat_id'], $this->cards->rejectionPrompt($ticket));
     }
 

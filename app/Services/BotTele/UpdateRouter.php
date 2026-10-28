@@ -23,6 +23,7 @@ class UpdateRouter
         ['ipapprove', 'prefix', 'ipapprove_'],
         ['ipreject', 'prefix', 'ipreject_'],
         ['ticket_create_user', 'equals', 'ticket_create_user'],
+        ['ticket_reset_key', 'equals', 'ticket_reset_key'],
         ['reject', 'prefix', 'reject_'],
     ];
 

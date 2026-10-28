@@ -40,6 +40,7 @@ class UpdateRouterTest extends TestCase
 
         $this->assertSame(['route' => 'ticket_dashboard', 'ticket_id' => ''], $router->callbackRoute('ticket_dashboard'));
         $this->assertSame(['route' => 'ticket_create_user', 'ticket_id' => ''], $router->callbackRoute('ticket_create_user'));
+        $this->assertSame(['route' => 'ticket_reset_key', 'ticket_id' => ''], $router->callbackRoute('ticket_reset_key'));
         $this->assertSame(['route' => 'take', 'ticket_id' => 'HGT-1'], $router->callbackRoute('take_HGT-1'));
         $this->assertSame(['route' => 'progress', 'ticket_id' => 'HGT-1'], $router->callbackRoute('progress_HGT-1'));
         $this->assertSame(['route' => 'update', 'ticket_id' => 'HGT-1'], $router->callbackRoute('update_HGT-1'));
