@@ -170,6 +170,25 @@
 @elseif($active === 'status-request')
     @php($canResubmit = fn ($registration) => in_array($registration->status, ['draft', 'pending_agent'], true) || ($registration->status === 'rejected' && $registration->revision_count < \App\Http\Controllers\MerchantRegistrationWorkflowController::MAX_REVISIONS))
     @php($storeFeeMenus = app(\App\Services\FeeMenuCatalog::class)->optionsFor('merchant'))
+    <style>
+        .fee-modal { max-width:560px; padding:0; overflow:hidden; border-radius:14px; }
+        .fee-modal-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:22px 26px 6px; }
+        .fee-modal-head h2 { margin:0; font-size:22px; color:var(--ink); }
+        .fee-modal-head p { margin:6px 0 0; color:var(--muted); font-size:14px; }
+        .fee-modal-x { width:38px; height:38px; flex:0 0 auto; border:1px solid var(--line); border-radius:9px; background:var(--soft); color:var(--ink); font-size:22px; line-height:1; cursor:pointer; }
+        .fee-modal-body { display:grid; gap:18px; padding:16px 26px 22px; }
+        .fee-field { display:grid; gap:8px; }
+        .fee-field > span { font-size:12px; font-weight:900; letter-spacing:.03em; text-transform:uppercase; color:var(--ink); }
+        .fee-field > span b { color:var(--danger); }
+        .fee-field select, .fee-input input { width:100%; min-height:44px; border:1px solid var(--line); border-radius:9px; padding:10px 14px; font:inherit; font-size:15px; color:var(--ink); background:#fff; }
+        .fee-input { position:relative; }
+        .fee-input input { padding-right:56px; }
+        .fee-input i { position:absolute; right:8px; top:50%; transform:translateY(-50%); min-width:34px; height:30px; display:grid; place-items:center; border-radius:7px; background:var(--soft); font-style:normal; font-weight:800; color:var(--ink); }
+        .fee-field small { color:var(--muted); font-size:12px; }
+        .fee-modal-foot { display:flex; justify-content:flex-end; gap:12px; padding:16px 26px; border-top:1px solid var(--line); background:var(--bg); }
+        .fee-modal-foot .btn { min-width:136px; min-height:44px; font-size:15px; }
+        .fee-modal-foot .btn:not(.primary) { background:var(--soft); border-color:var(--soft); color:var(--ink); }
+    </style>
     <section class="card agent-filter-card">
         <form class="agent-filter-grid" method="get">
             <label class="agent-filter-search"><span>Pencarian</span><input class="search" name="q" value="{{ $requestFilters['q'] ?? '' }}" placeholder="Cari toko, merchant ID, atau token request"></label>
@@ -191,14 +210,30 @@
                 <td>
                 @if($canResubmit($registration))
                     <button class="btn primary approval-detail-open" type="button" data-approval-detail="agent-reg-submit-{{ $registration->id }}">{{ $registration->status === 'rejected' ? 'Isi Fee & Submit Ulang' : 'Isi Fee & Submit MA' }}</button>
-                    <div class="approval-modal" id="agent-reg-submit-{{ $registration->id }}" hidden><div class="approval-modal-card">
-                        <div class="qris-toolbar"><div><h2>Fee Toko &amp; Fee Agen</h2><p class="muted" style="margin:4px 0 0">{{ $registration->store_name }}. Fee toko dari form bisa direvisi. Fee agen diisi bebas.</p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
-                        <form method="post" action="{{ route('api.merchant-registration.submit', $registration) }}" class="approve-fee-form" style="margin-top:12px">
+                    <div class="approval-modal" id="agent-reg-submit-{{ $registration->id }}" hidden><div class="approval-modal-card fee-modal">
+                        <div class="fee-modal-head">
+                            <div><h2>Fee Toko &amp; Fee Agen</h2><p>Masukkan nilai Fee Toko dan Fee Agen dalam bentuk persentase (%).</p></div>
+                            <button class="fee-modal-x approval-detail-close" type="button" aria-label="Tutup">&times;</button>
+                        </div>
+                        <form method="post" action="{{ route('api.merchant-registration.submit', $registration) }}">
                             @csrf
-                            <label>Menu Fee<select id="agent-fee-menu-{{ $registration->id }}" name="fee_menu" required><option value="">Pilih menu</option>@foreach($storeFeeMenus as $menuKey => $menu)<option value="{{ $menuKey }}" @selected(($regPayload['fee_menu'] ?? null) === $menuKey)>{{ $menu['label'] }}</option>@endforeach</select></label>
-                            <label>Fee Toko %<input id="agent-store-fee-{{ $registration->id }}" name="merchant_mdr_percent" inputmode="decimal" value="{{ $regPayload['merchant_mdr_percent'] ?? '' }}" required></label>
-                            <label>Fee Agen %<input id="agent-agent-fee-{{ $registration->id }}" name="agent_fee_percent" inputmode="decimal" value="{{ $regPayload['agent_fee_percent'] ?? '' }}" required></label>
-                            <button class="btn primary compact-btn" style="width:100%; margin:8px 0">Submit ke MA</button>
+                            <div class="fee-modal-body">
+                                <label class="fee-field" for="agent-fee-menu-{{ $registration->id }}"><span>Menu Fee <b>*</b></span>
+                                    <select id="agent-fee-menu-{{ $registration->id }}" name="fee_menu" required><option value="">Pilih menu</option>@foreach($storeFeeMenus as $menuKey => $menu)<option value="{{ $menuKey }}" @selected(($regPayload['fee_menu'] ?? null) === $menuKey)>{{ $menu['label'] }}</option>@endforeach</select>
+                                </label>
+                                <label class="fee-field" for="agent-store-fee-{{ $registration->id }}"><span>Fee Toko (%) <b>*</b></span>
+                                    <div class="fee-input"><input id="agent-store-fee-{{ $registration->id }}" name="merchant_mdr_percent" inputmode="decimal" placeholder="Contoh: 1.20" value="{{ $regPayload['merchant_mdr_percent'] ?? '' }}" required><i>%</i></div>
+                                    <small>Masukkan persentase Fee Toko. Contoh: 1.20</small>
+                                </label>
+                                <label class="fee-field" for="agent-agent-fee-{{ $registration->id }}"><span>Fee Agen (%) <b>*</b></span>
+                                    <div class="fee-input"><input id="agent-agent-fee-{{ $registration->id }}" name="agent_fee_percent" inputmode="decimal" placeholder="Contoh: 0.50" value="{{ $regPayload['agent_fee_percent'] ?? '' }}" required><i>%</i></div>
+                                    <small>Masukkan persentase Fee Agen. Contoh: 0.50</small>
+                                </label>
+                            </div>
+                            <div class="fee-modal-foot">
+                                <button class="btn approval-detail-close" type="button">Batal</button>
+                                <button class="btn primary">Simpan ke MA</button>
+                            </div>
                         </form>
                     </div></div>
                 @endif
