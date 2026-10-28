@@ -137,7 +137,7 @@ class BackfillMerchantTransactions implements ShouldQueue
 
             $cursor->fill([
                 'last_synced_at' => now('Asia/Jakarta'),
-                'last_payload_at' => $merchant->topupRequests()->whereDate('submitted_at', $date)->latest('submitted_at')->value('submitted_at'),
+                'last_payload_at' => $merchant->topupRequests()->whereWibDateBetween('submitted_at', $date, $date)->latest('submitted_at')->value('submitted_at'),
                 'meta' => [
                     'date' => $date,
                     'mode_progress' => $modeProgress,

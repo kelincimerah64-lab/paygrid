@@ -67,6 +67,24 @@ class WibDateFilterTest extends TestCase
             ->assertDontSee($justAfterMidnight->customer_reference);
     }
 
+    public function test_daily_metrics_bucket_transactions_by_wib_day(): void
+    {
+        $merchant = Merchant::query()->create([
+            'slug' => 'wib-metric-test', 'name' => 'WIB Metric Test', 'merchant_type' => 'cm', 'topup_enabled' => true,
+            'gateway' => 'hilogate', 'merchant_id' => 'store-wib-metric-test', 'approval_status' => 'approved',
+        ]);
+        $justAfterMidnight = $this->topup($merchant, '2026-10-27 00:10:00', 10000);
+        $this->topup($merchant, '2026-10-26 23:50:00', 20000);
+        $this->topup($merchant, '2026-10-27 23:30:00', 5000);
+
+        $rollups = app(\App\Services\MetricRollupService::class);
+        $this->assertSame(15000, $rollups->rebuildMerchantDay($merchant, '2026-10-27')->amount_success);
+        $this->assertSame(20000, $rollups->rebuildMerchantDay($merchant, '2026-10-26')->amount_success);
+
+        // A UTC timestamp (as passed by the ingestion service) lands on its WIB day, not its UTC day.
+        $this->assertSame('2026-10-27', $rollups->rebuildMerchantDay($merchant, $justAfterMidnight->submitted_at)->metric_date->toDateString());
+    }
+
     public function test_the_helper_turns_wib_dates_into_utc_bounds(): void
     {
         $sql = TopupRequest::query()->whereWibDateBetween('submitted_at', '2026-10-27', '2026-10-27')->toRawSql();

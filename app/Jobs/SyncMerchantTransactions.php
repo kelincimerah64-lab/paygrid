@@ -76,7 +76,7 @@ class SyncMerchantTransactions implements ShouldQueue
 
                         $request = $ingestion->ingestForMerchant($merchant, $payload, $merchant->gateway, $merchant->gateway.'_pull', true);
                         if ($request->submitted_at) {
-                            $dates[$request->submitted_at->toDateString()] = true;
+                            $dates[$request->submitted_at->copy()->timezone('Asia/Jakarta')->toDateString()] = true;
                         }
                         $total++;
                     }

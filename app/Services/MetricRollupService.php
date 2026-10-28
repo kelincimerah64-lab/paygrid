@@ -13,13 +13,14 @@ class MetricRollupService
     public function rebuildMerchantDay(Merchant $merchant, CarbonInterface|string $date, ?string $dataSource = null): MerchantDailyMetric
     {
         $metricDate = $date instanceof CarbonInterface
-            ? CarbonImmutable::instance($date)->startOfDay()
+            // A timestamp (e.g. a UTC submitted_at) is bucketed by its WIB calendar day, like every report.
+            ? CarbonImmutable::instance($date)->timezone('Asia/Jakarta')->startOfDay()
             : CarbonImmutable::parse((string) $date, 'Asia/Jakarta')->startOfDay();
         $day = $metricDate->toDateString();
 
         $query = TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->whereDate('submitted_at', $day);
+            ->whereWibDateBetween('submitted_at', $day, $day);
 
         if ($dataSource !== null) {
             $query->where('data_source', $dataSource);
@@ -68,7 +69,7 @@ class MetricRollupService
                 'net_success' => (int) $rows->net_success,
                 'fee_total' => (int) $rows->fee_total,
                 'settled_total' => (int) $rows->net_success,
-                'ticket_total' => $merchant->tickets()->whereDate('created_at', $day)->count(),
+                'ticket_total' => $merchant->tickets()->whereWibDateBetween('created_at', $day, $day)->count(),
             ],
         );
     }
