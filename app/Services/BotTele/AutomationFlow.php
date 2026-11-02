@@ -168,16 +168,23 @@ class AutomationFlow extends Flow
     private function sendReminder(BotTicket $ticket, int $number, int $waiting, CarbonImmutable $now): void
     {
         // cs_group_message_id is the single pointer to the ticket's live card in the tech group.
+        // The screenshot travels with the card: the old copy goes and a new one follows the reminder.
         $this->telegram->deleteMessage($this->techChatId(), $ticket->cs_group_message_id);
+        $this->telegram->deleteMessage($this->techChatId(), $ticket->tech_photo_message_id);
 
         // A new message (not an edit), so the technicians on shift and the leader tagged in it get a notification.
         $messageId = $this->telegram->sendMessage($this->techChatId(), $this->cards->openReminder($ticket, $number, $waiting, $this->onShiftTechnicians($now)), TicketCards::takeKeyboard($ticket->ticket_id));
+        // Same rule as at creation: approval categories never had their screenshot posted to the tech group.
+        $photoId = $ticket->has_attachment && ! SupportFlow::needsApproval($ticket->category)
+            ?$this->telegram->sendPhoto($this->techChatId(), (string) $ticket->attachment_file_id, $this->cards->screenshotCaption($ticket))
+            : null;
 
         $ticket->update([
             'open_reminder_message_ids' => $messageId !== null ? (string) $messageId : null,
             'open_reminder_count' => $number,
             'last_open_reminder_at' => $now->format(BotTime::FORMAT),
             'cs_group_message_id' => $messageId,
+            'tech_photo_message_id' => $photoId,
         ]);
     }
 

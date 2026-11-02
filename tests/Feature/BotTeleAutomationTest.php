@@ -29,7 +29,7 @@ class BotTeleAutomationTest extends TestCase
         config(['bottele.pic_escalation_chat_id' => self::PIC_CHAT]);
         Http::fake(['https://api.telegram.org/*' => fn (Request $request) => Http::response([
             'ok' => true,
-            'result' => str_ends_with($request->url(), '/sendMessage') ? ['message_id' => ++$this->nextMessageId] : true,
+            'result' => preg_match('~/send(Message|Photo)$~', $request->url()) ? ['message_id' => ++$this->nextMessageId] : true,
         ])]);
         $this->at('09:00:00');
     }
@@ -129,6 +129,36 @@ class BotTeleAutomationTest extends TestCase
             "Tech On Shift : <a href=\"tg://user?id=701\">Tech 701</a>, <a href=\"tg://user?id=702\">Tech 702</a>\nLeader : <a href=\"tg://user?id=900\">Gummy</a>",
             $this->sent('sendMessage')->sole()['text'],
         );
+    }
+
+    public function test_each_reminder_replaces_the_card_and_its_screenshot_as_a_pair(): void
+    {
+        $ticket = $this->openTicket(['has_attachment' => true, 'attachment_file_id' => 'shot', 'tech_photo_message_id' => 11]);
+
+        $this->at('09:10:00');
+        $this->runBot('check-open-ticket-reminders');
+        $ticket->refresh();
+        // Old card (10) and old photo (11) deleted, new card then new photo sent right after it.
+        $this->assertSame([10, 11], $this->sent('deleteMessage')->pluck('message_id')->all());
+        $this->assertSame(5001, (int) $ticket->cs_group_message_id);
+        $photo = $this->sent('sendPhoto')->sole();
+        $this->assertSame([self::TECH_CHAT, 'shot', "HGT-1\nCategory : Technical Issue"], [$photo['chat_id'], $photo['photo'], $photo['caption']]);
+        $this->assertSame(5002, (int) $ticket->tech_photo_message_id);
+
+        $this->at('09:20:00');
+        $this->runBot('check-open-ticket-reminders');
+        $this->assertSame([10, 11, 5001, 5002], $this->sent('deleteMessage')->pluck('message_id')->all());
+        $this->assertSame(5004, (int) $ticket->refresh()->tech_photo_message_id);
+    }
+
+    public function test_reminder_does_not_post_the_screenshot_of_an_approval_ticket(): void
+    {
+        $this->openTicket(['category' => 'IP Whitelist / VPN', 'has_attachment' => true, 'attachment_file_id' => 'shot']);
+
+        $this->at('09:10:00');
+        $this->runBot('check-open-ticket-reminders');
+
+        $this->assertCount(0, $this->sent('sendPhoto'));
     }
 
     public function test_ip_whitelist_reminder_shows_approver(): void

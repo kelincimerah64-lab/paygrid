@@ -79,7 +79,9 @@ class TicketFlow extends Flow
         foreach (array_diff(array_filter([(int) $ticket->cs_group_message_id, ...$this->reminderIds($ticket)]), [(int) $u['message_id']]) as $messageId) {
             $this->telegram->deleteMessage($this->techChatId(), $messageId);
         }
+        $this->telegram->deleteMessage($this->techChatId(), $ticket->tech_photo_message_id);
         $this->telegram->deleteMessage($ticket->source_chat_id, $ticket->merchant_message_id);
+        $this->telegram->deleteMessage($ticket->source_chat_id, $ticket->merchant_photo_message_id);
     }
 
     /** "Extract Progress Ticket ID" -> "Status ASSIGNED" -> "IF - Correct Assigned CS" -> "GS - Update ON_PROGRESS" */

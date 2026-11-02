@@ -38,7 +38,7 @@ class BotTeleWebhookTest extends TestCase
         // Every Telegram call succeeds; sendMessage hands out increasing message ids.
         Http::fake(['https://api.telegram.org/*' => fn (Request $request) => Http::response([
             'ok' => true,
-            'result' => str_ends_with($request->url(), '/sendMessage') ? ['message_id' => ++$this->nextMessageId] : true,
+            'result' => preg_match('~/send(Message|Photo)$~', $request->url()) ? ['message_id' => ++$this->nextMessageId] : true,
         ])]);
         $this->at('2026-10-23 09:00:00');
     }
@@ -310,6 +310,22 @@ class BotTeleWebhookTest extends TestCase
         // A rejected ticket can no longer be taken.
         $this->click('take_'.$ticket->ticket_id, self::TECH, self::TECH_CHAT, $card);
         $this->assertSame('REJECTED', $ticket->refresh()->status);
+    }
+
+    public function test_reject_also_deletes_the_screenshot_in_both_groups(): void
+    {
+        $this->message('/support');
+        $this->click('ticket_api', self::MERCHANT, self::MERCHANT_CHAT, $this->nextMessageId);
+        $this->message('', extra: ['text' => null, 'caption' => 'Error 500', 'photo' => [['file_id' => 'big']]]);
+        $ticket = BotTicket::query()->sole();
+        $this->assertNotNull($ticket->tech_photo_message_id);
+        $this->assertNotNull($ticket->merchant_photo_message_id);
+
+        $this->click('reject_'.$ticket->ticket_id, self::TECH, self::TECH_CHAT, (int) $ticket->cs_group_message_id);
+
+        $deleted = $this->sent('deleteMessage')->map(fn (array $p) => [$p['chat_id'], $p['message_id']])->all();
+        $this->assertContains([self::TECH_CHAT, (int) $ticket->tech_photo_message_id], $deleted);
+        $this->assertContains([self::MERCHANT_CHAT, (int) $ticket->merchant_photo_message_id], $deleted);
     }
 
     public function test_send_update_saves_last_update_and_edits_merchant_card_in_merchant_chat(): void

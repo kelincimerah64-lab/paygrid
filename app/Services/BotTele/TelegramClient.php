@@ -98,9 +98,12 @@ class TelegramClient
         return is_array($result) ? $result : null;
     }
 
-    public function sendPhoto(mixed $chatId, string $fileId, string $caption): void
+    /** Returns the new message_id, or null when sending failed. */
+    public function sendPhoto(mixed $chatId, string $fileId, string $caption): ?int
     {
-        $this->call('sendPhoto', ['chat_id' => $chatId, 'photo' => $fileId, 'caption' => $caption, 'parse_mode' => 'HTML']);
+        $result = $this->call('sendPhoto', ['chat_id' => $chatId, 'photo' => $fileId, 'caption' => $caption, 'parse_mode' => 'HTML']);
+
+        return isset($result['message_id']) ? (int) $result['message_id'] : null;
     }
 
     private function filled(mixed $value): bool

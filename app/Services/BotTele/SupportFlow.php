@@ -132,7 +132,7 @@ class SupportFlow extends Flow
         // Not in n8n: the merchant's own photo message is deleted below, so the bot re-posts the screenshot
         // under the ticket card, the same way it shows it in the tech group.
         if ($ticket->has_attachment) {
-            $this->telegram->sendPhoto($ticket->source_chat_id, (string) $ticket->attachment_file_id, $this->cards->screenshotCaption($ticket));
+            $ticket->update(['merchant_photo_message_id' => $this->telegram->sendPhoto($ticket->source_chat_id, (string) $ticket->attachment_file_id, $this->cards->screenshotCaption($ticket))]);
         }
 
         // "TG - Delete Support Command/Menu/Prompt/User Detail": clear the conversation once the ticket exists.
@@ -159,7 +159,7 @@ class SupportFlow extends Flow
         $ticket->update(['cs_group_message_id' => $techMessageId]);
 
         if ($ticket->has_attachment) {
-            $this->telegram->sendPhoto($this->techChatId(), (string) $ticket->attachment_file_id, $this->cards->screenshotCaption($ticket));
+            $ticket->update(['tech_photo_message_id' => $this->telegram->sendPhoto($this->techChatId(), (string) $ticket->attachment_file_id, $this->cards->screenshotCaption($ticket))]);
         }
 
         return $ticket;
