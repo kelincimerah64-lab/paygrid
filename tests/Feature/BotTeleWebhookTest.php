@@ -215,11 +215,7 @@ class BotTeleWebhookTest extends TestCase
     {
         $this->message('/support');
         $this->click('ticket_api', self::MERCHANT, self::MERCHANT_CHAT, $this->nextMessageId);
-        $photoMessageId = $this->message('', extra: ['text' => null, 'caption' => 'Error 500', 'photo' => [['file_id' => 'small'], ['file_id' => 'big']]]);
-
-        // The merchant's screenshot is not cleaned up, only the command, menu and prompt are.
-        $this->assertNotContains($photoMessageId, $this->sent('deleteMessage')->pluck('message_id')->all());
-        $this->assertCount(3, $this->sent('deleteMessage'));
+        $this->message('', extra: ['text' => null, 'caption' => 'Error 500', 'photo' => [['file_id' => 'small'], ['file_id' => 'big']]]);
 
         $ticket = BotTicket::query()->sole();
         $this->assertTrue($ticket->has_attachment);

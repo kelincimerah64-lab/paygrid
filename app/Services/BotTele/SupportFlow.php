@@ -134,10 +134,7 @@ class SupportFlow extends Flow
         $this->telegram->deleteMessage($session->chat_id, $session->support_command_message_id);
         $this->telegram->deleteMessage($session->chat_id, $session->support_menu_message_id);
         $this->telegram->deleteMessage($session->chat_id, $session->support_prompt_message_id);
-        // Not like n8n: a screenshot stays in the merchant group so the merchant still sees what they sent.
-        if (! $u['has_photo']) {
-            $this->telegram->deleteMessage($u['chat_id'], $u['message_id']);
-        }
+        $this->telegram->deleteMessage($u['chat_id'], $u['message_id']);
         $session->delete();
 
         $ticket->update(['merchant_message_id' => $merchantMessageId]);
