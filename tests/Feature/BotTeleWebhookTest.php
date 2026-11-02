@@ -215,17 +215,21 @@ class BotTeleWebhookTest extends TestCase
     {
         $this->message('/support');
         $this->click('ticket_api', self::MERCHANT, self::MERCHANT_CHAT, $this->nextMessageId);
-        $this->message('', extra: ['text' => null, 'caption' => 'Error 500', 'photo' => [['file_id' => 'small'], ['file_id' => 'big']]]);
+        $photoMessageId = $this->message('', extra: ['text' => null, 'caption' => 'Error 500', 'photo' => [['file_id' => 'small'], ['file_id' => 'big']]]);
 
         $ticket = BotTicket::query()->sole();
         $this->assertTrue($ticket->has_attachment);
         $this->assertSame('big', $ticket->attachment_file_id);
         $this->assertSame('Error 500', $ticket->description);
 
-        $photo = $this->sent('sendPhoto')->sole();
-        $this->assertSame(self::TECH_CHAT, $photo['chat_id']);
-        $this->assertSame('big', $photo['photo']);
-        $this->assertSame($ticket->ticket_id."\nCategory : Technical Issue", $photo['caption']);
+        // The merchant's own photo message is cleaned up, and the bot re-posts the screenshot in both groups.
+        $this->assertContains($photoMessageId, $this->sent('deleteMessage')->pluck('message_id')->all());
+        $photos = $this->sent('sendPhoto');
+        $this->assertSame([self::MERCHANT_CHAT, self::TECH_CHAT], $photos->pluck('chat_id')->all());
+        foreach ($photos as $photo) {
+            $this->assertSame('big', $photo['photo']);
+            $this->assertSame($ticket->ticket_id."\nCategory : Technical Issue", $photo['caption']);
+        }
     }
 
     public function test_take_progress_resolve_records_sla_in_seconds_and_releases_technician(): void
