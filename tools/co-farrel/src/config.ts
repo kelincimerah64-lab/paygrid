@@ -45,7 +45,9 @@ export function loadConfig() {
     members: parseMembers(required('MEMBERS')),
     model: process.env.AGENT_MODEL?.trim() || 'claude-opus-5-5',
     maxBudgetUsd: Number(process.env.MAX_BUDGET_USD ?? 1),
+    maxExecuteBudgetUsd: Number(process.env.MAX_EXECUTE_BUDGET_USD ?? 5),
     stateFile: process.env.STATE_FILE?.trim() || './state.json',
+    requestsFile: process.env.REQUESTS_FILE?.trim() || './requests.json',
   };
 }
 

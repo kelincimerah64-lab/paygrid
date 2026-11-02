@@ -12,6 +12,11 @@ export function senderNumber(message: WahaMessage): string {
   return String(message.participant ?? message.author ?? '').split('@')[0].replace(/\D/g, '');
 }
 
+/** The other side of a private chat as a bare phone number ("62811@c.us" -> "62811"). */
+export function chatNumber(message: WahaMessage): string {
+  return String(message.from ?? '').split('@')[0].replace(/\D/g, '');
+}
+
 /**
  * True when the message tags the bot. A WhatsApp mention shows in the body as "@<id>", where the id
  * is the phone number or, on newer WhatsApp, a separate "lid" number; writing the name also counts.

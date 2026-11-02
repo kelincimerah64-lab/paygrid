@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { redact, resolveReadablePath, SEARCH_ROOTS } from './guard.ts';
+import type { Proposal } from './requests.ts';
 
 const run = promisify(execFile);
 const text = (value: string) => ({ content: [{ type: 'text' as const, text: redact(value) }] });
@@ -15,7 +16,7 @@ const MAX_FILE_BYTES = 512 * 1024;
  * Read-only tools for stage 1. Each one reads a fixed thing in the PayGrid folder and redacts
  * the output; none writes a file, changes the database or calls an API that changes state.
  */
-export function paygridTools(paygridDir: string, phpBin = process.env.PHP_BIN || 'php') {
+export function paygridTools(paygridDir: string, onProposal?: (proposal: Proposal) => void, phpBin = process.env.PHP_BIN || 'php') {
   const artisan = async (args: string[]) => {
     const { stdout } = await run(phpBin, ['artisan', ...args], { cwd: paygridDir, timeout: 30_000, maxBuffer: 2 * 1024 * 1024 });
     return stdout;
@@ -157,7 +158,27 @@ export function paygridTools(paygridDir: string, phpBin = process.env.PHP_BIN ||
     { annotations: { readOnlyHint: true, openWorldHint: true } },
   );
 
-  return createSdkMcpServer({ name: 'paygrid', version: '0.1.0', tools: [readCode, searchCode, getLogs, getBotStatus] });
+  // Only offered while investigating: the agent cannot change anything itself, it files a proposal
+  // that goes to the owner for approval.
+  const proposeAction = tool(
+    'propose_action',
+    'File a proposal for an action that changes something on the server (fix code, run a command, restart, re-sync). It is sent to the owner for approval; nothing runs until they approve. Call it at most once, after investigating.',
+    {
+      summary: z.string().describe('One line: the problem found, in plain Indonesian'),
+      plan: z.string().describe('Numbered, concrete steps: files to change, commands to run, how to check it worked'),
+      risk: z.string().describe('What could go wrong and how to undo it'),
+    },
+    async (proposal) => {
+      onProposal?.(proposal);
+      return text('Proposal filed. Tell the requester it is waiting for the owner\'s approval. Do not attempt the change yourself.');
+    },
+  );
+
+  return createSdkMcpServer({
+    name: 'paygrid',
+    version: '0.2.0',
+    tools: onProposal ? [readCode, searchCode, getLogs, getBotStatus, proposeAction] : [readCode, searchCode, getLogs, getBotStatus],
+  });
 }
 
 async function walk(dir: string, visit: (file: string) => Promise<void>): Promise<void> {
