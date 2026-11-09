@@ -40,6 +40,12 @@ return [
         'callback_token' => env('N8N_CALLBACK_TOKEN'),
     ],
 
+    // Co PayGrid and Data PayGrid (tools/co-paygrid): the dashboard reads their WhatsApp QR codes from here.
+    'co_paygrid' => [
+        'url' => env('CO_PAYGRID_STATUS_URL', 'http://127.0.0.1:8787'),
+        'token' => env('CO_PAYGRID_STATUS_TOKEN'),
+    ],
+
     'ops_assistant' => [
         'token' => env('OPS_ASSISTANT_TOKEN'),
     ],

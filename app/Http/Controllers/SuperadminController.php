@@ -14,10 +14,15 @@ use App\Rules\FeeMenuRatesAboveReference;
 use App\Services\AuditLogService;
 use App\Services\FeeMenuCatalog;
 use App\Services\FeeSyncService;
+use Endroid\QrCode\ErrorCorrectionLevel;
+use Endroid\QrCode\QrCode;
+use Endroid\QrCode\Writer\PngWriter;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -26,7 +31,7 @@ class SuperadminController extends Controller
 {
     public function page(FeeMenuCatalog $feeMenus, string $page = 'dashboard-fee'): View
     {
-        abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'fee-menu-settings', 'timer-ticket', 'accounts'], true), 404);
+        abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'fee-menu-settings', 'timer-ticket', 'accounts', 'integrations'], true), 404);
 
         $search = trim((string) request('q', ''));
         $type = (string) request('type', 'all');
@@ -80,6 +85,7 @@ class SuperadminController extends Controller
                 'fee-menu-settings' => 'Pengaturan Menu Fee',
                 'timer-ticket' => 'Timer Ticket',
                 'accounts' => 'Daftar Account',
+                'integrations' => 'Integrasi',
                 default => 'Dashboard Fee',
             },
             'merchants' => $merchants,
@@ -92,6 +98,37 @@ class SuperadminController extends Controller
             'feeMenus' => $feeMenus,
             'feeMenuRows' => FeeMenu::query()->orderBy('sort_order')->get(),
         ]);
+    }
+
+    /** WhatsApp link state of the two bots. Polled by the Integrasi page; a QR here can link a WhatsApp account. */
+    public function integrationStatus(): JsonResponse
+    {
+        $noStore = ['Cache-Control' => 'no-store'];
+
+        try {
+            $status = Http::withToken((string) config('services.co_paygrid.token'))
+                ->timeout(3)
+                ->get(rtrim((string) config('services.co_paygrid.url'), '/').'/status')
+                ->throw()
+                ->json();
+        } catch (\Throwable) {
+            return response()->json(['online' => false], 200, $noStore);
+        }
+
+        $bot = fn (string $name): array => [
+            'state' => $status[$name]['state'] ?? 'connecting',
+            'phone' => $status[$name]['phone'] ?? null,
+            'configured_group' => $status[$name]['configured_group'] ?? null,
+            'groups' => $status[$name]['groups'] ?? [],
+            'qr_image' => empty($status[$name]['qr']) ? null : (new PngWriter)->write(new QrCode(
+                data: $status[$name]['qr'],
+                errorCorrectionLevel: ErrorCorrectionLevel::Medium,
+                size: 280,
+                margin: 12,
+            ))->getDataUri(),
+        ];
+
+        return response()->json(['online' => true, 'co' => $bot('co'), 'data' => $bot('data')], 200, $noStore);
     }
 
     public function storeMa(Request $request, AuditLogService $audit): RedirectResponse
@@ -359,6 +396,7 @@ class SuperadminController extends Controller
             ['key' => 'ma', 'label' => 'MA', 'url' => route('superadmin.page', 'ma')],
             ['key' => 'timer-ticket', 'label' => 'Timer Ticket', 'url' => route('superadmin.page', 'timer-ticket')],
             ['key' => 'accounts', 'label' => 'Daftar Account', 'url' => route('superadmin.page', 'accounts')],
+            ['key' => 'integrations', 'label' => 'Integrasi', 'url' => route('superadmin.page', 'integrations')],
         ];
     }
 

@@ -16,10 +16,10 @@
 </section>
 
 @if(session('status'))
-    <section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>
+    <div class="status-banner"><span class="badge ok">{{ session('status') }}</span></div>
 @endif
 @if($errors->any())
-    <section class="card pad section"><span class="badge danger">{{ $errors->first() }}</span></section>
+    <div class="status-banner"><span class="badge danger">{{ $errors->first() }}</span></div>
 @endif
 
 @if(in_array($active, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'accounts'], true))
@@ -262,6 +262,83 @@
             @endforeach
         </tbody></table></div>
     </section>
+@endif
+
+@if($active === 'integrations')
+    <section class="card pad section" id="integrations-offline" hidden>
+        <span class="badge danger">Service Co PayGrid belum berjalan</span>
+    </section>
+    <section class="grid section" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+        @foreach(['co' => ['Co PayGrid', 'Bot teknis: bot Telegram dan server'], 'data' => ['Data PayGrid', 'Bot analisis data']] as $key => [$name, $purpose])
+            <div class="card pad" data-bot="{{ $key }}">
+                <h2>{{ $name }}</h2>
+                <div class="sub">{{ $purpose }}</div>
+                <div class="section"><span class="badge" data-state>Memuat...</span></div>
+                <div data-phone class="section" hidden></div>
+                <div data-configured class="section" hidden></div>
+                <div class="section" data-qr-wrap hidden>
+                    <img data-qr alt="QR WhatsApp {{ $name }}" width="280" height="280" style="max-width:100%;height:auto">
+                    <div class="sub">WhatsApp di HP nomor bot, buka Perangkat tertaut, lalu Tautkan perangkat dan scan. QR berganti otomatis.</div>
+                </div>
+                <div class="section" data-groups-wrap hidden>
+                    <strong>Grup yang diikuti</strong>
+                    <div class="sub">Salin ID grup yang dipilih ke .env Co PayGrid, lalu restart service.</div>
+                    <ul data-groups></ul>
+                </div>
+            </div>
+        @endforeach
+    </section>
+@push('scripts')
+<script>
+    (function () {
+        var labels = { connected: ['Terhubung', 'ok'], qr: ['Menunggu scan QR', 'warn'], connecting: ['Menyambung...', ''] };
+
+        function render(card, bot) {
+            var label = labels[bot.state] || labels.connecting;
+            var state = card.querySelector('[data-state]');
+            state.textContent = label[0];
+            state.className = 'badge ' + label[1];
+
+            var phone = card.querySelector('[data-phone]');
+            phone.hidden = !bot.phone;
+            phone.textContent = bot.phone ? 'Nomor: +' + bot.phone : '';
+
+            var connected = bot.state === 'connected';
+            var configured = card.querySelector('[data-configured]');
+            configured.hidden = !connected;
+            configured.textContent = bot.configured_group ? 'Grup aktif: ' + bot.configured_group : 'Grup belum dipilih, jadi bot belum menjawab.';
+
+            card.querySelector('[data-qr-wrap]').hidden = !bot.qr_image;
+            if (bot.qr_image) card.querySelector('[data-qr]').src = bot.qr_image;
+
+            var list = card.querySelector('[data-groups]');
+            list.textContent = '';
+            (bot.groups || []).forEach(function (group) {
+                var item = document.createElement('li');
+                item.textContent = group.name + ': ' + group.id;
+                list.appendChild(item);
+            });
+            card.querySelector('[data-groups-wrap]').hidden = !connected || !(bot.groups || []).length;
+        }
+
+        function refresh() {
+            fetch(@json(route('superadmin.integrations.status')), { headers: { Accept: 'application/json' } })
+                .then(function (response) { return response.json(); })
+                .then(function (status) {
+                    document.getElementById('integrations-offline').hidden = status.online;
+                    document.querySelectorAll('[data-bot]').forEach(function (card) {
+                        if (status.online) render(card, status[card.dataset.bot]);
+                        else card.querySelector('[data-qr-wrap]').hidden = true;
+                    });
+                })
+                .catch(function () { document.getElementById('integrations-offline').hidden = false; });
+        }
+
+        refresh();
+        setInterval(refresh, 4000);
+    })();
+</script>
+@endpush
 @endif
 
 @if(in_array($active, ['add-fee', 'ma', 'merchant-group'], true))
