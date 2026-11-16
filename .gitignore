@@ -27,3 +27,5 @@ paygrid-access-directory*.xls
 paygrid-access-directory*.xlsx
 /mobile-apk
 .claude/settings.local.json
+deploy_scp.sh
+telegram-absen-bot.n8n-workflow.json

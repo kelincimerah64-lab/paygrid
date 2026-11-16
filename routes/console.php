@@ -11,7 +11,50 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+Artisan::command('onboarding:universal-link', function () {
+    $link = AgentOnboardingLink::query()
+        ->whereNull('agent_id')
+        ->where('kind', 'universal')
+        ->where('status', 'active')
+        ->first();
+
+    if (! $link) {
+        $link = AgentOnboardingLink::query()->create([
+            'agent_id' => null,
+            'kind' => 'universal',
+            'token' => Str::random(20),
+            'status' => 'active',
+            'reusable' => true,
+            'expires_at' => null,
+        ]);
+        $this->info('Created new universal onboarding link.');
+    } else {
+        $this->info('Universal onboarding link already exists.');
+    }
+
+    $this->line(route('merchant-registration.token-form', $link));
+})->purpose('Print the single hidden universal onboarding link, creating it if it does not exist yet.');
+
 Artisan::command('gateway:sync-transactions {--merchant=} {--from=} {--to=} {--max-pages=} {--page-size=} {--queue=default}', function (\App\Services\GatewaySyncDispatcher $dispatcher) {
+    // The schedule itself always ticks every 5s (Laravel can't read a live DB
+    // value into a cron-style definition) - this self-throttle is what makes
+    // the effective poll interval adjustable via system_settings without a
+    // redeploy. Ticks that come in before the configured interval has
+    // elapsed since the last real dispatch cycle are a no-op.
+    $minInterval = max(5, (int) \App\Models\PaygridSetting::value('gateway_sync_min_interval_seconds', '5'));
+    $lastCycleKey = 'paygrid:gateway-sync:last-cycle-at';
+    // Stored as a plain integer timestamp, not a Carbon object -
+    // config('cache.serializable_classes') is false (Laravel's default
+    // object-injection hardening), so any cached object unserializes back
+    // as __PHP_Incomplete_Class instead of a real Carbon instance.
+    $lastCycle = \Illuminate\Support\Facades\Cache::get($lastCycleKey);
+
+    if ($lastCycle && now()->timestamp - (int) $lastCycle < $minInterval) {
+        return;
+    }
+
+    \Illuminate\Support\Facades\Cache::put($lastCycleKey, now()->timestamp, now()->addMinutes(10));
+
     $query = Merchant::query()
         ->where('approval_status', 'approved')
         ->whereIn('gateway', ['hilogate', 'artageto', 'magnetopay'])
@@ -77,6 +120,58 @@ Artisan::command('gateway:sync-withdrawals {--merchant=}', function () {
 
     $this->info("Dispatched {$count} merchant withdrawal sync job(s).");
 })->purpose('Dispatch background sync jobs pulling Hilogate withdrawal history into merchant_withdrawals.');
+
+Artisan::command('reconciliation:monthly {--month=}', function () {
+    $month = $this->option('month') ?: now('Asia/Jakarta')->subMonthNoOverflow()->format('Y-m');
+
+    $merchants = Merchant::query()
+        ->where('approval_status', 'approved')
+        ->whereIn('gateway', ['hilogate', 'artageto', 'magnetopay'])
+        ->whereNotNull('merchant_id')
+        ->whereNotNull('merchant_key')
+        ->get(['id', 'gateway']);
+
+    $collectionCount = 0;
+    $withdrawalCount = 0;
+
+    foreach ($merchants as $merchant) {
+        \App\Jobs\ReconcileMerchantMonth::dispatch($merchant->id, $month)->onQueue('backfill');
+        $collectionCount++;
+
+        if (in_array($merchant->gateway, ['hilogate', 'magnetopay'], true)) {
+            \App\Jobs\ReconcileMerchantMonthWithdrawals::dispatch($merchant->id, $month)->onQueue('backfill');
+            $withdrawalCount++;
+        }
+    }
+
+    $this->info("Dispatched reconciliation for {$month}: {$collectionCount} collection job(s), {$withdrawalCount} withdrawal job(s).");
+})->purpose('Walk every approved merchant\'s full given month (default: last month) against the gateway to catch anything the daily sync missed.');
+
+Artisan::command('reconciliation:sweep-stale {--minutes=15}', function () {
+    $minutes = (int) $this->option('minutes');
+    $staleBefore = now()->subMinutes($minutes);
+
+    // A worker restart mid-job (deploy, OOM, etc.) can kill a job without
+    // Laravel ever calling its failed() handler - the run row is left at
+    // status=running forever with no further updates. Nothing else revisits
+    // it, so without this sweep it just sits there indefinitely (see
+    // Tiktok5000/2026-11-12 incident). A run still genuinely progressing
+    // saves a checkpoint after every page, so one truly stuck this long is
+    // safe to call orphaned rather than slow.
+    $stale = \App\Models\ReconciliationRun::query()
+        ->where('status', 'running')
+        ->where('updated_at', '<', $staleBefore)
+        ->get();
+
+    foreach ($stale as $run) {
+        $run->update([
+            'status' => 'failed',
+            'last_error' => "Orphaned - tidak ada progress selama lebih dari {$minutes} menit (kemungkinan worker queue restart di tengah proses). Coba dispatch ulang manual.",
+        ]);
+    }
+
+    $this->info("Marked {$stale->count()} stale reconciliation run(s) as failed.");
+})->purpose('Mark reconciliation runs stuck at "running" with no progress as failed instead of leaving them stuck forever.');
 
 Artisan::command('gateway:sync-balances {--merchant=}', function (\App\Services\GatewayBalanceService $balances) {
     $query = Merchant::query()
@@ -288,6 +383,74 @@ Artisan::command('metrics:rebuild-daily {date?}', function (\App\Services\Metric
     $this->info("Rebuilt {$count} merchant daily metric row(s) for {$date}.");
 })->purpose('Rebuild summary metrics from topup_requests for one date.');
 
+/**
+ * Computed for the day that just ended (default: yesterday WIB) and
+ * reported the next day, matching the Commission Configuration page's
+ * "report day = transaction day + 1" rule. Only 'active' configs run -
+ * drafts never generate real commission numbers. Safe to re-run: the
+ * unique (merchant_id, transaction_date) key on merchant_commission_reports
+ * makes this an upsert, not a duplicate-insert.
+ */
+Artisan::command('commission:generate-reports {date?}', function () {
+    $date = $this->argument('date') ?: now('Asia/Jakarta')->subDay()->toDateString();
+    $dayOfWeek = \Carbon\CarbonImmutable::parse($date, 'Asia/Jakarta')->dayOfWeek;
+    $rangeStart = \Carbon\CarbonImmutable::parse($date, 'Asia/Jakarta')->startOfDay()->utc();
+    $rangeEnd = \Carbon\CarbonImmutable::parse($date, 'Asia/Jakarta')->endOfDay()->utc();
+
+    $configs = \App\Models\CommissionConfig::query()
+        ->where('status', 'active')
+        ->with(['days' => fn ($q) => $q->where('day_of_week', $dayOfWeek)->where('enabled', true), 'merchants'])
+        ->get()
+        ->filter(fn ($c) => $c->days->isNotEmpty());
+
+    $count = 0;
+    foreach ($configs as $config) {
+        $rate = $config->days->first()->rate_percent;
+        $wdFeeFixed = $config->days->first()->wd_fee_fixed;
+        $merchantIds = match (true) {
+            $config->apply_scope === 'specific' => $config->merchants->pluck('id'),
+            $config->agent_id !== null => Merchant::query()->where('agent_id', $config->agent_id)->pluck('id'),
+            default => Merchant::query()->whereRelation('agent', 'ma_user_id', $config->ma_user_id)->pluck('id'),
+        };
+
+        foreach ($merchantIds as $merchantId) {
+            $volume = (int) \App\Models\TopupRequest::query()
+                ->where('merchant_id', $merchantId)
+                ->where('status', 'success')
+                ->whereBetween('submitted_at', [$rangeStart, $rangeEnd])
+                ->sum('amount');
+
+            $wdQuery = \App\Models\MerchantWithdrawal::query()
+                ->where('merchant_id', $merchantId)
+                ->where('status', 'COMPLETED')
+                ->whereBetween('gateway_created_at', [$rangeStart, $rangeEnd]);
+            $wdVolume = (int) (clone $wdQuery)->sum('amount');
+            $wdTrxCount = (clone $wdQuery)->count();
+
+            \App\Models\MerchantCommissionReport::query()->updateOrCreate(
+                ['merchant_id' => $merchantId, 'transaction_date' => $date],
+                [
+                    'commission_config_id' => $config->id,
+                    'day_of_week' => $dayOfWeek,
+                    'volume' => $volume,
+                    'rate_percent' => $rate,
+                    'commission_amount' => (int) round($volume * $rate / 100),
+                    'wd_volume' => $wdVolume,
+                    'wd_trx_count' => $wdTrxCount,
+                    'wd_fee_fixed' => $wdFeeFixed,
+                    // Withdrawal fee is always a flat IDR amount per transaction,
+                    // never a percentage of volume - confirmed with the business.
+                    'wd_commission_amount' => (int) round($wdFeeFixed * $wdTrxCount),
+                    'report_date' => \Carbon\CarbonImmutable::parse($date, 'Asia/Jakarta')->addDay()->toDateString(),
+                ]
+            );
+            $count++;
+        }
+    }
+
+    $this->info("Generated {$count} commission report row(s) for {$date}.");
+})->purpose("Generate daily per-merchant commission report rows from the previous day's successful volume.");
+
 Artisan::command('fees:backfill-snapshots', function (\App\Services\FeeService $fees) {
     $count = 0;
     \App\Models\TopupRequest::query()->with('merchant')->chunkById(500, function ($requests) use ($fees, &$count) {
@@ -356,29 +519,6 @@ Artisan::command('tickets:auto-create-pending', function (
 
     $this->info("Checked {$checked} overdue pending transaction(s), auto-created {$created} ticket(s).");
 })->purpose('Re-verify overdue pending transactions against the gateway and auto-create tickets for ones still pending.');
-
-Artisan::command('wa-tickets:remind-unclaimed', function () {
-    $minutes = (int) config('paygrid.whatsapp.reminder_minutes', 10);
-    $staged = 0;
-
-    \App\Models\MerchantTicket::query()
-        ->whereNull('claimed_by_user_id')
-        ->where('status', 'open')
-        ->where('wa_reminder_stage', '<', 3)
-        ->whereNotNull('wa_reminder_stage_at')
-        ->where(fn ($q) => $q->whereNull('approval_status')->orWhere('approval_status', 'approved'))
-        ->where('wa_reminder_stage_at', '<=', now()->subMinutes($minutes))
-        ->chunkById(100, function ($tickets) use (&$staged) {
-            foreach ($tickets as $ticket) {
-                $nextStage = $ticket->wa_reminder_stage + 1;
-                \App\Jobs\NotifyWaTicketLink::dispatch($ticket->id, 'reminder', (string) config('paygrid.whatsapp.handling_group_id'), $nextStage);
-                $ticket->forceFill(['wa_reminder_stage' => $nextStage, 'wa_reminder_stage_at' => now()])->save();
-                $staged++;
-            }
-        });
-
-    $this->info("Advanced {$staged} unclaimed-ticket reminder card(s).");
-})->purpose('Advance the WA group reminder card for tickets still unclaimed, every configured interval, up to 3 stages.');
 
 Artisan::command('gateway:health-hilogate {merchant}', function (\App\Services\Gateway\GatewayManager $gateways) {
     $merchant = Merchant::query()

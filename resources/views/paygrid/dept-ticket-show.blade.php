@@ -20,7 +20,7 @@
 <div class="ticket-detail-crumb"><a href="{{ route('dept-tickets.index') }}">Semua Tiket</a> / <span>Detail Tiket</span></div>
 
 @if(session('status'))
-    <section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>
+    <div class="status-banner"><span class="badge ok">{{ session('status') }}</span></div>
 @endif
 
 <div class="ticket-detail-title-row">
@@ -53,7 +53,14 @@
             @endforelse
         </div>
 
-        @if($ticket->status !== 'closed')
+        @php
+            $canReply = in_array(auth()->user()->role, ['cs_pusat', 'superadmin'], true) || (int) $ticket->claimed_by_user_id === (int) auth()->id();
+        @endphp
+        @if($ticket->status === 'closed')
+            <p class="muted" style="padding:14px 18px; border-top:1px solid var(--line)">Tiket ini sudah ditutup.</p>
+        @elseif(! $canReply)
+            <p class="muted" style="padding:14px 18px; border-top:1px solid var(--line)">Ambil tiket ini dulu dari daftar tiket sebelum membalas.</p>
+        @else
             <form method="post" action="{{ route('dept-tickets.reply', $ticket) }}" class="ticket-reply-box">
                 @csrf
                 <label>Balas ke toko</label>
@@ -63,25 +70,46 @@
                     <button class="btn primary compact-btn" type="submit">Kirim Balasan &#10148;</button>
                 </div>
             </form>
-        @else
-            <p class="muted" style="padding:14px 18px; border-top:1px solid var(--line)">Tiket ini sudah ditutup.</p>
         @endif
     </div>
 
     <aside class="ticket-detail-aside">
         <div class="ticket-aside-card">
             <h3>Update Status</h3>
-            <form method="post" action="{{ route('dept-tickets.status', $ticket) }}">
+            @if($ticket->status === 'closed')
+                <p class="muted">Tiket ini sudah ditutup, status tidak bisa diubah lagi.</p>
+            @elseif(! $canReply)
+                <p class="muted">Ambil tiket ini dulu sebelum mengubah status.</p>
+            @else
+                <form method="post" action="{{ route('dept-tickets.status', $ticket) }}">
+                    @csrf
+                    <label class="muted" style="display:block; font-size:11.5px; margin-bottom:6px">Status tiket</label>
+                    <select name="status">
+                        <option value="open" @selected($ticket->status === 'open')>Belum Diproses</option>
+                        <option value="in_progress" @selected($ticket->status === 'in_progress')>Diproses</option>
+                        <option value="closed" @selected($ticket->status === 'closed')>Selesai</option>
+                    </select>
+                    <button class="btn" type="submit" style="width:100%">Simpan Status</button>
+                </form>
+            @endif
+        </div>
+
+        @if($ticket->department !== App\Services\MerchantTicketService::SIMPLE_DEPARTMENT && $ticket->status !== 'closed' && $canReply)
+        <div class="ticket-aside-card">
+            <h3>Pindahkan ke Department Lain</h3>
+            <form method="post" action="{{ route('dept-tickets.push', $ticket) }}">
                 @csrf
-                <label class="muted" style="display:block; font-size:11.5px; margin-bottom:6px">Status tiket</label>
-                <select name="status">
-                    <option value="open" @selected($ticket->status === 'open')>Belum Diproses</option>
-                    <option value="in_progress" @selected($ticket->status === 'in_progress')>Diproses</option>
-                    <option value="closed" @selected($ticket->status === 'closed')>Selesai</option>
+                <label class="muted" style="display:block; font-size:11.5px; margin-bottom:6px">Department tujuan</label>
+                <select name="department">
+                    @foreach(App\Services\MerchantTicketService::DEPARTMENTS as $dept)
+                        @continue($dept === $ticket->department)
+                        <option value="{{ $dept }}">{{ $ticketsService->departmentLabel($dept) }}</option>
+                    @endforeach
                 </select>
-                <button class="btn" type="submit" style="width:100%">Simpan Status</button>
+                <button class="btn" type="submit" style="width:100%">Pindahkan Tiket</button>
             </form>
         </div>
+        @endif
 
         <div class="ticket-aside-card">
             <h3>Informasi Tiket</h3>
@@ -89,6 +117,7 @@
             <div class="ticket-info-row"><span>Menu</span><strong>{{ $categoryLabel }}</strong></div>
             <div class="ticket-info-row"><span>Dibuat</span><strong>{{ $ticket->created_at->timezone('Asia/Jakarta')->format('d M Y, H:i') }}</strong></div>
             <div class="ticket-info-row"><span>Status</span><strong>{{ $statusLabel($ticket->status) }}</strong></div>
+            <div class="ticket-info-row"><span>Diambil oleh</span><strong>{{ $ticket->claimedBy?->name ?? 'Belum diambil' }}</strong></div>
             @if(!empty($ticket->metadata))
                 @foreach($ticket->metadata as $key => $value)
                     @continue($value === null || $value === '')
@@ -119,3 +148,25 @@
     </aside>
 </div>
 @endsection
+
+@push('scripts')
+<script src="{{ asset('js/paygrid-realtime.js') }}?v={{ filemtime(public_path('js/paygrid-realtime.js')) }}"></script>
+<script>
+(function () {
+    if (window.PayGridRealtime) {
+        var realtime = window.PayGridRealtime.connect({
+            key: @json(config('broadcasting.connections.reverb.key')),
+            host: @json(config('broadcasting.connections.reverb.options.host')),
+            port: @json(config('broadcasting.connections.reverb.options.port')),
+            scheme: @json(config('broadcasting.connections.reverb.options.scheme')),
+        });
+        realtime.subscribePrivate('private-ticket.{{ $ticket->id }}', 'message.sent', function () {
+            window.PayGridRealtime.playNotifySound();
+            var replyBox = document.querySelector('.ticket-reply-box textarea');
+            if (document.activeElement === replyBox) return;
+            window.location.reload();
+        });
+    }
+})();
+</script>
+@endpush

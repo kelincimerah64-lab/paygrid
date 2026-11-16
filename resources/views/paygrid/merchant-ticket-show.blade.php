@@ -26,7 +26,7 @@
 <div class="ticket-detail-crumb"><a href="{{ route('merchant.tickets.index', $merchant) }}">Semua Tiket</a> / <span>Detail Tiket</span></div>
 
 @if(session('status'))
-    <section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>
+    <div class="status-banner"><span class="badge ok">{{ session('status') }}</span></div>
 @endif
 
 <div class="ticket-detail-title-row">
@@ -181,6 +181,7 @@
             scheme: @json(config('broadcasting.connections.reverb.options.scheme')),
         });
         realtime.subscribePrivate('private-ticket.{{ $ticket->id }}', 'message.sent', function () {
+            window.PayGridRealtime.playNotifySound();
             var replyBox = document.querySelector('.ticket-reply-box textarea');
             if (document.activeElement === replyBox) return;
             window.location.reload();

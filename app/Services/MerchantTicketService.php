@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
+use App\Events\MerchantTicketCreated;
 use App\Events\MerchantTicketMessageSent;
-use App\Jobs\NotifyWaTicketLink;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
 use App\Models\MerchantTicketMessage;
@@ -13,7 +13,7 @@ use Illuminate\Http\UploadedFile;
 
 class MerchantTicketService
 {
-    public const DEPARTMENTS = ['cs', 'tech', 'finance'];
+    public const DEPARTMENTS = ['cs', 'dev', 'tech_supp', 'finance', 'settlement', 'fraud', 'dispute'];
 
     /**
      * Separate from DEPARTMENTS on purpose - that constant also drives the
@@ -29,16 +29,19 @@ class MerchantTicketService
     ];
 
     public const CS_CATEGORIES = [
-        'settlement' => 'Settlement',
         'transaction' => 'Cek Transaksi',
         'topup' => 'Topup',
         'others' => 'Others',
     ];
 
-    public const TECH_CATEGORIES = [
+    public const DEV_CATEGORIES = [
+        'technical_issue' => 'Technical Issue',
+        'others' => 'Others',
+    ];
+
+    public const TECH_SUPP_CATEGORIES = [
         'merchant_details' => 'Merchant Details/User Role',
         'ip_whitelist' => 'IP Whitelist/VPS',
-        'technical_issue' => 'Technical Issue',
         'others' => 'Others',
     ];
 
@@ -52,20 +55,32 @@ class MerchantTicketService
     ];
 
     /**
-     * Categories that need approval before they're worked on, keyed by
-     * department. Drives the approval gate in create() below, so it applies
-     * no matter which controller called create() - the toko ticket portal
-     * and the MA WA-ticket dashboard both end up here.
+     * Same category set as FINANCE_CATEGORIES on purpose - the "Settlement"
+     * wizard card used to route to the 'finance' department and showed this
+     * full list (not just the "Settlement" category) in its "Jenis
+     * Permasalahan" dropdown. Now that card routes to the new 'settlement'
+     * department instead, so this list has to match or toko lose access to
+     * Topup Saldo/Topdown Saldo/Missing Transaction/Discrepancies Amount.
+     * 'finance' department itself is now reached only via manual transfer.
      */
-    public const PILOT_APPROVAL_CATEGORIES = [
-        'tech' => ['ip_whitelist'],
-        'finance' => ['topup_saldo', 'topdown_saldo'],
+    public const SETTLEMENT_CATEGORIES = self::FINANCE_CATEGORIES;
+
+    public const FRAUD_CATEGORIES = [
+        'others' => 'Others',
+    ];
+
+    public const DISPUTE_CATEGORIES = [
+        'others' => 'Others',
     ];
 
     public const DEPARTMENT_LABELS = [
         'cs' => 'CS',
-        'tech' => 'Tech Support',
+        'dev' => 'Dev',
+        'tech_supp' => 'Tech Support',
         'finance' => 'Finance',
+        'settlement' => 'Settlement',
+        'fraud' => 'Fraud',
+        'dispute' => 'Dispute',
         'general' => 'Tiket Toko',
     ];
 
@@ -79,9 +94,9 @@ class MerchantTicketService
      */
     public const CARDS = [
         'transaksi' => ['label' => 'Transaksi', 'description' => 'Cek status transaksi, RRN, refund, dll.', 'icon' => '💳', 'department' => 'cs', 'default_category' => 'transaction', 'response' => '15 - 30 menit'],
-        'settlement' => ['label' => 'Settlement', 'description' => 'Pertanyaan seputar pencairan dana', 'icon' => '🏦', 'department' => 'finance', 'default_category' => 'settlement', 'response' => '1 - 4 jam'],
-        'teknis' => ['label' => 'Teknis', 'description' => 'Integrasi API, error, dll.', 'icon' => '⚙️', 'department' => 'tech', 'default_category' => 'technical_issue', 'response' => '1 - 4 jam'],
-        'akun_user' => ['label' => 'Akun / User', 'description' => 'Akses akun, user baru, reset password', 'icon' => '👤', 'department' => 'tech', 'default_category' => 'merchant_details', 'response' => '1 - 4 jam'],
+        'settlement' => ['label' => 'Settlement', 'description' => 'Pertanyaan seputar pencairan dana', 'icon' => '🏦', 'department' => 'settlement', 'default_category' => 'settlement', 'response' => '1 - 4 jam'],
+        'teknis' => ['label' => 'Teknis', 'description' => 'Integrasi API, error, dll.', 'icon' => '⚙️', 'department' => 'dev', 'default_category' => 'technical_issue', 'response' => '1 - 4 jam'],
+        'akun_user' => ['label' => 'Akun / User', 'description' => 'Akses akun, user baru, reset password', 'icon' => '👤', 'department' => 'tech_supp', 'default_category' => 'merchant_details', 'response' => '1 - 4 jam'],
         'lainnya' => ['label' => 'Lainnya', 'description' => 'Pertanyaan lain', 'icon' => '💬', 'department' => 'cs', 'default_category' => 'others', 'response' => '1 - 4 jam'],
     ];
 
@@ -281,8 +296,12 @@ class MerchantTicketService
     public function categoriesFor(string $department): array
     {
         return match ($department) {
-            'tech' => self::TECH_CATEGORIES,
+            'dev' => self::DEV_CATEGORIES,
+            'tech_supp' => self::TECH_SUPP_CATEGORIES,
             'finance' => self::FINANCE_CATEGORIES,
+            'settlement' => self::SETTLEMENT_CATEGORIES,
+            'fraud' => self::FRAUD_CATEGORIES,
+            'dispute' => self::DISPUTE_CATEGORIES,
             'general' => self::GENERAL_CATEGORIES,
             default => self::CS_CATEGORIES,
         };
@@ -298,15 +317,8 @@ class MerchantTicketService
         return $this->categoriesFor($department)[$category] ?? $category;
     }
 
-    public function needsPilotApproval(string $department, string $category): bool
-    {
-        return in_array($category, self::PILOT_APPROVAL_CATEGORIES[$department] ?? [], true);
-    }
-
     public function create(Merchant $merchant, User $user, array $data, array $attachments = []): MerchantTicket
     {
-        $needsApproval = $this->needsPilotApproval($data['department'], $data['category']);
-
         $ticket = MerchantTicket::query()->create([
             'merchant_id' => $merchant->id,
             'created_by_user_id' => $user->id,
@@ -317,22 +329,12 @@ class MerchantTicketService
             'description' => $data['description'],
             'metadata' => $data['metadata'] ?? null,
             'attachments' => $this->storeAttachments($merchant, $attachments),
-            'approval_status' => $needsApproval ? 'waiting' : null,
             'last_message_at' => now(),
         ]);
 
         $ticket->forceFill(['ticket_no' => 'TK-'.str_pad((string) $ticket->id, 5, '0', STR_PAD_LEFT)])->save();
 
-        // Every approval-gated category notifies the same WhatsApp approval
-        // group regardless of who created the ticket (toko via the portal,
-        // or staff via the MA WA-ticket dashboard) - this used to split
-        // between this job (n8n-routed, a different WA group) for ip_whitelist
-        // specifically and NotifyWaTicketLink (MaWaTicketController only) for
-        // everything else, so a toko-created ip_whitelist ticket never
-        // reached the group staff actually watch for approvals.
-        if ($needsApproval) {
-            NotifyWaTicketLink::dispatch($ticket->id, 'created', (string) config('paygrid.whatsapp.approval_group_id'));
-        }
+        event(MerchantTicketCreated::forTicket($ticket));
 
         return $ticket;
     }
@@ -390,17 +392,19 @@ class MerchantTicketService
 
     /**
      * Atomic claim - only succeeds if nobody has claimed yet. Returns false
-     * (without changing anything) if another staff member beat this call to it.
+     * (without changing anything) if another staff member beat this call to
+     * it. Flips status to in_progress right away, so a claimed ticket never
+     * sits showing "Belum Diproses" while someone's already handling it.
      */
     public function claim(MerchantTicket $ticket, User $user): bool
     {
         $claimed = MerchantTicket::query()
             ->where('id', $ticket->id)
             ->whereNull('claimed_by_user_id')
-            ->update(['claimed_by_user_id' => $user->id, 'claimed_at' => now()]);
+            ->update(['claimed_by_user_id' => $user->id, 'claimed_at' => now(), 'status' => 'in_progress']);
 
         if ($claimed) {
-            $ticket->forceFill(['claimed_by_user_id' => $user->id, 'claimed_at' => now()]);
+            $ticket->forceFill(['claimed_by_user_id' => $user->id, 'claimed_at' => now(), 'status' => 'in_progress']);
         }
 
         return (bool) $claimed;
@@ -422,6 +426,27 @@ class MerchantTicketService
             ? 'Dialihkan dari '.($from?->name ?? 'antrean').' ke '.$to->name.'.'
             : 'Dilepas ke antrean oleh '.$actor->name.'.';
         $ticket->messages()->create(['user_id' => null, 'is_staff' => true, 'is_internal' => true, 'body' => $note]);
+    }
+
+    /**
+     * Cross-department push - changes the department and releases any claim
+     * (the claimant doesn't necessarily work in the target department).
+     * Logs who pushed it and from which department as an internal system
+     * message, same note style as transfer().
+     */
+    public function pushToDepartment(MerchantTicket $ticket, User $actor, string $toDepartment): void
+    {
+        $fromDepartment = $ticket->department;
+        $ticket->forceFill([
+            'department' => $toDepartment,
+            'claimed_by_user_id' => null,
+            'claimed_at' => null,
+        ])->save();
+
+        $note = 'Tiket dipindahkan dari '.$this->departmentLabel($fromDepartment).' (oleh '.$actor->name.') ke '.$this->departmentLabel($toDepartment).'.';
+        $ticket->messages()->create(['user_id' => null, 'is_staff' => true, 'is_internal' => true, 'body' => $note]);
+
+        event(MerchantTicketCreated::forTicket($ticket));
     }
 
     public function closeWithNote(MerchantTicket $ticket, User $user, ?string $note): void

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Concerns\ConvertsWibDateRange;
 use App\Models\GatewaySyncLog;
 use App\Models\Merchant;
 use App\Models\SyncCursor;
@@ -18,7 +19,7 @@ use Illuminate\Queue\SerializesModels;
 
 class BackfillMerchantTransactions implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use ConvertsWibDateRange, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 4;
 
@@ -135,9 +136,10 @@ class BackfillMerchantTransactions implements ShouldQueue
                 $rollups->rebuildMerchantDay($merchant, $date, $merchant->gateway.'_backfill_today');
             }
 
+            [$dayRangeStart, $dayRangeEnd] = $this->wibDayToUtcRange($date);
             $cursor->fill([
                 'last_synced_at' => now('Asia/Jakarta'),
-                'last_payload_at' => $merchant->topupRequests()->whereDate('submitted_at', $date)->latest('submitted_at')->value('submitted_at'),
+                'last_payload_at' => $merchant->topupRequests()->whereBetween('submitted_at', [$dayRangeStart, $dayRangeEnd])->latest('submitted_at')->value('submitted_at'),
                 'meta' => [
                     'date' => $date,
                     'mode_progress' => $modeProgress,

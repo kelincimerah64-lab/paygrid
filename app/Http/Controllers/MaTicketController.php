@@ -40,8 +40,10 @@ class MaTicketController extends Controller
             'cards' => MerchantTicketService::CARDS,
             'categoriesByDepartment' => [
                 'cs' => MerchantTicketService::CS_CATEGORIES,
-                'tech' => MerchantTicketService::TECH_CATEGORIES,
+                'dev' => MerchantTicketService::DEV_CATEGORIES,
+                'tech_supp' => MerchantTicketService::TECH_SUPP_CATEGORIES,
                 'finance' => MerchantTicketService::FINANCE_CATEGORIES,
+                'settlement' => MerchantTicketService::SETTLEMENT_CATEGORIES,
             ],
             'categoryMeta' => MerchantTicketService::CATEGORY_META,
         ]);
@@ -50,6 +52,10 @@ class MaTicketController extends Controller
     public function store(Request $request, CsScopeResolver $scope, MerchantTicketService $tickets, AuditLogService $audit): RedirectResponse
     {
         $user = $request->user();
+
+        if ($user->is_demo) {
+            return back()->with('status', 'Tiket berhasil dikirim. (Mode demo — data tidak benar-benar disimpan dan tidak masuk ke antrian CS Pusat.)');
+        }
 
         $merchantIds = $user->role === 'superadmin'
             ? Merchant::query()->where('general_ticket_enabled', true)->pluck('id')

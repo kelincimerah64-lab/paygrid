@@ -1,5 +1,16 @@
-@php($bm = $botMonitoring ?? ['kpis' => [], 'tickets' => [], 'categories' => [], 'statuses' => [], 'assignees' => [], 'error' => null])
-@php($botFilters = ['status' => request('bot_status', ''), 'category' => request('bot_category', ''), 'assigned' => request('bot_assigned', ''), 'from' => request('bot_from', ''), 'to' => request('bot_to', ''), 'q' => request('bot_q', '')])
+@php
+    $bm = $botMonitoring ?? ['kpis' => [], 'tickets' => [], 'categories' => [], 'statuses' => [], 'assignees' => [], 'error' => null];
+    $botFilters = ['status' => request('bot_status', ''), 'category' => request('bot_category', ''), 'assigned' => request('bot_assigned', ''), 'from' => request('bot_from', ''), 'to' => request('bot_to', ''), 'q' => request('bot_q', '')];
+    $botStatusBadge = function (?string $status) {
+        return match (true) {
+            $status === 'RESOLVED' => 'ok',
+            in_array($status, ['FAILED', 'ESCALATED'], true) => 'danger',
+            in_array($status, ['EXPIRED', 'REJECTED'], true) => 'neutral',
+            in_array($status, ['ASSIGNED', 'WAITING_APPROVAL'], true) => 'info',
+            default => 'warn',
+        };
+    };
+@endphp
 <form class="card filters section" method="get">
     <input class="search" name="bot_q" value="{{ $botFilters['q'] }}" placeholder="Cari ticket ID / requester...">
     <div class="actions">
@@ -9,6 +20,7 @@
         <input type="date" name="bot_from" value="{{ $botFilters['from'] }}"><input type="date" name="bot_to" value="{{ $botFilters['to'] }}">
         <button class="btn primary">Filter</button><a class="btn" href="{{ route($botRouteName) }}">Reset</a>
         <a class="btn" href="{{ route($botRouteName, array_merge(request()->query(), ['refresh' => 1])) }}">Refresh</a>
+        @isset($botExportRouteName)<a class="btn" href="{{ route($botExportRouteName, request()->query()) }}">Export CSV</a>@endisset
     </div>
 </form>
 
@@ -27,7 +39,7 @@
 @php($botResolvedPct = ($bm['kpis']['total'] ?? 0) > 0 ? round((($bm['kpis']['resolved'] ?? 0) / $bm['kpis']['total']) * 100) : 0)
 @php($botFailedPct = ($bm['kpis']['total'] ?? 0) > 0 ? round((($bm['kpis']['failed'] ?? 0) / $bm['kpis']['total']) * 100) : 0)
 @if($bm['error'])
-    <section class="card pad section"><span class="badge danger">{{ $bm['error'] }}</span></section>
+    <div class="status-banner"><span class="badge danger">{{ $bm['error'] }}</span></div>
 @else
     <section class="grid qris-metrics section">
         <div class="card pad qris-metric primary"><span>Total Ticket</span><strong>{{ number_format($bm['kpis']['total'] ?? 0, 0, ',', '.') }}</strong><small>Sesuai filter aktif</small></div>
@@ -58,12 +70,22 @@
                         <td><strong>{{ $t['ticket_id'] ?? '-' }}</strong><br><span class="muted">{{ ! empty($t['has_attachment']) ? 'Ada lampiran' : 'Tanpa lampiran' }}</span></td>
                         <td><strong>{{ ($t['requester_name'] ?? null) ?: '-' }}</strong><br><span class="muted">{{ ! empty($t['requester_username']) ? '@'.$t['requester_username'] : '-' }}</span></td>
                         <td>{{ ($t['category'] ?? null) ?: '-' }}</td>
-                        <td><span class="badge {{ $status === 'RESOLVED' ? 'ok' : ($status === 'FAILED' ? 'danger' : 'warn') }}">{{ $status ?: '-' }}</span></td>
+                        <td><span class="badge {{ $botStatusBadge($status) }}">{{ $status ?: '-' }}</span></td>
                         <td>{{ ($t['assigned_name'] ?? null) ?: '-' }}</td>
                         <td><strong>{{ $t['total_resolution_minutes'] ?? '-' }} min</strong><br><span class="muted">Pickup {{ $t['pickup_minutes'] ?? '-' }} / Handling {{ $t['handling_minutes'] ?? '-' }}</span></td>
                         <td class="time-cell">{{ $t['created_at']?->format('d/m/y') ?? '-' }}<span>{{ $t['created_at']?->format('H.i') ? $t['created_at']?->format('H.i').' WIB' : '-' }}</span></td>
                         <td>{{ ($t['last_update'] ?? null) ?: '-' }}</td>
-                        <td><button class="btn compact-btn bot-detail-open" type="button" data-bot-detail="{{ $ticketModalId }}">Detail</button></td>
+                        <td>
+                            <button class="btn compact-btn bot-detail-open" type="button" data-bot-detail="{{ $ticketModalId }}">Detail</button>
+                            @isset($botRejectRouteName)
+                                @if(! empty($t['ticket_id']) && ! in_array($status, ['RESOLVED', 'FAILED', 'REJECTED'], true))
+                                    <form method="post" action="{{ route($botRejectRouteName, $t['ticket_id'] ?? '') }}" style="display:inline" onsubmit="return confirm('Reject ticket {{ $t['ticket_id'] ?? '' }}? Card di Telegram akan dihapus dan tidak bisa dibatalkan.')">
+                                        @csrf
+                                        <button class="btn danger compact-btn">Reject</button>
+                                    </form>
+                                @endif
+                            @endisset
+                        </td>
                     </tr>
                     <tr class="bot-detail-row" id="{{ $ticketModalId }}" hidden>
                         <td colspan="9">

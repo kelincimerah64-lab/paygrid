@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
-#[Fillable(['name', 'email', 'username', 'contact', 'role', 'is_active', 'is_hidden', 'merchant_id', 'ma_user_id', 'agent_id', 'base_hg_percent', 'connection_type', 'connection_fee_percent', 'settlement_method', 'settlement_fee_percent', 'ma_fee_percent', 'fee_menu', 'fee_menu_rates', 'password', 'plain_password', 'hilogate_onboarding_email', 'hilogate_onboarding_password'])]
+#[Fillable(['name', 'email', 'username', 'contact', 'role', 'is_active', 'is_hidden', 'is_demo', 'merchant_id', 'ma_user_id', 'agent_id', 'base_hg_percent', 'connection_type', 'connection_fee_percent', 'settlement_method', 'settlement_fee_percent', 'ma_fee_percent', 'fee_menu', 'fee_menu_rates', 'password', 'plain_password', 'hilogate_onboarding_email', 'hilogate_onboarding_password'])]
 #[Hidden(['password', 'secondary_password', 'plain_password', 'remember_token', 'hilogate_onboarding_password'])]
 class User extends Authenticatable
 {
@@ -88,6 +88,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'is_active' => 'boolean',
             'is_hidden' => 'boolean',
+            'is_demo' => 'boolean',
             'base_hg_percent' => 'decimal:4',
             'connection_fee_percent' => 'decimal:4',
             'settlement_fee_percent' => 'decimal:4',

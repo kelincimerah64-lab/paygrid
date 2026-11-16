@@ -2,13 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\NotifyWaTicketLink;
 use App\Models\Merchant;
 use App\Models\MerchantTicket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -44,7 +42,7 @@ class MerchantTicketTest extends TestCase
         $this->assertNotNull($ticket->ticket_no);
     }
 
-    public function test_tech_department_ticket_can_be_created(): void
+    public function test_dev_department_ticket_can_be_created(): void
     {
         $this->seed();
         $merchant = $this->pilotMerchant();
@@ -52,13 +50,32 @@ class MerchantTicketTest extends TestCase
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'card' => 'teknis',
+            'category' => 'technical_issue',
+            'description' => 'Butuh dicek developer.',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('merchant_tickets', [
+            'merchant_id' => $merchant->id,
+            'department' => 'dev',
+            'category' => 'technical_issue',
+        ]);
+    }
+
+    public function test_tech_supp_department_ticket_can_be_created(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+
+        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
+            'card' => 'akun_user',
             'category' => 'ip_whitelist',
             'description' => 'Butuh whitelist IP VPS baru.',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('merchant_tickets', [
             'merchant_id' => $merchant->id,
-            'department' => 'tech',
+            'department' => 'tech_supp',
             'category' => 'ip_whitelist',
         ]);
     }
@@ -70,7 +87,7 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'card' => 'teknis',
+            'card' => 'akun_user',
             'category' => 'ip_whitelist',
             'description' => 'Butuh whitelist 3 IP VPS baru.',
             'ip_address' => ['103.10.20.30', '103.10.20.31', ''],
@@ -97,14 +114,14 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'card' => 'teknis',
+            'card' => 'akun_user',
             'category' => 'ip_whitelist',
             'description' => 'Terlalu banyak IP.',
             'ip_address' => ['1.1.1.1', '2.2.2.2', '3.3.3.3', '4.4.4.4', '5.5.5.5', '6.6.6.6'],
         ])->assertSessionHasErrors('ip_address');
     }
 
-    public function test_finance_department_ticket_can_be_created(): void
+    public function test_settlement_department_ticket_can_be_created(): void
     {
         $this->seed();
         $merchant = $this->pilotMerchant();
@@ -118,7 +135,7 @@ class MerchantTicketTest extends TestCase
 
         $this->assertDatabaseHas('merchant_tickets', [
             'merchant_id' => $merchant->id,
-            'department' => 'finance',
+            'department' => 'settlement',
             'category' => 'discrepancies_amount',
         ]);
     }
@@ -179,7 +196,7 @@ class MerchantTicketTest extends TestCase
             'merchant_id' => $merchant->id,
             'created_by_user_id' => $admin->id,
             'ticket_no' => 'TK-00002',
-            'department' => 'tech',
+            'department' => 'tech_supp',
             'category' => 'ip_whitelist',
             'title' => 'Test title',
             'description' => 'tech ticket',
@@ -218,7 +235,7 @@ class MerchantTicketTest extends TestCase
             'merchant_id' => $merchant->id,
             'created_by_user_id' => $admin->id,
             'ticket_no' => 'TK-00003',
-            'department' => 'tech',
+            'department' => 'dev',
             'category' => 'technical_issue',
             'title' => 'Test title',
             'description' => 'tech ticket',
@@ -227,6 +244,96 @@ class MerchantTicketTest extends TestCase
 
         $this->actingAs($superadmin)->get(route('dept-tickets.index'))->assertOk()->assertSee('TK-00003');
         $this->actingAs($superadmin)->get(route('dept-tickets.show', $ticket))->assertOk();
+    }
+
+    public function test_claimed_ticket_is_hidden_from_other_staff_until_closed(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+        $claimant = User::factory()->create(['role' => 'dept_cs']);
+        $bystander = User::factory()->create(['role' => 'dept_cs']);
+
+        $ticket = MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => $admin->id,
+            'ticket_no' => 'TK-00010',
+            'department' => 'cs',
+            'category' => 'others',
+            'description' => 'Claim test.',
+            'last_message_at' => now(),
+        ]);
+
+        // Unclaimed: both can open it.
+        $this->actingAs($bystander)->get(route('dept-tickets.show', $ticket))->assertOk();
+
+        $this->actingAs($claimant)->post(route('dept-tickets.claim', $ticket))->assertRedirect(route('dept-tickets.show', $ticket));
+        // Claiming flips the ticket straight to in_progress - it never sits
+        // showing "Belum Diproses" once someone's handling it.
+        $this->assertSame('in_progress', $ticket->fresh()->status);
+
+        // Claimed by someone else: bystander is bounced with a friendly
+        // message (no 403), claimant keeps access.
+        $this->actingAs($bystander)->get(route('dept-tickets.show', $ticket))
+            ->assertRedirect(route('dept-tickets.index'))
+            ->assertSessionHas('status', fn ($msg) => str_contains($msg, 'sudah diambil oleh') && str_contains($msg, $claimant->name));
+        $this->actingAs($bystander)->post(route('dept-tickets.status', $ticket), ['status' => 'open'])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Ambil tiket ini dulu sebelum mengubah status.');
+        $this->assertSame('in_progress', $ticket->fresh()->status);
+        $this->actingAs($claimant)->get(route('dept-tickets.show', $ticket))->assertOk();
+
+        $this->actingAs($claimant)->post(route('dept-tickets.status', $ticket), ['status' => 'closed'])->assertRedirect();
+
+        // Closed: it's history now, visible to the bystander again.
+        $this->actingAs($bystander)->get(route('dept-tickets.show', $ticket))->assertOk();
+    }
+
+    public function test_push_department_moves_ticket_and_releases_claim(): void
+    {
+        $this->seed();
+        $merchant = $this->pilotMerchant();
+        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
+        $claimant = User::factory()->create(['role' => 'dept_cs', 'name' => 'Budi']);
+        $bystander = User::factory()->create(['role' => 'dept_cs']);
+
+        $ticket = MerchantTicket::query()->create([
+            'merchant_id' => $merchant->id,
+            'created_by_user_id' => $admin->id,
+            'ticket_no' => 'TK-00011',
+            'department' => 'cs',
+            'category' => 'others',
+            'description' => 'Push test.',
+            'last_message_at' => now(),
+        ]);
+
+        // Not claimed yet: cannot push, bounced with a flash message instead of a 403.
+        $this->actingAs($claimant)->post(route('dept-tickets.push', $ticket), ['department' => 'dev'])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Ambil tiket ini dulu sebelum memindahkan department.');
+        $this->assertSame('cs', $ticket->fresh()->department);
+
+        $this->actingAs($claimant)->post(route('dept-tickets.claim', $ticket));
+
+        // Someone else can't push a ticket they haven't claimed.
+        $this->actingAs($bystander)->post(route('dept-tickets.push', $ticket), ['department' => 'dev'])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Ambil tiket ini dulu sebelum memindahkan department.');
+        $this->assertSame('cs', $ticket->fresh()->department);
+
+        $this->actingAs($claimant)->post(route('dept-tickets.push', $ticket), ['department' => 'dev'])->assertRedirect();
+
+        $ticket->refresh();
+        $this->assertSame('dev', $ticket->department);
+        $this->assertNull($ticket->claimed_by_user_id);
+        $this->assertDatabaseHas('merchant_ticket_messages', [
+            'merchant_ticket_id' => $ticket->id,
+            'is_internal' => true,
+        ]);
+        $note = $ticket->messages()->latest()->first();
+        $this->assertStringContainsString('Budi', $note->body);
+        $this->assertStringContainsString('CS', $note->body);
+        $this->assertStringContainsString('Dev', $note->body);
     }
 
     public function test_two_way_thread_and_status_transition(): void
@@ -238,7 +345,7 @@ class MerchantTicketTest extends TestCase
 
         $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
             'card' => 'transaksi',
-            'category' => 'settlement',
+            'category' => 'transaction',
             'description' => 'Settlement belum masuk.',
         ]);
         $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
@@ -293,7 +400,7 @@ class MerchantTicketTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_closed_ticket_rejects_store_reply_until_reopened(): void
+    public function test_closed_ticket_rejects_store_reply_and_cannot_be_reopened(): void
     {
         $this->seed();
         $merchant = $this->pilotMerchant();
@@ -316,16 +423,16 @@ class MerchantTicketTest extends TestCase
         $this->actingAs($admin)->post(route('merchant.tickets.reply', [$merchant, $ticket]), ['body' => 'halo?'])
             ->assertStatus(422);
 
-        $this->actingAs($csPusat)->post(route('dept-tickets.status', $ticket), ['status' => 'open'])->assertRedirect();
-        $this->assertSame('open', $ticket->fresh()->status);
-
-        $this->actingAs($admin)->post(route('merchant.tickets.reply', [$merchant, $ticket]), ['body' => 'sekarang bisa'])
-            ->assertRedirect();
+        // Once closed, a department ticket is locked for good - even CS Pusat
+        // cannot reopen it anymore (bounced with a flash message, not a 403/422).
+        $this->actingAs($csPusat)->post(route('dept-tickets.status', $ticket), ['status' => 'open'])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Tiket sudah ditutup dan tidak bisa diubah lagi.');
+        $this->assertSame('closed', $ticket->fresh()->status);
     }
 
-    public function test_dept_status_update_notifies_wa_card_and_records_who_closed_it(): void
+    public function test_dept_status_update_records_who_closed_it(): void
     {
-        Bus::fake();
         $this->seed();
         $merchant = $this->pilotMerchant();
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
@@ -347,13 +454,13 @@ class MerchantTicketTest extends TestCase
         $this->assertSame('closed', $ticket->status);
         $this->assertSame($csPusat->id, $ticket->closed_by_user_id);
         $this->assertNotNull($ticket->closed_at);
-        Bus::assertDispatched(NotifyWaTicketLink::class, fn ($job) => $job->ticketId === $ticket->id && $job->event === 'closed');
 
-        $this->actingAs($csPusat)->post(route('dept-tickets.status', $ticket), ['status' => 'open'])->assertRedirect();
+        // Once closed, status is locked - even CS Pusat cannot reopen it.
+        $this->actingAs($csPusat)->post(route('dept-tickets.status', $ticket), ['status' => 'open'])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Tiket sudah ditutup dan tidak bisa diubah lagi.');
         $ticket->refresh();
-        $this->assertSame('open', $ticket->status);
-        $this->assertNull($ticket->closed_by_user_id);
-        $this->assertNull($ticket->closed_at);
+        $this->assertSame('closed', $ticket->status);
     }
 
     public function test_ma_sees_pilot_merchant_and_can_create_ticket_for_it(): void
@@ -501,7 +608,7 @@ class MerchantTicketTest extends TestCase
 
         $response = $this->actingAs($csPusat)->get(route('center-support.tickets'))->assertOk();
         $response->assertSee('class="nav-badge"', false);
-        $response->assertSee('Manual Tickets');
+        $response->assertSee('Tiket Toko');
     }
 
     public function test_ticket_can_be_created_with_multiple_attachments(): void
@@ -539,12 +646,12 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
         $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
 
-        $this->actingAs($admin)->post(route('merchant.tickets.simple.store', $merchant), [
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $admin, [
+            'department' => \App\Services\MerchantTicketService::SIMPLE_DEPARTMENT,
+            'category' => \App\Services\MerchantTicketService::SIMPLE_DEPARTMENT,
             'description' => 'Butuh bantuan, ada bukti.',
-            'attachments' => [UploadedFile::fake()->image('bukti.jpg')],
-        ])->assertRedirect();
+        ], [UploadedFile::fake()->image('bukti.jpg')]);
 
-        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
         $this->assertCount(1, $ticket->attachments);
 
         $this->actingAs($csPusat)->get(route('dept-tickets.attachment', [$ticket, 0]))->assertOk();
@@ -558,10 +665,11 @@ class MerchantTicketTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
         $csPusat = User::query()->where('email', 'cs-pusat@paygrid.local')->firstOrFail();
 
-        $this->actingAs($admin)->post(route('merchant.tickets.simple.store', $merchant), [
+        $ticket = app(\App\Services\MerchantTicketService::class)->create($merchant, $admin, [
+            'department' => \App\Services\MerchantTicketService::SIMPLE_DEPARTMENT,
+            'category' => \App\Services\MerchantTicketService::SIMPLE_DEPARTMENT,
             'description' => 'Butuh bantuan.',
-        ])->assertRedirect();
-        $ticket = MerchantTicket::query()->where('merchant_id', $merchant->id)->firstOrFail();
+        ]);
 
         // No chat: reply endpoints are blocked for both sides on a toko ticket.
         $this->actingAs($admin)->post(route('merchant.tickets.reply', [$merchant, $ticket]), ['body' => 'halo'])
@@ -708,150 +816,6 @@ class MerchantTicketTest extends TestCase
         $this->assertArrayNotHasKey('rrn', $discrepancy->metadata);
     }
 
-    public function test_ip_whitelist_ticket_starts_waiting_for_approval_and_other_categories_do_not(): void
-    {
-        $this->seed();
-        $merchant = $this->pilotMerchant();
-        $admin = User::factory()->create(['role' => 'admin', 'merchant_id' => $merchant->id]);
-
-        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'card' => 'teknis',
-            'category' => 'ip_whitelist',
-            'description' => 'Butuh whitelist IP VPS baru.',
-        ])->assertRedirect();
-
-        $ipTicket = MerchantTicket::query()->where('merchant_id', $merchant->id)->where('category', 'ip_whitelist')->firstOrFail();
-        $this->assertSame('waiting', $ipTicket->approval_status);
-
-        $this->actingAs($admin)->post(route('merchant.tickets.store', $merchant), [
-            'card' => 'teknis',
-            'category' => 'technical_issue',
-            'description' => 'Kendala teknis lain.',
-        ])->assertRedirect();
-
-        $otherTicket = MerchantTicket::query()->where('merchant_id', $merchant->id)->where('category', 'technical_issue')->firstOrFail();
-        $this->assertNull($otherTicket->approval_status);
-    }
-
-    public function test_n8n_callback_requires_valid_bearer_token(): void
-    {
-        $this->seed();
-        $merchant = $this->pilotMerchant();
-        config(['services.n8n.callback_token' => 'secret-token']);
-        $ticket = MerchantTicket::query()->create([
-            'merchant_id' => $merchant->id,
-            'created_by_user_id' => User::factory()->create()->id,
-            'ticket_no' => 'TK-IP-0001',
-            'department' => 'tech',
-            'category' => 'ip_whitelist',
-            'title' => 'Test title',
-            'description' => 'butuh whitelist',
-            'approval_status' => 'waiting',
-            'last_message_at' => now(),
-        ]);
-
-        $this->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', ['status' => 'approved'])
-            ->assertStatus(401);
-
-        $this->withHeader('Authorization', 'Bearer wrong-token')
-            ->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', ['status' => 'approved'])
-            ->assertStatus(401);
-
-        $this->assertSame('waiting', $ticket->fresh()->approval_status);
-    }
-
-    public function test_n8n_callback_approves_ticket_and_leaves_it_open(): void
-    {
-        $this->seed();
-        $merchant = $this->pilotMerchant();
-        config(['services.n8n.callback_token' => 'secret-token']);
-        $ticket = MerchantTicket::query()->create([
-            'merchant_id' => $merchant->id,
-            'created_by_user_id' => User::factory()->create()->id,
-            'ticket_no' => 'TK-IP-0002',
-            'department' => 'tech',
-            'category' => 'ip_whitelist',
-            'title' => 'Test title',
-            'description' => 'butuh whitelist',
-            'approval_status' => 'waiting',
-            'last_message_at' => now(),
-        ]);
-
-        $this->withHeader('Authorization', 'Bearer secret-token')
-            ->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', [
-                'status' => 'approved',
-                'approved_by' => 'Budi (WA)',
-            ])
-            ->assertOk()
-            ->assertJson(['ok' => true]);
-
-        $ticket->refresh();
-        $this->assertSame('approved', $ticket->approval_status);
-        $this->assertSame('Budi (WA)', $ticket->approval_by);
-        $this->assertSame('open', $ticket->status);
-        $this->assertNotNull($ticket->approval_completed_at);
-        $this->assertDatabaseHas('merchant_ticket_messages', [
-            'merchant_ticket_id' => $ticket->id,
-            'is_staff' => true,
-        ]);
-    }
-
-    public function test_n8n_callback_rejects_ticket_and_closes_it_with_note(): void
-    {
-        $this->seed();
-        $merchant = $this->pilotMerchant();
-        config(['services.n8n.callback_token' => 'secret-token']);
-        $ticket = MerchantTicket::query()->create([
-            'merchant_id' => $merchant->id,
-            'created_by_user_id' => User::factory()->create()->id,
-            'ticket_no' => 'TK-IP-0003',
-            'department' => 'tech',
-            'category' => 'ip_whitelist',
-            'title' => 'Test title',
-            'description' => 'butuh whitelist',
-            'approval_status' => 'waiting',
-            'last_message_at' => now(),
-        ]);
-
-        $this->withHeader('Authorization', 'Bearer secret-token')
-            ->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', [
-                'status' => 'rejected',
-                'approved_by' => 'Budi (WA)',
-                'note' => 'IP tidak valid.',
-            ])
-            ->assertOk();
-
-        $ticket->refresh();
-        $this->assertSame('rejected', $ticket->approval_status);
-        $this->assertSame('IP tidak valid.', $ticket->approval_note);
-        $this->assertSame('closed', $ticket->status);
-        $this->assertNotNull($ticket->closed_at);
-    }
-
-    public function test_n8n_callback_cannot_be_replayed_once_ticket_no_longer_waiting(): void
-    {
-        $this->seed();
-        $merchant = $this->pilotMerchant();
-        config(['services.n8n.callback_token' => 'secret-token']);
-        $ticket = MerchantTicket::query()->create([
-            'merchant_id' => $merchant->id,
-            'created_by_user_id' => User::factory()->create()->id,
-            'ticket_no' => 'TK-IP-0004',
-            'department' => 'tech',
-            'category' => 'ip_whitelist',
-            'title' => 'Test title',
-            'description' => 'butuh whitelist',
-            'approval_status' => 'approved',
-            'last_message_at' => now(),
-        ]);
-
-        $this->withHeader('Authorization', 'Bearer secret-token')
-            ->postJson('/api/n8n/tickets/'.$ticket->ticket_no.'/approval', ['status' => 'rejected'])
-            ->assertStatus(422);
-
-        $this->assertSame('approved', $ticket->fresh()->approval_status);
-    }
-
     public function test_ticket_creation_rejects_more_than_five_attachments(): void
     {
         Storage::fake('local');
@@ -903,7 +867,7 @@ class MerchantTicketTest extends TestCase
 
         $this->actingAs($ma)->post(route('ma.tickets.store'), [
             'merchant_id' => $merchant->id,
-            'card' => 'teknis',
+            'card' => 'akun_user',
             'category' => 'ip_whitelist',
             'description' => 'Butuh whitelist IP dari form terpusat MA.',
         ])->assertRedirect();
@@ -923,7 +887,7 @@ class MerchantTicketTest extends TestCase
 
         $this->actingAs($ma)->post(route('ma.tickets.store'), [
             'merchant_id' => $merchant->id,
-            'card' => 'teknis',
+            'card' => 'akun_user',
             'category' => 'ip_whitelist',
             'description' => 'Butuh whitelist IP.',
             'ip_address' => ['103.10.20.30'],

@@ -16,7 +16,6 @@
         <div class="sub">Monitor performa toko, volume transaksi, dan status settlement dari data PayGrid lokal.</div>
     </div>
     <div class="page-actions">
-        <a class="btn primary" href="{{ route('agent.create-store') }}">Create Toko</a>
         <a class="btn" href="{{ route('agent.requests') }}">Status Request</a>
     </div>
 </div>

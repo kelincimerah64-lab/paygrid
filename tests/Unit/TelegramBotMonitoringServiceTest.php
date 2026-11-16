@@ -156,4 +156,92 @@ class TelegramBotMonitoringServiceTest extends TestCase
         $this->assertSame(0, $result['kpis']['total']);
         $this->assertSame([], $result['tickets']);
     }
+
+    private function ticketHeaders(): array
+    {
+        return [
+            'ticket_id', 'created_at', 'source_chat_id', 'source_chat_title', 'requester_user_id',
+            'requester_name', 'requester_username', 'category', 'description', 'status',
+            'assigned_user_id', 'assigned_name', 'cs_group_message_id', 'merchant_message_id', 'has_attachment',
+            'assigned_at', 'started_at', 'pickup_minutes', 'investigation_lag_minutes', 'handling_minutes',
+            'total_resolution_minutes', 'last_update', 'updated_at', 'completed_at',
+        ];
+    }
+
+    public function test_reject_marks_ticket_rejected_and_returns_message_ids_for_telegram_deletion(): void
+    {
+        Cache::flush();
+        $this->configureCredentials();
+
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'fake-token', 'expires_in' => 3600]),
+            'https://sheets.googleapis.com/v4/spreadsheets/sheet-123/values/A:X' => Http::response([
+                'values' => [
+                    $this->ticketHeaders(),
+                    ['T-1', '2026-08-01 10:00:00', '-1001', 'Toko A', '1', 'Budi', 'budi', 'API Error', 'desc', 'RESOLVED', '', '', '', '', 'FALSE', '', '', '', '', '', '', '', '', ''],
+                    ['T-2', '2026-08-02 11:00:00', '-1002', 'Toko B', '2', 'Sari', 'sari', 'API Error', 'desc', 'OPEN', '', '', '555', '777', 'FALSE', '', '', '', '', '', '', '', '', ''],
+                ],
+            ]),
+            'https://sheets.googleapis.com/v4/spreadsheets/sheet-123/values:batchUpdate' => Http::response(['spreadsheetId' => 'sheet-123']),
+        ]);
+
+        $result = app(TelegramBotMonitoringService::class)->reject('T-2');
+
+        $this->assertSame('OPEN', $result['previous_status']);
+        $this->assertSame('555', $result['cs_group_message_id']);
+        $this->assertSame('777', $result['merchant_message_id']);
+        $this->assertSame('-1002', $result['source_chat_id']);
+
+        Http::assertSent(function ($request) {
+            if (! str_ends_with($request->url(), 'values:batchUpdate')) {
+                return false;
+            }
+
+            $data = collect($request->data()['data']);
+
+            return $data->firstWhere('range', 'J3')['values'][0][0] === 'REJECTED'
+                && $data->contains('range', 'V3')
+                && $data->contains('range', 'W3')
+                && $data->contains('range', 'X3');
+        });
+    }
+
+    public function test_reject_throws_when_ticket_not_found(): void
+    {
+        Cache::flush();
+        $this->configureCredentials();
+
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'fake-token', 'expires_in' => 3600]),
+            'https://sheets.googleapis.com/v4/spreadsheets/sheet-123/values/A:X' => Http::response([
+                'values' => [
+                    ['ticket_id', 'status'],
+                    ['T-1', 'OPEN'],
+                ],
+            ]),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        app(TelegramBotMonitoringService::class)->reject('T-999');
+    }
+
+    public function test_delete_telegram_message_returns_false_when_token_missing_and_posts_when_configured(): void
+    {
+        Cache::flush();
+        config()->set('paygrid.telegram_bot_monitoring.ticket_bot_token', null);
+
+        $this->assertFalse(app(TelegramBotMonitoringService::class)->deleteTelegramMessage('-100', '5'));
+
+        config()->set('paygrid.telegram_bot_monitoring.ticket_bot_token', 'bot-token-abc');
+
+        Http::fake([
+            'https://api.telegram.org/botbot-token-abc/deleteMessage' => Http::response(['ok' => true]),
+        ]);
+
+        $this->assertTrue(app(TelegramBotMonitoringService::class)->deleteTelegramMessage('-100', '5'));
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://api.telegram.org/botbot-token-abc/deleteMessage'
+            && $request['chat_id'] === '-100'
+            && $request['message_id'] === 5);
+    }
 }

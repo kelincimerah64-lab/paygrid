@@ -10,6 +10,14 @@
     $deptLabel = fn ($dept) => app(App\Services\MerchantTicketService::class)->departmentLabel($dept);
     $categoryLabel = fn ($ticket) => app(App\Services\MerchantTicketService::class)->categoryLabel($ticket->department, $ticket->category);
     $departmentFilter = request('department', '');
+    $restrictedDept = str_starts_with(auth()->user()->role, 'dept_') ? substr(auth()->user()->role, 5) : null;
+    $notifyDepartments = $restrictedDept
+        ? [$restrictedDept]
+        : [...App\Services\MerchantTicketService::DEPARTMENTS, App\Services\MerchantTicketService::SIMPLE_DEPARTMENT];
+    $canOpen = fn ($ticket) => $restrictedDept === null
+        || $ticket->status === 'closed'
+        || $ticket->claimed_by_user_id === null
+        || (int) $ticket->claimed_by_user_id === (int) auth()->id();
 @endphp
 
 @section('content')
@@ -21,7 +29,7 @@
 </div>
 
 @if(session('status'))
-    <section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>
+    <div class="status-banner"><span class="badge ok">{{ session('status') }}</span></div>
 @endif
 
 <form class="card filters" method="get">
@@ -30,8 +38,12 @@
         <select name="department">
             <option value="" @selected($departmentFilter === '')>Semua tujuan</option>
             <option value="cs" @selected($departmentFilter === 'cs')>CS</option>
-            <option value="tech" @selected($departmentFilter === 'tech')>Tech Support</option>
+            <option value="dev" @selected($departmentFilter === 'dev')>Dev</option>
+            <option value="tech_supp" @selected($departmentFilter === 'tech_supp')>Tech Support</option>
             <option value="finance" @selected($departmentFilter === 'finance')>Finance</option>
+            <option value="settlement" @selected($departmentFilter === 'settlement')>Settlement</option>
+            <option value="fraud" @selected($departmentFilter === 'fraud')>Fraud</option>
+            <option value="dispute" @selected($departmentFilter === 'dispute')>Dispute</option>
             <option value="general" @selected($departmentFilter === 'general')>Tiket Toko</option>
         </select>
         <select name="status">
@@ -48,17 +60,22 @@
 <section class="card qris-panel section">
     <div class="ticket-list">
         @forelse($tickets as $ticket)
-            <a class="ticket-list-row" href="{{ route('dept-tickets.show', $ticket) }}">
-                <div class="ticket-list-icon" aria-hidden="true">{{ strtoupper(mb_substr($ticket->merchant?->name ?: '-', 0, 1)) }}</div>
-                <div class="ticket-list-main">
-                    <div class="ticket-list-no">{{ $ticket->ticket_no }} &middot; {{ $ticket->merchant?->name ?: '-' }}</div>
-                    <div class="ticket-list-sub"><span>{{ $deptLabel($ticket->department) }}</span><span>&middot;</span><span class="truncate ref-line">{{ $categoryLabel($ticket) }}</span></div>
+            @if(! $ticket->claimed_by_user_id && $ticket->status === 'open')
+                <form method="post" action="{{ route('dept-tickets.claim', $ticket) }}">
+                    @csrf
+                    <button type="submit" class="ticket-list-row ticket-list-row-btn">
+                        @include('paygrid.partials.dept-ticket-row', ['ticket' => $ticket, 'deptLabel' => $deptLabel, 'categoryLabel' => $categoryLabel, 'statusLabel' => $statusLabel, 'statusClass' => $statusClass])
+                    </button>
+                </form>
+            @elseif($canOpen($ticket))
+                <a class="ticket-list-row" href="{{ route('dept-tickets.show', $ticket) }}">
+                    @include('paygrid.partials.dept-ticket-row', ['ticket' => $ticket, 'deptLabel' => $deptLabel, 'categoryLabel' => $categoryLabel, 'statusLabel' => $statusLabel, 'statusClass' => $statusClass])
+                </a>
+            @else
+                <div class="ticket-list-row ticket-list-row-locked">
+                    @include('paygrid.partials.dept-ticket-row', ['ticket' => $ticket, 'deptLabel' => $deptLabel, 'categoryLabel' => $categoryLabel, 'statusLabel' => $statusLabel, 'statusClass' => $statusClass])
                 </div>
-                <div class="ticket-list-meta">
-                    <span class="badge {{ $statusClass($ticket->status) }}">{{ $statusLabel($ticket->status) }}</span>
-                    <span class="ticket-list-time">{{ $ticket->last_message_at?->timezone('Asia/Jakarta')->format('d M Y H:i') ?? '-' }}</span>
-                </div>
-            </a>
+            @endif
         @empty
             <div class="ticket-list-empty">Tidak ada tiket.</div>
         @endforelse
@@ -72,3 +89,27 @@
     </div>
 </section>
 @endsection
+
+@push('scripts')
+<script src="{{ asset('js/paygrid-realtime.js') }}?v={{ filemtime(public_path('js/paygrid-realtime.js')) }}"></script>
+<script>
+(function () {
+    if (!window.PayGridRealtime) return;
+    var realtime = window.PayGridRealtime.connect({
+        key: @json(config('broadcasting.connections.reverb.key')),
+        host: @json(config('broadcasting.connections.reverb.options.host')),
+        port: @json(config('broadcasting.connections.reverb.options.port')),
+        scheme: @json(config('broadcasting.connections.reverb.options.scheme')),
+    });
+    var departments = @json($notifyDepartments);
+    departments.forEach(function (dept) {
+        realtime.subscribePrivate('private-department-tickets.' + dept, 'ticket.created', function () {
+            window.PayGridRealtime.playNotifySound();
+            var search = document.querySelector('.filters .search');
+            if (document.activeElement === search) return;
+            window.location.reload();
+        });
+    });
+})();
+</script>
+@endpush

@@ -47,6 +47,123 @@ class TelegramBotMonitoringService
         ];
     }
 
+    /**
+     * CSV export of the same filtered/sorted ticket list the dashboard table
+     * shows - same columns (in sheet order) and same formatted values
+     * (dates, Ya/Tidak, "X menit") as the on-screen Detail panel, via the
+     * already-built sheet_fields rather than re-deriving formatting here.
+     */
+    public function toCsv(array $filters): string
+    {
+        $data = $this->data($filters);
+        $labels = collect($data['headers'])->map(fn (string $header) => $this->columnLabel($header))->all();
+
+        $escape = fn ($value) => '"'.str_replace('"', '""', (string) $value).'"';
+
+        $csv = implode(',', array_map($escape, $labels))."\n";
+        foreach ($data['tickets'] as $ticket) {
+            $values = collect($ticket['sheet_fields'] ?? [])->pluck('value')->all();
+            $csv .= implode(',', array_map($escape, $values))."\n";
+        }
+
+        return $csv;
+    }
+
+    /**
+     * Reject a ticket: marks it REJECTED in the sheet (row is kept for history/audit,
+     * not deleted) and returns the Telegram message/chat ids the caller needs to delete
+     * the ticket card in the CS group and the ack message in the requester's source chat.
+     *
+     * @return array{previous_status: ?string, cs_group_message_id: ?string, merchant_message_id: ?string, source_chat_id: ?string}
+     */
+    public function reject(string $ticketId): array
+    {
+        $raw = $this->fetchRawRows();
+
+        if ($raw === null || $raw === []) {
+            throw new \RuntimeException('Gagal mengambil data dari Google Sheets.');
+        }
+
+        $headers = $this->headers($raw);
+        $colIndex = array_flip($headers);
+
+        if (! isset($colIndex['ticket_id'])) {
+            throw new \RuntimeException('Kolom ticket_id tidak ditemukan di sheet.');
+        }
+
+        $rowIndex = null;
+        foreach ($raw as $i => $row) {
+            if ($i === 0) {
+                continue;
+            }
+            if (($row[$colIndex['ticket_id']] ?? null) === $ticketId) {
+                $rowIndex = $i;
+                break;
+            }
+        }
+
+        if ($rowIndex === null) {
+            throw new \RuntimeException("Ticket {$ticketId} tidak ditemukan di sheet.");
+        }
+
+        $row = $raw[$rowIndex];
+        $get = fn (string $field) => isset($colIndex[$field]) ? ($row[$colIndex[$field]] ?? null) : null;
+
+        $result = [
+            'previous_status' => $get('status'),
+            'cs_group_message_id' => $get('cs_group_message_id') ?: null,
+            'merchant_message_id' => $get('merchant_message_id') ?: null,
+            'source_chat_id' => $get('source_chat_id') ?: null,
+        ];
+
+        $now = now('Asia/Jakarta')->format('Y-m-d H:i:s');
+
+        $this->writeCells($rowIndex + 1, $colIndex, [
+            'status' => 'REJECTED',
+            'updated_at' => $now,
+            'completed_at' => $now,
+            'last_update' => 'Ticket direject oleh CS Pusat (duplikat/tidak valid).',
+        ]);
+
+        Cache::forget(self::DATA_CACHE_KEY);
+
+        return $result;
+    }
+
+    public function deleteTelegramMessage(string|int|null $chatId, string|int|null $messageId): bool
+    {
+        $token = config('paygrid.telegram_bot_monitoring.ticket_bot_token');
+
+        if (! $token || ! $chatId || ! $messageId) {
+            return false;
+        }
+
+        try {
+            $response = Http::timeout(10)->post("https://api.telegram.org/bot{$token}/deleteMessage", [
+                'chat_id' => $chatId,
+                'message_id' => (int) $messageId,
+            ]);
+
+            if (! $response->successful()) {
+                Log::warning('telegram_bot_monitoring.delete_message_failed', [
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'status' => $response->status(),
+                ]);
+            }
+
+            return $response->successful();
+        } catch (Throwable $e) {
+            Log::warning('telegram_bot_monitoring.delete_message_failed', [
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
     public function pendingIpWhitelist(): Collection
     {
         $rows = $this->fetchRows(false);
@@ -72,6 +189,59 @@ class TelegramBotMonitoringService
         return $this->normalize($rows)->filter(fn ($ticket) => ! in_array($ticket['status'], self::TERMINAL_STATUSES, true)
             && $ticket['created_at'] !== null
             && $ticket['created_at']->diffInMinutes(CarbonImmutable::now()) >= $threshold)->values();
+    }
+
+    /**
+     * Raw sheet rows including the header row at index 0 - used when a row's exact
+     * sheet position is needed (reject()), unlike fetchRows() which callers only read.
+     */
+    private function fetchRawRows(): ?array
+    {
+        return $this->fetchRows(false);
+    }
+
+    private function writeCells(int $sheetRowNumber, array $colIndex, array $fieldValues): void
+    {
+        $data = [];
+
+        foreach ($fieldValues as $field => $value) {
+            if (! isset($colIndex[$field])) {
+                continue;
+            }
+
+            $column = $this->columnLetter($colIndex[$field]);
+            $data[] = ['range' => "{$column}{$sheetRowNumber}", 'values' => [[$value]]];
+        }
+
+        if ($data === []) {
+            return;
+        }
+
+        $spreadsheetId = config('paygrid.telegram_bot_monitoring.spreadsheet_id');
+        $token = $this->accessToken();
+
+        $response = Http::withToken($token)->timeout(10)->post(
+            "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values:batchUpdate",
+            ['valueInputOption' => 'USER_ENTERED', 'data' => $data]
+        );
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('Gagal update Google Sheets: '.$response->status());
+        }
+    }
+
+    private function columnLetter(int $zeroBasedIndex): string
+    {
+        $letter = '';
+        $index = $zeroBasedIndex + 1;
+
+        while ($index > 0) {
+            $index--;
+            $letter = chr(65 + ($index % 26)).$letter;
+            $index = intdiv($index, 26);
+        }
+
+        return $letter;
     }
 
     private function fetchRows(bool $forceRefresh): ?array
@@ -120,7 +290,7 @@ class TelegramBotMonitoringService
             $header = $this->base64UrlEncode(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
             $claims = $this->base64UrlEncode(json_encode([
                 'iss' => $email,
-                'scope' => 'https://www.googleapis.com/auth/spreadsheets.readonly',
+                'scope' => 'https://www.googleapis.com/auth/spreadsheets',
                 'aud' => 'https://oauth2.googleapis.com/token',
                 'iat' => $now,
                 'exp' => $now + 3600,

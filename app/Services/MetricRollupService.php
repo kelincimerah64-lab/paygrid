@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Concerns\ConvertsWibDateRange;
 use App\Models\Merchant;
 use App\Models\MerchantDailyMetric;
 use App\Models\TopupRequest;
@@ -10,16 +11,22 @@ use Carbon\CarbonInterface;
 
 class MetricRollupService
 {
+    use ConvertsWibDateRange;
+
     public function rebuildMerchantDay(Merchant $merchant, CarbonInterface|string $date, ?string $dataSource = null): MerchantDailyMetric
     {
+        // A CarbonInterface $date (e.g. a TopupRequest's submitted_at) is
+        // UTC - setTimezone('Asia/Jakarta') first so startOfDay() lands on
+        // the correct WIB calendar day, not the UTC one.
         $metricDate = $date instanceof CarbonInterface
-            ? CarbonImmutable::instance($date)->startOfDay()
+            ? CarbonImmutable::instance($date)->setTimezone('Asia/Jakarta')->startOfDay()
             : CarbonImmutable::parse((string) $date, 'Asia/Jakarta')->startOfDay();
         $day = $metricDate->toDateString();
+        [$rangeStart, $rangeEnd] = $this->wibDayToUtcRange($day);
 
         $query = TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->whereDate('submitted_at', $day);
+            ->whereBetween('submitted_at', [$rangeStart, $rangeEnd]);
 
         if ($dataSource !== null) {
             $query->where('data_source', $dataSource);
@@ -68,7 +75,7 @@ class MetricRollupService
                 'net_success' => (int) $rows->net_success,
                 'fee_total' => (int) $rows->fee_total,
                 'settled_total' => (int) $rows->net_success,
-                'ticket_total' => $merchant->tickets()->whereDate('created_at', $day)->count(),
+                'ticket_total' => $merchant->tickets()->whereBetween('created_at', [$rangeStart, $rangeEnd])->count(),
             ],
         );
     }

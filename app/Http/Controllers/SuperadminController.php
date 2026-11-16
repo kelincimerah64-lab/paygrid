@@ -6,6 +6,7 @@ use App\Models\Agent;
 use App\Models\FeeMenu;
 use App\Models\Merchant;
 use App\Models\PaygridSetting;
+use App\Models\ReconciliationRun;
 use App\Models\TopupRequest;
 use App\Models\User;
 use App\Rules\ExactlyOneFeeMenuFilled;
@@ -31,7 +32,7 @@ class SuperadminController extends Controller
 {
     public function page(FeeMenuCatalog $feeMenus, string $page = 'dashboard-fee'): View
     {
-        abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'fee-menu-settings', 'timer-ticket', 'accounts', 'integrations'], true), 404);
+        abort_unless(in_array($page, ['dashboard-fee', 'add-fee', 'ma', 'merchant-group', 'fee-menu-settings', 'timer-ticket', 'accounts', 'integrations', 'system-configuration'], true), 404);
 
         $search = trim((string) request('q', ''));
         $type = (string) request('type', 'all');
@@ -86,6 +87,7 @@ class SuperadminController extends Controller
                 'timer-ticket' => 'Timer Ticket',
                 'accounts' => 'Daftar Account',
                 'integrations' => 'Integrasi',
+                'system-configuration' => 'System Configuration',
                 default => 'Dashboard Fee',
             },
             'merchants' => $merchants,
@@ -97,6 +99,10 @@ class SuperadminController extends Controller
             'filters' => compact('search', 'type', 'status', 'role', 'maId', 'agentId'),
             'feeMenus' => $feeMenus,
             'feeMenuRows' => FeeMenu::query()->orderBy('sort_order')->get(),
+            'gatewaySyncIntervalSeconds' => (int) PaygridSetting::value('gateway_sync_min_interval_seconds', '5'),
+            'reconciliationRuns' => $page === 'system-configuration'
+                ? ReconciliationRun::query()->with('merchant:id,name')->latest('id')->limit(300)->get()
+                : collect(),
         ]);
     }
 
@@ -279,6 +285,27 @@ class SuperadminController extends Controller
         return back()->with('status', 'Timer ticket berhasil disimpan.');
     }
 
+    public function updateSystemConfiguration(Request $request, AuditLogService $audit): RedirectResponse
+    {
+        $data = $request->validate(['gateway_sync_min_interval_seconds' => ['required', 'integer', 'min:5', 'max:3600']]);
+        $setting = PaygridSetting::query()->updateOrCreate(
+            ['key' => 'gateway_sync_min_interval_seconds'],
+            ['value' => (string) $data['gateway_sync_min_interval_seconds']],
+        );
+        $audit->record('superadmin.system_configuration_updated', $setting, null, $data);
+
+        return back()->with('status', 'Pengaturan sistem berhasil disimpan.');
+    }
+
+    public function runReconciliation(Request $request, AuditLogService $audit): RedirectResponse
+    {
+        $data = $request->validate(['month' => ['required', 'date_format:Y-m']]);
+        \Illuminate\Support\Facades\Artisan::call('reconciliation:monthly', ['--month' => $data['month']]);
+        $audit->record('superadmin.reconciliation_triggered', $request->user(), null, $data);
+
+        return back()->with('status', 'Reconciliation untuk bulan '.$data['month'].' sudah di-dispatch ke background.');
+    }
+
     public function resetAccount(Request $request, User $user, AuditLogService $audit): RedirectResponse
     {
         $data = $request->validate(['password' => ['nullable', 'string', 'min:6', 'max:120']]);
@@ -397,6 +424,7 @@ class SuperadminController extends Controller
             ['key' => 'timer-ticket', 'label' => 'Timer Ticket', 'url' => route('superadmin.page', 'timer-ticket')],
             ['key' => 'accounts', 'label' => 'Daftar Account', 'url' => route('superadmin.page', 'accounts')],
             ['key' => 'integrations', 'label' => 'Integrasi', 'url' => route('superadmin.page', 'integrations')],
+            ['key' => 'system-configuration', 'label' => 'System Configuration', 'url' => route('superadmin.page', 'system-configuration')],
         ];
     }
 

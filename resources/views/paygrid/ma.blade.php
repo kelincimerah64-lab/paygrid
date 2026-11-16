@@ -12,8 +12,8 @@
 
 @section('content')
 
-@if(session('status'))<section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>@endif
-@if($errors->any())<section class="card pad section"><span class="badge danger">{{ $errors->first() }}</span></section>@endif
+@if(session('status'))<div class="status-banner"><span class="badge ok">{{ session('status') }}</span></div>@endif
+@if($errors->any())<div class="status-banner"><span class="badge danger">{{ $errors->first() }}</span></div>@endif
 @if(! in_array($active, ['overview', 'report', 'fee', 'bot-monitoring'], true))
 <form class="card filters" method="get">
     @if($active !== 'approval')<input class="search" name="q" value="{{ $filters['q'] }}" placeholder="Cari toko, agen, status, payment, RRN...">@endif
@@ -34,7 +34,6 @@
 @endif
 
 @if($active === 'overview')
-    <section class="card pad section" style="padding-bottom:12px"><span class="muted">Periode data di bawah ini:</span> <span class="badge ok">{{ $periodLabel }}</span></section>
     <div data-live-root data-live-interval="15000">
 
     @php
@@ -47,17 +46,14 @@
     <section class="grid ma-hero-grid section">
         <div class="card pad ma-hero-card">
             <div class="ma-hero-row">
-                <div class="ma-hero-main"><span class="eyebrow">Total Liquidity (Volume Sukses)</span><div class="ma-hero-value">{{ $money($summary['volume_success']) }}</div></div>
+                <div class="ma-hero-main"><span class="eyebrow">Total Collection</span><div class="ma-hero-value">{{ $money($summary['volume_success']) }}</div><span class="muted" style="font-size:11px; display:block; margin-top:4px">{{ $periodLabel }}</span></div>
                 <div class="ma-hero-chips">
-                    <div class="ma-hero-chip"><span>Available Balance</span><strong>{{ $money($summary['available_balance']) }}</strong></div>
-                    <div class="ma-hero-chip"><span>Pending Settlement</span><strong>{{ $money($summary['pending_settlement']) }}</strong></div>
-                    <div class="ma-hero-chip"><span>Success Rate</span><strong>{{ number_format($summary['success_rate'], 2, ',', '.') }}%</strong></div>
-                    <div class="ma-hero-chip"><span>Fee MA</span><strong>{{ $money($summary['fee_ma']) }}</strong></div>
-                    <div class="ma-hero-chip"><span>Fee Agent</span><strong>{{ $money($summary['fee_agent']) }}</strong></div>
-                    <div class="ma-hero-chip"><span>Fee Marketing</span><strong>-</strong></div>
-                    <div class="ma-hero-chip"><span>Fee Disbursement</span><strong>-</strong></div>
+                    <div class="ma-hero-chip"><span>MDR Fee</span><strong>{{ $money($summary['fee_merchant']) }}</strong></div>
+                    <div class="ma-hero-chip"><span>MDR MA</span><strong>{{ $money($summary['fee_ma']) }}</strong></div>
+                    <div class="ma-hero-chip"><span>MDR Agent</span><strong>{{ $money($summary['fee_agent']) }}</strong></div>
+                    <div class="ma-hero-chip"><span>CB Agent</span><strong>-</strong></div>
+                    <div class="ma-hero-chip"><span>CB Disbursement</span><strong>-</strong></div>
                 </div>
-                <div class="ma-hero-spark-box"><canvas data-spark="{{ json_encode($overviewQuickStats['successful_volume']['spark'] ?? []) }}" data-spark-color="#1557c2"></canvas></div>
             </div>
         </div>
     </section>
@@ -69,21 +65,12 @@
                 <div class="ma-stat-tile-title">{{ $tile['title'] }}</div>
                 <div class="ma-stat-tile-head"><span class="ma-stat-icon {{ $tile['color'] }}">{!! $tile['icon'] !!}</span><span>{{ $tile['label'] }}</span></div>
                 <strong>{{ $tile['money'] ? $money($stat['value']) : number_format($stat['value'], 2, ',', '.').'%' }}</strong>
-                <div class="ma-stat-trend {{ $stat['change'] === null ? '' : ($stat['change'] >= 0 ? 'up' : 'down') }}">{!! $stat['change'] === null ? '-' : (($stat['change'] >= 0 ? '&#9650; ' : '&#9660; ').number_format(abs($stat['change']), 1, ',', '.').'%') !!} vs Kemarin</div>
-                <div class="ma-spark-box"><canvas data-spark="{{ json_encode($stat['spark']) }}" data-spark-color="#1557c2"></canvas></div>
-                <div class="ma-stat-tile-foot">#{{ $tile['trxLabel'] }} <strong>{{ number_format($overviewDisbursement['total_trx'] ?? 0, 0, ',', '.') }}</strong></div>
+                <div class="ma-stat-tile-meta">
+                    <span class="ma-stat-trend {{ $stat['change'] === null ? '' : ($stat['change'] >= 0 ? 'up' : 'down') }}">{!! $stat['change'] === null ? '-' : (($stat['change'] >= 0 ? '&#9650; ' : '&#9660; ').number_format(abs($stat['change']), 1, ',', '.').'%') !!} vs Kemarin</span>
+                    <span class="ma-stat-tile-trx">TRX {{ number_format($stat['trx'] ?? 0, 0, ',', '.') }}</span>
+                </div>
             </div>
         @endforeach
-    </section>
-
-    <section class="card pad section">
-        <div class="ma-flow-head"><div><h2>Disbursement Hari Ini</h2><span class="muted">Data 00:00:00 &ndash; Present (WIB)</span></div></div>
-        <div class="grid ma-disb-tiles">
-            <div class="ma-disb-tile"><span>Total Disbursement</span><strong>{{ $money($overviewDisbursement['total'] ?? 0) }}</strong></div>
-            <div class="ma-disb-tile"><span>Total Disbursement Transaction</span><strong>{{ number_format($overviewDisbursement['total_trx'] ?? 0, 0, ',', '.') }}</strong></div>
-            <div class="ma-disb-tile"><span>Total Disbursement Pending</span><strong>{{ $money($overviewDisbursement['pending'] ?? 0) }}</strong></div>
-            <div class="ma-disb-tile"><span>Total Disbursement Pending Transaction</span><strong>{{ number_format($overviewDisbursement['pending_trx'] ?? 0, 0, ',', '.') }}</strong></div>
-        </div>
     </section>
 
     <section class="card pad ma-flow-card section">
@@ -100,10 +87,33 @@
         <div class="ma-flow-chart-box"><canvas id="ma-overview-flow-chart"></canvas></div>
     </section>
 
+    <section class="card pad ma-flow-card section">
+        <div class="ma-flow-head">
+            <div>
+                <h2>Analytics Hari Ini</h2>
+                <span class="muted" id="ma-analytics-subtitle">QRIS Source per jam (WIB)</span>
+            </div>
+            <div class="ma-flow-controls">
+                <div class="ma-tabs" data-analytics-metric-group>
+                    <button class="btn compact-btn active" type="button" data-analytics-metric="qris_source">QRIS Source</button>
+                    <button class="btn compact-btn" type="button" data-analytics-metric="top_merchant">Top Merchant</button>
+                    <button class="btn compact-btn" type="button" data-analytics-metric="withdrawal_success">Withdrawal Sukses</button>
+                    <button class="btn compact-btn" type="button" data-analytics-metric="withdrawal_pending">Withdrawal Pending</button>
+                </div>
+                <div class="ma-tabs" data-analytics-range-group>
+                    <button class="btn compact-btn active" type="button" data-analytics-range="1d">1D</button>
+                    <button class="btn compact-btn" type="button" data-analytics-range="7d">7D</button>
+                    <button class="btn compact-btn" type="button" data-analytics-range="month">Month</button>
+                </div>
+            </div>
+        </div>
+        <div class="ma-flow-chart-box"><canvas id="ma-overview-analytics-chart"></canvas></div>
+    </section>
+
     <section class="grid ma-bottom-grid section">
         <div class="card pad ma-mini-panel">
             <div class="ma-mini-panel-head"><h3>QRIS Source</h3><a class="ma-view-all" href="{{ route('ma.report') }}">View All</a></div>
-            <div class="ma-mini-list">
+            <div class="ma-mini-list" data-paginate data-per-page="10">
                 @php $sourceMax = $topPaymentSources->max('volume') ?: 1; @endphp
                 @forelse($topPaymentSources as $i => $row)
                     <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['channel'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $sourceMax * 100) }}%"></span></span></span><strong>{{ $moneyC($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
@@ -131,24 +141,24 @@
 
     <section class="grid ma-withdrawal-grid section">
         <div class="card pad ma-mini-panel">
-            <div class="ma-mini-panel-head"><h3>Withdrawal Selesai per Bank</h3><span class="muted" style="font-size:11px">Hari ini</span></div>
-            <div class="ma-mini-list">
+            <div class="ma-mini-panel-head"><h3>Withdrawal Sukses Bank</h3><span class="muted" style="font-size:11px">Hari ini</span></div>
+            <div class="ma-mini-list" data-paginate data-per-page="8">
                 @php $wdCompletedMax = $withdrawalsCompletedByBank->max('volume') ?: 1; @endphp
                 @forelse($withdrawalsCompletedByBank as $i => $row)
                     <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['bank_name'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $wdCompletedMax * 100) }}%"></span></span></span><strong>{{ $moneyD($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
                 @empty
-                    <p class="muted" style="margin:0">Belum ada withdrawal selesai hari ini.</p>
+                    <p class="muted" style="margin:0">Belum ada withdrawal sukses hari ini.</p>
                 @endforelse
             </div>
         </div>
         <div class="card pad ma-mini-panel">
-            <div class="ma-mini-panel-head"><h3>Withdrawal Nyangkut per Bank</h3><span class="muted" style="font-size:11px">Semua periode</span></div>
-            <div class="ma-mini-list">
+            <div class="ma-mini-panel-head"><h3>Withdrawal Pending Bank</h3><span class="muted" style="font-size:11px">Hari ini</span></div>
+            <div class="ma-mini-list" data-paginate data-per-page="8">
                 @php $wdPendingMax = $withdrawalsPendingByBank->max('volume') ?: 1; @endphp
                 @forelse($withdrawalsPendingByBank as $i => $row)
                     <div class="ma-mini-row"><span class="rank">{{ $i + 1 }}</span><span class="ma-mini-row-name">{{ $row['bank_name'] }}<span class="ma-mini-bar"><span style="width:{{ round($row['volume'] / $wdPendingMax * 100) }}%"></span></span></span><strong>{{ $moneyD($row['volume']) }}<small class="muted" style="display:block;font-weight:700">{{ number_format($row['trx_total'], 0, ',', '.') }} trx</small></strong></div>
                 @empty
-                    <p class="muted" style="margin:0">Gak ada withdrawal yang nyangkut.</p>
+                    <p class="muted" style="margin:0">Gak ada withdrawal yang pending.</p>
                 @endforelse
             </div>
         </div>
@@ -219,7 +229,7 @@
     <div data-live-root data-live-interval="15000"><section class="grid qris-metrics section" data-live-region="ma-report-cards"><div class="card pad qris-metric"><span>Total WD</span><strong>{{ number_format($selectedStoreWithdrawalStats['trx_total'] ?? 0, 0, ',', '.') }}</strong><small>{{ $selectedStore->name ?? 'Semua Toko' }}</small></div><div class="card pad qris-metric success"><span>Completed</span><strong>{{ number_format($selectedStoreWithdrawalStats['trx_completed'] ?? 0, 0, ',', '.') }}</strong><small>{{ $money($selectedStoreWithdrawalStats['amount_completed'] ?? 0) }}</small></div><div class="card pad qris-metric pending"><span>Pending</span><strong>{{ number_format($selectedStoreWithdrawalStats['trx_pending'] ?? 0, 0, ',', '.') }}</strong><small>{{ $money($selectedStoreWithdrawalStats['amount_pending'] ?? 0) }}</small></div><div class="card pad qris-metric primary"><span>Nilai Completed</span><strong>{{ $money($selectedStoreWithdrawalStats['amount_completed'] ?? 0) }}</strong><small>{{ $periodLabel }}</small></div></section>
         <section id="ma-report-table" class="card qris-panel section" data-live-region="ma-report-table"><div class="qris-toolbar"><h2>Withdrawal {{ $selectedStore->name ?? 'Semua Toko' }}</h2><span class="muted">25 transaksi per halaman | {{ $periodLabel }}</span></div><div class="table-wrap sticky-head"><table class="table qris-table ma-wd-table"><thead><tr><th>Waktu</th><th>Selesai</th><th>Toko</th><th>Agen</th><th>Bank</th><th>Nama Akun</th><th>No Rekening</th><th>Status</th><th>Amount</th><th>Net</th><th>Fee</th></tr></thead><tbody>@forelse($withdrawals as $wd)@php $wdBadge = $wd->status === 'COMPLETED' ? 'ok' : ($wd->status === 'FAILED' ? 'danger' : 'warn'); @endphp<tr data-agent-id="{{ $wd->merchant?->agent?->id }}" data-store-id="{{ $wd->merchant?->id }}"><td class="time-cell">{{ $wd->gateway_created_at?->timezone('Asia/Jakarta')->format('d/m/y') }}<span>{{ $wd->gateway_created_at?->timezone('Asia/Jakarta')->format('H.i') }} WIB</span></td><td class="time-cell">{{ $wd->gateway_completed_at?->timezone('Asia/Jakarta')->format('d/m/y') ?? '-' }}<span>{{ $wd->gateway_completed_at ? $wd->gateway_completed_at->timezone('Asia/Jakarta')->format('H.i').' WIB' : '-' }}</span></td><td>{{ $wd->merchant?->name ?: '-' }}</td><td>{{ $wd->merchant?->agent?->name ?: '-' }}</td><td>{{ $wd->bank_name ?: '-' }}</td><td>{{ $wd->account_name ?: '-' }}</td><td>{{ $wd->account_number ?: '-' }}</td><td><span class="badge {{ $wdBadge }}">{{ $wd->status }}</span></td><td>{{ $money($wd->amount) }}</td><td>{{ $money($wd->net_amount) }}</td><td>{{ $money($wd->fee) }}</td></tr>@empty<tr><td colspan="11" class="empty"><strong>Belum ada withdrawal.</strong>Pilih periode/toko lain atau tunggu sync gateway berikutnya.</td></tr>@endforelse</tbody></table></div><div class="qris-pagination pad"><div class="pager-summary">Showing {{ $withdrawals->firstItem() ?? 0 }} to {{ $withdrawals->lastItem() ?? 0 }}</div><div class="pager-links">@if($withdrawals->onFirstPage())<span class="pager disabled">Prev</span>@else<a class="pager" href="{{ $withdrawals->previousPageUrl() }}#ma-report-table">Prev</a>@endif @if($withdrawals->hasMorePages())<a class="pager" href="{{ $withdrawals->nextPageUrl() }}#ma-report-table">Next</a>@else<span class="pager disabled">Next</span>@endif</div></div></section></div>
     @else
-    <div data-live-root data-live-interval="15000"><section class="grid qris-metrics section" data-live-region="ma-report-cards"><div class="card pad qris-metric success"><span>TRX Sukses</span><strong>{{ number_format($selectedStoreStats['trx_total'] ?? 0, 0, ',', '.') }}</strong><small>{{ $selectedStore->name ?? 'Semua Toko' }}</small></div><div class="card pad qris-metric success"><span>Sukses</span><strong>{{ number_format($selectedStoreStats['trx_success'] ?? 0, 0, ',', '.') }}</strong><small>{{ $periodLabel }}</small></div><div class="card pad qris-metric pending"><span>Pending Transaksi</span><strong>{{ number_format($selectedStoreStats['trx_pending'] ?? 0, 0, ',', '.') }}</strong><small>Total sesuai periode</small></div><div class="card pad qris-metric primary"><span>Settlement</span><strong>{{ $money($selectedStoreStats['settlement'] ?? 0) }}</strong><small>Net dari trx sukses</small></div></section>
+    <div data-live-root data-live-interval="15000"><section class="grid qris-metrics section" data-live-region="ma-report-cards"><div class="card pad qris-metric"><span>Total TRX</span><strong>{{ number_format($selectedStoreStats['trx_total'] ?? 0, 0, ',', '.') }}</strong><small>{{ $selectedStore->name ?? 'Semua Toko' }}</small></div><div class="card pad qris-metric success"><span>Sukses</span><strong>{{ number_format($selectedStoreStats['trx_success'] ?? 0, 0, ',', '.') }}</strong><small>{{ $periodLabel }}</small></div><div class="card pad qris-metric pending"><span>Pending Transaksi</span><strong>{{ number_format($selectedStoreStats['trx_pending'] ?? 0, 0, ',', '.') }}</strong><small>Total sesuai periode</small></div><div class="card pad qris-metric primary"><span>Settlement</span><strong>{{ $money($selectedStoreStats['settlement'] ?? 0) }}</strong><small>Net dari trx sukses</small></div></section>
         <section id="ma-report-table" class="card qris-panel section" data-live-region="ma-report-table"><div class="qris-toolbar"><h2>Transaksi {{ $selectedStore->name ?? 'Semua Toko' }}</h2><span class="muted">25 transaksi per halaman | {{ $periodLabel }}</span></div><div class="table-wrap sticky-head"><table class="table qris-table ma-report-table"><thead><tr><th>Masuk</th><th>Sukses</th><th>Durasi</th><th>Toko</th><th>Agen</th><th>Status</th><th>Amount</th><th>Reference</th><th>RRN</th><th>Payment ID</th><th>Net</th><th>Settlement</th><th>Sumber TRX</th></tr></thead><tbody>@forelse($transactions as $trx)<tr data-agent-id="{{ $trx->merchant?->agent?->id }}" data-store-id="{{ $trx->merchant?->id }}"><td class="time-cell">{{ $trx->submitted_at?->timezone('Asia/Jakarta')->format('d/m/y') }}<span>{{ $trx->submitted_at?->timezone('Asia/Jakarta')->format('H.i') }} WIB</span></td><td class="time-cell">{{ $trx->succeeded_at?->timezone('Asia/Jakarta')->format('d/m/y') ?? '-' }}<span>{{ $trx->succeeded_at?->timezone('Asia/Jakarta')->format('H.i') ? $trx->succeeded_at?->timezone('Asia/Jakarta')->format('H.i').' WIB' : '-' }}</span></td><td>{{ $trx->successDurationLabel() }}</td><td>{{ $trx->merchant?->name ?: '-' }}</td><td>{{ $trx->merchant?->agent?->name ?: '-' }}</td><td><span class="badge {{ $badge($trx->status) }}">{{ App\Support\PayGridLabels::status($trx->status) }}</span></td><td>{{ $money($trx->amount) }}</td><td>{{ $trx->customer_reference ?: $trx->gateway_ref_id ?: '-' }}</td><td>{{ $trx->rrn ?: '-' }}</td><td>{{ $trx->payment_id ?: '-' }}</td><td>{{ $money($trx->net_amount) }}</td><td>{{ $trx->status === 'success' ? 'Settleable' : 'Pending Transaksi' }}</td><td>{{ $trx->data_source }}</td></tr>@empty<tr><td colspan="13" class="empty"><strong>Belum ada transaksi.</strong>Pilih periode/status lain atau tunggu sync Hilogate berikutnya.</td></tr>@endforelse</tbody></table></div><div class="qris-pagination pad"><div class="pager-summary">Showing {{ $transactions->firstItem() ?? 0 }} to {{ $transactions->lastItem() ?? 0 }}</div><div class="pager-links">@if($transactions->onFirstPage())<span class="pager disabled">Prev</span>@else<a class="pager" href="{{ $transactions->previousPageUrl() }}#ma-report-table">Prev</a>@endif @if($transactions->hasMorePages())<a class="pager" href="{{ $transactions->nextPageUrl() }}#ma-report-table">Next</a>@else<span class="pager disabled">Next</span>@endif</div></div></section></div>
     @endif
 @endif
@@ -228,7 +238,7 @@
     <section class="card pad section ma-period-card"><form method="get" class="ma-period-form"><label>Periode<select name="period" data-ma-period-select><option value="this_month" @selected($filters['period'] === 'this_month')>Bulan Ini</option><option value="last_month" @selected($filters['period'] === 'last_month')>Bulan Lalu</option><option value="last_30_days" @selected($filters['period'] === 'last_30_days')>30 Hari</option><option value="custom" @selected($filters['period'] === 'custom')>Custom</option><option value="all" @selected($filters['period'] === 'all')>Semua Periode</option></select></label><label>Dari<input type="date" name="from" value="{{ $dateInput($dataFilters['from'] ?? $filters['from']) }}" data-ma-period-custom></label><label>Sampai<input type="date" name="to" value="{{ $dateInput($dataFilters['to'] ?? $filters['to']) }}" data-ma-period-custom></label><button class="btn primary compact-btn">Terapkan</button><span class="badge ok">{{ $periodLabel }}</span></form></section>
     <section class="grid qris-metrics section"><div class="card pad qris-metric primary"><span>Total Fee MA</span><strong>{{ $money($summary['fee_ma']) }}</strong></div><div class="card pad qris-metric pending"><span>Total Fee Agen</span><strong>{{ $money($summary['fee_agent']) }}</strong></div></section>
     <section class="card qris-panel section"><div class="qris-toolbar"><h2>Fee Saya (MA)</h2></div>@include('paygrid.partials.fee-menu-rates-readonly', ['role' => 'ma', 'feeMenus' => $feeMenus, 'rates' => auth()->user()->fee_menu_rates ?? []])</section>
-    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Pembagian Fee Per Toko</h2><p class="muted" style="margin:4px 0 0">Margin Agent = MDR Toko &minus; Based Fee Agent. Margin MA = Based Fee Agent &minus; Based Fee MA. Status <strong>Gak Sinkron</strong> artinya salah satu margin itu minus &mdash; rate-nya perlu dinaikin biar MDR Toko &ge; Based Fee Agent &ge; Based Fee MA.</p></div></div><div class="table-wrap"><table class="table qris-table ma-fee-split-table"><thead><tr><th>Toko</th><th>Menu Fee</th><th>MDR Toko</th><th>Volume Trx</th><th>Margin Agent</th><th>Estimasi Fee Agen</th><th>Margin MA</th><th>Estimasi Fee MA</th><th>Status</th><th>Detail</th></tr></thead><tbody>
+    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Pembagian Fee Per Toko</h2><p class="muted" style="margin:4px 0 0">Margin Agent = MDR Toko &minus; Based Fee Agent. Margin MA = Based Fee Agent &minus; Based Fee MA. Status <strong>Gak Sinkron</strong> artinya salah satu margin itu minus &mdash; rate-nya perlu dinaikin biar MDR Toko &ge; Based Fee Agent &ge; Based Fee MA.</p></div><a class="btn compact-btn" href="{{ route('ma.fee.export', request()->query()) }}">Export Excel</a></div><div class="table-wrap"><table class="table qris-table ma-fee-split-table"><thead><tr><th>Toko</th><th>Menu Fee</th><th>MDR Toko</th><th>Volume Trx</th><th>Margin Agent</th><th>Estimasi Fee Agen</th><th>Margin MA</th><th>Estimasi Fee MA</th><th>Status</th><th>Detail</th></tr></thead><tbody>
     @foreach($merchants as $m)
     @php
         $basedFeeAgent = (float) $m->agent_fee_percent;
@@ -263,7 +273,14 @@
 @endif
 
 @if($active === 'approval')
-    <section class="card qris-panel section"><div class="qris-toolbar"><div><h2>Request Approval</h2><p class="muted" style="margin:4px 0 0">Review toko, user access, dan fee structure. Request baru dari submit agen masuk ke sini, pending diprioritaskan paling atas.</p></div></div></section>
+    <section class="card qris-panel section"><div class="ma-approval-header">
+        <div><h2>Request Approval</h2><p class="muted" style="margin:4px 0 0">Review toko, user access, dan fee structure. Request baru dari submit agen masuk ke sini, pending diprioritaskan paling atas.</p></div>
+        <div class="ma-approval-pills">
+            <span class="ma-approval-pill pending">Pending <strong>{{ $approvalCounts['pending'] ?? 0 }}</strong></span>
+            <span class="ma-approval-pill approved">Approved <strong>{{ $approvalCounts['approved'] ?? 0 }}</strong></span>
+            <span class="ma-approval-pill rejected">Rejected <strong>{{ $approvalCounts['rejected'] ?? 0 }}</strong></span>
+        </div>
+    </div></section>
     <section class="card qris-panel section"><div class="table-wrap"><table class="table qris-table ma-approval-table"><thead><tr><th>Toko</th><th>Agen</th><th>Menu Fee</th><th>Merchant MDR</th><th>Admin</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
     @if($registrations->isEmpty())
         <tr><td colspan="7" class="empty">Belum ada request.</td></tr>
@@ -283,19 +300,23 @@
             $cashbackTrxToko = $merchant?->cashback_trx_toko_amount ?? ($payload['cashback_trx_toko_amount'] ?? 0);
             $cashbackTrxAgent = $merchant?->cashback_trx_agent_amount ?? ($payload['cashback_trx_agent_amount'] ?? 0);
             $requestMenuOptions = $feeMenus->optionsFor('merchant');
-            $requestFeeMenu = $merchant?->fee_menu ?? $payload['fee_menu'] ?? null;
-            $requestRates = $merchant?->fee_menu_rates ?? ($payload['fee_menu_rates'] ?? []);
+            $requestOnboardingLink = $r->onboardingLink();
+            $requestFeeMenu = $merchant?->fee_menu ?? $payload['fee_menu'] ?? $requestOnboardingLink?->fee_menu ?? null;
+            $requestRates = $merchant?->fee_menu_rates ?? ($payload['fee_menu_rates'] ?? ($requestOnboardingLink?->fee_menu_rates ?? []));
             $detailRows = $r->detailRowsForMa();
         @endphp
         <tr>
-            <td data-label="Toko"><strong>{{ $r->store_name }}</strong><br><span class="muted truncate" style="display:block; max-width:180px">{{ $payload['topup_url'] ?? $merchant?->topup_url ?? $r->engine_name ?? '-' }}</span></td>
+            <td data-label="Toko"><strong>{{ $r->store_name }}</strong><span class="toko-sub truncate" style="max-width:180px">{{ $payload['topup_url'] ?? $merchant?->topup_url ?? $r->engine_name ?? '-' }}</span></td>
             <td data-label="Agen">{{ $r->agent?->name ?: '-' }}</td>
-            <td data-label="Menu Fee">{{ $requestFeeMenu ? ($requestMenuOptions[$requestFeeMenu]['label'] ?? $requestFeeMenu) : '-' }}</td>
+            <td data-label="Menu Fee"><span class="ma-approval-fee-pill">{{ $requestFeeMenu ? ($requestMenuOptions[$requestFeeMenu]['label'] ?? $requestFeeMenu) : '-' }}</span></td>
             <td data-label="Merchant MDR">{{ $pct($merchantMdr) }}</td>
             <td data-label="Admin">{{ $adminName }}<br><span class="muted truncate" style="display:block; max-width:180px">{{ $adminEmail }}</span></td>
-            <td data-label="Status"><span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></td>
+            <td data-label="Status"><span class="ma-approval-status {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></td>
             <td data-label=""><button class="btn compact-btn approval-detail-open" type="button" data-approval-detail="approval-detail-{{ $r->id }}">Detail</button>
             <a class="btn compact-btn" href="{{ route('ma.merchant-registration.pdf', $r) }}" target="_blank" rel="noopener">PDF</a>
+            @if($r->status === 'approved')
+            <a class="btn compact-btn primary" href="{{ route('ma.merchant-registration.export', $r) }}">&#8681; Export</a>
+            @endif
             <div class="approval-modal" id="approval-detail-{{ $r->id }}" hidden><div class="approval-modal-card">
                 <div class="qris-toolbar"><div><h2>{{ $r->store_name }}</h2><p class="muted" style="margin:4px 0 0">Agen: {{ $r->agent?->name ?: '-' }} &mdash; <span class="badge {{ $badge($r->status) }}">{{ ucfirst(str_replace('_', ' ', $r->status)) }}</span></p></div><button class="btn compact-btn approval-detail-close" type="button">Tutup</button></div>
                 <div class="user-access-card"><strong>ADMIN</strong><h2>{{ $adminName }}</h2><div class="muted truncate">{{ $adminEmail }}</div><b>PW: {{ $adminPassword }}</b></div>
@@ -305,7 +326,7 @@
                     @endforeach
                 </div>
                 @if(!in_array($r->status, ['approved', 'rejected'], true))
-                    <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form" style="margin-top:12px">
+                    <form method="post" action="{{ route('api.merchant-registration.approve', $r) }}" class="approve-fee-form form-grid pad">
                         @csrf
                         <label>Email Admin<input type="email" name="admin_email" value="{{ old('admin_email', $adminEmail !== '-' ? $adminEmail : '') }}" required></label>
                         @if(($r->merchant_type ?: ($payload['merchant_type'] ?? null)) === 'script')
@@ -316,11 +337,32 @@
                         <input type="hidden" name="cashback_agent_percent" value="{{ $cashbackAgentFee }}">
                         <input type="hidden" name="cashback_trx_toko_amount" value="{{ $cashbackTrxToko }}">
                         <input type="hidden" name="cashback_trx_agent_amount" value="{{ $cashbackTrxAgent }}">
-                        <button class="btn primary compact-btn" style="width:100%; margin:8px 0">Approve</button>
+                        <label>Fee Disbursement %<input name="disbursement_fee_percent" value="{{ $pctInput($merchant?->disbursement_fee_percent ?? ($payload['disbursement_fee_percent'] ?? ($requestOnboardingLink?->disbursement_fee_percent ?? 0))) }}"></label>
+                        <label>Fee Disbursement (IDR)<input name="disbursement_fee_fixed" value="{{ (int) ($merchant?->disbursement_fee_fixed ?? ($payload['disbursement_fee_fixed'] ?? ($payload['withdrawal_fee'] ?? ($requestOnboardingLink?->disbursement_fee_fixed ?? 0)))) }}"></label>
+                        <label>Fee Marketing %<input name="marketing_fee_percent" value="{{ $pctInput($merchant?->marketing_fee_percent ?? ($payload['marketing_fee_percent'] ?? 0)) }}"></label>
+                        <label>Fee Marketing (IDR)<input name="marketing_fee_fixed" value="{{ (int) ($merchant?->marketing_fee_fixed ?? ($payload['marketing_fee_fixed'] ?? 0)) }}"></label>
+                        <label>Fee MA %<input name="ma_fee_percent" value="{{ $pctInput($merchant?->ma_fee_percent ?? ($payload['ma_fee_percent'] ?? 0)) }}"></label>
+                        <label>Fee Agen %<input name="agent_fee_percent" value="{{ $pctInput($merchant?->agent_fee_percent ?? ($payload['agent_fee_percent'] ?? 0)) }}"></label>
+                        @if($r->gateway === 'magnetopay')
+                            <label>VA Settlement Type<input name="va_settlement_type" value="{{ $merchant?->va_settlement_type ?? ($payload['va_settlement_type'] ?? '') }}" placeholder="H+1"></label>
+                            <label>IP Whitelist Enabled<select name="is_whitelisted"><option value="0" @selected(! ($merchant?->ip_whitelist_enabled ?? false))>Tidak</option><option value="1" @selected($merchant?->ip_whitelist_enabled ?? false)>Ya</option></select></label>
+                            <label>IP Dashboard (pisah koma)<input name="ip_dashboard" value="{{ $merchant ? implode(', ', $merchant->dashboard_ip_whitelist ?? []) : ($payload['ip_dashboard'] ?? '') }}"></label>
+                            <label>IP API Whitelist (pisah koma)<input name="api_ip_whitelist" value="{{ $merchant ? implode(', ', $merchant->api_ip_whitelist ?? []) : ($payload['api_ip_whitelist'] ?? '') }}"></label>
+                            <label>Transaction Payment Gateway<input name="transaction_payment_gateway" value="{{ $payload['transaction_payment_gateway'] ?? '' }}" placeholder="JAYA DIGITAL RTS"></label>
+                            <label>Withdrawal Payment Gateway<input name="withdrawal_payment_gateway" value="{{ $payload['withdrawal_payment_gateway'] ?? '' }}" placeholder="INA WD"></label>
+                            <label>VA Payment Gateway<input name="va_payment_gateway" value="{{ $payload['va_payment_gateway'] ?? '' }}"></label>
+                            <label>Fee Calculation 1 (%)<input name="magnetopay_fee_1_percent" value="{{ $pctInput($merchant?->magnetopay_fee_1_percent ?? 0) }}"></label>
+                            <label>Fee Calculation 2 (%)<input name="magnetopay_fee_2_percent" value="{{ $pctInput($merchant?->magnetopay_fee_2_percent ?? 0) }}"></label>
+                            <label>Fee Calculation 3 (%)<input name="magnetopay_fee_3_percent" value="{{ $pctInput($merchant?->magnetopay_fee_3_percent ?? 0) }}"></label>
+                            <label>Fee VA (%)<input name="magnetopay_fee_va_percent" value="{{ $pctInput($merchant?->magnetopay_fee_va_percent ?? 0) }}"></label>
+                            <label>Fee Withdrawal (Rp)<input name="magnetopay_fee_withdrawal_fixed" value="{{ (int) ($merchant?->magnetopay_fee_withdrawal_fixed ?? 0) }}" placeholder="-499"></label>
+                            <label>Fee Withdrawal (%)<input name="magnetopay_fee_withdrawal_percent" value="{{ $pctInput($merchant?->magnetopay_fee_withdrawal_percent ?? 0) }}"></label>
+                        @endif
+                        <button class="btn primary compact-btn" style="margin-top:4px">Approve</button>
                     </form>
-                    <form method="post" action="{{ route('api.merchant-registration.reject', $r) }}">
+                    <form method="post" action="{{ route('api.merchant-registration.reject', $r) }}" class="pad" style="padding-top:0">
                         @csrf
-                        <button class="btn danger compact-btn" style="width:100%">Reject</button>
+                        <button class="btn danger compact-btn">Reject</button>
                     </form>
                 @endif
             </div></div></td>
@@ -374,6 +416,10 @@
                 <label>Cash Back Agen %<input name="cashback_agent_percent" value="{{ $pctInput($m->cashback_agent_percent) }}" required></label>
                 <label>Cash Back Trx Toko (IDR)<input name="cashback_trx_toko_amount" value="{{ (int) $m->cashback_trx_toko_amount }}" required></label>
                 <label>Cash Back Trx Agen (IDR)<input name="cashback_trx_agent_amount" value="{{ (int) $m->cashback_trx_agent_amount }}" required></label>
+                <label>Fee Disbursement %<input name="disbursement_fee_percent" value="{{ $pctInput($m->disbursement_fee_percent) }}"></label>
+                <label>Fee Disbursement (IDR)<input name="disbursement_fee_fixed" value="{{ (int) $m->disbursement_fee_fixed }}"></label>
+                <label>Fee Marketing %<input name="marketing_fee_percent" value="{{ $pctInput($m->marketing_fee_percent) }}"></label>
+                <label>Fee Marketing (IDR)<input name="marketing_fee_fixed" value="{{ (int) $m->marketing_fee_fixed }}"></label>
                 <div><button class="btn primary">Simpan Fee</button></div></form></div></div></td></tr>
         @empty
             <tr><td colspan="8" class="empty">Belum ada toko.</td></tr>
@@ -389,14 +435,13 @@
         <td data-label="Kontak"><input form="agent-create" name="contact"></td>
         <td data-label="Status"><select form="agent-create" name="status"><option>Active</option><option>Review</option><option>Suspended</option></select></td>
         <td data-label="Tipe">
-            <select form="agent-create" name="connection_type" id="agent-create-type" onchange="paygridToggleEngineType(this, 'agent-create-engine-type')">
-                <option value="cm">CM</option>
-                <option value="script">Engine</option>
-            </select>
-            <select form="agent-create" name="engine_type" id="agent-create-engine-type" style="display:none" disabled>
-                <option value="sc">Script</option>
+            <select id="agent-create-type" onchange="paygridSetAgentCreateType(this)">
                 <option value="api">API</option>
+                <option value="script">Script</option>
+                <option value="cm" selected>CM</option>
             </select>
+            <input type="hidden" form="agent-create" name="connection_type" id="agent-create-connection-type" value="cm">
+            <input type="hidden" form="agent-create" name="engine_type" id="agent-create-engine-type" value="" disabled>
         </td>
         <td data-label="Fee per Menu">@include('paygrid.partials.fee-menu-rates', ['role' => 'agent', 'typeCategory' => null, 'feeMenus' => $feeMenus, 'formId' => 'agent-create'])</td>
         <td data-label="Password"><input form="agent-create" name="password" value="{{ config('paygrid.demo_password') }}"></td>
@@ -418,60 +463,10 @@
         @include('paygrid.partials.fee-menu-rates', ['role' => 'merchant', 'typeCategory' => null, 'feeMenus' => $feeMenus])
         <label class="field-span-full">Catatan<textarea name="note" rows="3"></textarea></label></div><button class="btn primary" style="margin-top:16px">Buat Toko</button></form></section>
 
-    @php($latestMaLink = session('onboarding_link') ?: '')
-    <section class="card pad section agent-onboarding-card">
-        <div class="qris-toolbar compact-toolbar"><div><h2>Generate Link Onboarding</h2><p class="muted">Buat link registrasi permanen untuk merchant isi sendiri - pilih agen/grup tujuan toko ini. 1 agen cuma punya 1 link, nggak expired dan bisa dipakai berkali-kali buat request toko baru.</p></div></div>
-        <form method="post" action="{{ route('ma.onboarding-links.store') }}" class="form-grid pad">
-            @csrf
-            <label>Agen / Grup<select name="agent_id" required><option value="">Pilih agen</option>@foreach($allAgents as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></label>
-            <label>Email Penerima<input name="recipient_email" type="email" placeholder="merchant@domain.com"></label>
-            <label>Username Telegram<input name="recipient_telegram" placeholder="@merchantusername"></label>
-            <div class="actions" style="align-self:end"><button class="btn primary">Generate Link</button><button class="btn" type="button" data-copy-onboarding-link>Copy Link</button></div>
-            <label style="grid-column:1 / -1">Link Form Unik<input data-onboarding-link readonly value="{{ $latestMaLink ?: 'Link akan muncul di sini.' }}"></label>
-        </form>
-    </section>
-    <section class="card section">
-        <div class="qris-toolbar"><h2>Link Terakhir</h2><span class="muted">{{ ($onboardingLinks ?? collect())->count() }} link</span></div>
-        <form method="post" action="{{ route('ma.onboarding-links.bulk') }}">@csrf<input type="hidden" name="action" value="expire"><div class="actions pad"><button class="btn danger">Expire Selected</button></div><div class="table-wrap"><table class="table qris-table agent-link-table ma-link-table"><thead><tr><th>Pilih</th><th>Dibuat</th><th>Agen</th><th>Penerima</th><th>Status</th><th>Link</th><th>Request</th><th>Aksi</th></tr></thead><tbody>@forelse(($onboardingLinks ?? collect()) as $row)@php($effectiveStatus = $row->isUsable() ? $row->status : 'expired')<tr><td class="checkbox-cell">@if($row->isUsable())<input type="checkbox" name="link_ids[]" value="{{ $row->id }}">@else<span class="muted">-</span>@endif</td><td class="time-cell">{{ $row->created_at->timezone('Asia/Jakarta')->format('d M y') }}<span>{{ $row->created_at->timezone('Asia/Jakarta')->format('H:i') }}</span></td><td>{{ $row->agent?->name ?: '-' }}</td><td><strong>{{ $row->recipient_email ?: '-' }}</strong><br><span class="muted">{{ $row->recipient_telegram ?: '-' }}</span></td><td><span class="badge {{ $effectiveStatus === 'active' ? 'ok' : 'warn' }}">{{ ucfirst($effectiveStatus) }}{{ $row->reusable && $effectiveStatus === 'active' ? ' (Permanen)' : '' }}</span></td><td><button type="button" class="btn compact-btn" data-copy-row-link="{{ route('merchant-registration.token-form', $row) }}">Copy</button></td><td>{{ $row->registration?->store_name ?: '-' }}</td><td>@if($row->isUsable())<button class="btn danger" formaction="{{ route('ma.onboarding-links.expire', $row) }}" formmethod="post">Expire</button>@else<span class="muted">-</span>@endif</td></tr>@empty<tr><td colspan="8" class="empty">Belum ada link.</td></tr>@endforelse</tbody></table></div></form>
-    </section>
-    <script>
-    function paygridCopyText(text, btn) {
-        if (!text) return;
-        var original = btn.textContent;
-        var done = () => { btn.textContent = 'Tersalin!'; setTimeout(() => btn.textContent = original, 1500); };
-        var fallback = () => {
-            var tmp = document.createElement('textarea');
-            tmp.value = text;
-            tmp.style.position = 'fixed';
-            tmp.style.opacity = '0';
-            document.body.appendChild(tmp);
-            tmp.select();
-            tmp.setSelectionRange(0, 99999);
-            try { document.execCommand('copy'); done(); } catch (e) {}
-            document.body.removeChild(tmp);
-        };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(done).catch(fallback);
-        } else {
-            fallback();
-        }
-    }
-    document.addEventListener('DOMContentLoaded', () => {
-        var btn = document.querySelector('[data-copy-onboarding-link]');
-        var input = document.querySelector('[data-onboarding-link]');
-        if (btn && input) {
-            btn.addEventListener('click', () => paygridCopyText(input.value || '', btn));
-        }
-        document.addEventListener('click', (e) => {
-            var rowBtn = e.target.closest('[data-copy-row-link]');
-            if (rowBtn) paygridCopyText(rowBtn.getAttribute('data-copy-row-link'), rowBtn);
-        });
-    });
-    </script>
 @endif
 
 @if($active === 'bot-monitoring')
-    @include('paygrid.partials.bot-monitoring-panel', ['botRouteName' => 'ma.bot-monitoring'])
+    @include('paygrid.partials.bot-monitoring-panel', ['botRouteName' => 'ma.bot-monitoring', 'botExportRouteName' => 'ma.bot-monitoring.export'])
 @endif
 
 @if($active === 'analytics')
@@ -577,6 +572,14 @@ function paygridToggleEngineType(select, engineTypeId) {
     engineType.style.display = isEngine ? '' : 'none';
     engineType.disabled = !isEngine;
 }
+function paygridSetAgentCreateType(select) {
+    var map = { api: ['script', 'api'], script: ['script', 'sc'], cm: ['cm', ''] };
+    var values = map[select.value] || map.cm;
+    document.getElementById('agent-create-connection-type').value = values[0];
+    var engineType = document.getElementById('agent-create-engine-type');
+    engineType.value = values[1];
+    engineType.disabled = values[1] === '';
+}
 var createStoreForm = document.getElementById('create-store-form');
 if (createStoreForm) {
     createStoreForm.addEventListener('submit', function () {
@@ -647,6 +650,38 @@ function paygridPaginateTable(table, perPage) {
 function paygridPaginateAllTables(root) {
     (root || document).querySelectorAll('table.ma-paginate').forEach((table) => paygridPaginateTable(table));
 }
+function paygridPaginateMiniList(container) {
+    if (container.dataset.maPaginated) return;
+    container.dataset.maPaginated = '1';
+    const perPage = parseInt(container.dataset.perPage || '8', 10);
+    const rows = Array.from(container.querySelectorAll(':scope > .ma-mini-row'));
+    if (rows.length <= perPage) return;
+
+    const pager = document.createElement('div');
+    pager.className = 'qris-pagination pad';
+    container.after(pager);
+
+    let page = 1;
+    function render() {
+        const totalPages = Math.max(1, Math.ceil(rows.length / perPage));
+        page = Math.min(Math.max(1, page), totalPages);
+        const start = (page - 1) * perPage;
+        rows.forEach((r, i) => { r.style.display = (i >= start && i < start + perPage) ? '' : 'none'; });
+        const from = start + 1;
+        const to = Math.min(start + perPage, rows.length);
+        pager.innerHTML = '<div class="pager-summary">Showing ' + from + ' to ' + to + ' of ' + rows.length + '</div><div class="pager-links">'
+            + '<button type="button" class="pager" data-dir="prev"' + (page === 1 ? ' disabled' : '') + '>Prev</button>'
+            + '<button type="button" class="pager" data-dir="next"' + (page === totalPages ? ' disabled' : '') + '>Next</button></div>';
+        pager.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => {
+            page += btn.dataset.dir === 'next' ? 1 : -1;
+            render();
+        }));
+    }
+    render();
+}
+function paygridPaginateAllMiniLists(root) {
+    (root || document).querySelectorAll('[data-paginate]').forEach((el) => paygridPaginateMiniList(el));
+}
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-ma-tab]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -706,23 +741,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof Chart !== 'undefined') {
         Chart.defaults.font.size = 11;
         Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-
-        document.querySelectorAll('canvas[data-spark]').forEach((canvas) => {
-            const values = JSON.parse(canvas.dataset.spark || '[]');
-            if (!values.length) return;
-            const color = canvas.dataset.sparkColor || '#1557c2';
-            new Chart(canvas, {
-                type: 'line',
-                data: { labels: values.map((_, i) => i), datasets: [{ data: values, borderColor: color, backgroundColor: 'transparent', borderWidth: 1.5, tension: .3, pointRadius: 0 }] },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
-                    scales: { x: { display: false }, y: { display: false } },
-                    elements: { line: { borderJoinStyle: 'round' } },
-                },
-            });
-        });
 
         const flowDailyEl = document.getElementById('ma-overview-flow-data');
         const flowHourlyEl = document.getElementById('ma-overview-hourly-flow-data');
@@ -796,6 +814,93 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('[data-flow-range]').forEach((b) => b.classList.toggle('active', b === btn));
                 renderFlow();
             }));
+
+            const analyticsCanvas = document.getElementById('ma-overview-analytics-chart');
+            if (analyticsCanvas) {
+                const hourlyLabels = (hourly.labels || []).slice(0, (Number.isInteger(hourly.currentHour) ? hourly.currentHour : 23) + 1);
+                const dailyLabels = hourly.dailyLabels || [];
+                const analyticsPalette = ['#1557c2', '#d95b18', '#4f2a8a', '#008450', '#c62828', '#0d9488', '#b15a00', '#7c3aed', '#be185d', '#15803d'];
+                const analyticsSubtitle = document.getElementById('ma-analytics-subtitle');
+                const metricTitle = {
+                    qris_source: 'QRIS Source',
+                    top_merchant: 'Top Merchant',
+                    withdrawal_success: 'Withdrawal Sukses',
+                    withdrawal_pending: 'Withdrawal Pending',
+                };
+                const rangeLabel = { '1d': 'Hari ini per jam', '7d': '7 Hari Terakhir', month: '30 Hari Terakhir' };
+                let analyticsMetric = 'qris_source';
+                let analyticsRange = '1d';
+
+                const analyticsChart = new Chart(analyticsCanvas, {
+                    type: 'bar',
+                    data: { labels: [], datasets: [] },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            x: { stacked: true },
+                            y: { stacked: true, ticks: { callback: fmt } },
+                        },
+                    },
+                });
+
+                function renderAnalytics() {
+                    const periodLen = analyticsRange === '7d' ? 7 : 30;
+                    let labels = [];
+                    let datasets = [];
+
+                    if (analyticsMetric === 'qris_source' || analyticsMetric === 'top_merchant') {
+                        if (analyticsRange === '1d') {
+                            const series = (analyticsMetric === 'qris_source' ? hourly.qrisSourceSeries : hourly.topMerchantSeries) || [];
+                            labels = hourlyLabels;
+                            datasets = series.map((s, i) => ({
+                                label: s.name,
+                                data: (s.data || []).slice(0, labels.length),
+                                backgroundColor: analyticsPalette[i % analyticsPalette.length],
+                            }));
+                        } else {
+                            const series = (analyticsMetric === 'qris_source' ? hourly.qrisSourceDailySeries : hourly.topMerchantDailySeries) || [];
+                            labels = dailyLabels.slice(-periodLen);
+                            datasets = series.map((s, i) => ({
+                                label: s.name,
+                                data: (s.data || []).slice(-periodLen),
+                                backgroundColor: analyticsPalette[i % analyticsPalette.length],
+                            }));
+                        }
+                    } else {
+                        const isSuccess = analyticsMetric === 'withdrawal_success';
+                        const color = isSuccess ? '#008450' : '#b15a00';
+                        if (analyticsRange === '1d') {
+                            labels = hourlyLabels;
+                            const data = (isSuccess ? hourly.todayWithdrawal : hourly.todayWithdrawalPending) || [];
+                            datasets = [{ label: metricTitle[analyticsMetric], data: data.slice(0, labels.length), backgroundColor: color }];
+                        } else {
+                            const field = isSuccess ? 'withdrawal' : 'withdrawal_pending_amount';
+                            const slice = dailySeries.slice(-periodLen);
+                            labels = slice.map((row) => row.date);
+                            datasets = [{ label: metricTitle[analyticsMetric], data: slice.map((row) => row[field] ?? 0), backgroundColor: color }];
+                        }
+                    }
+
+                    analyticsChart.data.labels = labels;
+                    analyticsChart.data.datasets = datasets;
+                    if (analyticsSubtitle) analyticsSubtitle.textContent = metricTitle[analyticsMetric] + ' - ' + rangeLabel[analyticsRange];
+                    analyticsChart.update();
+                }
+                renderAnalytics();
+
+                document.querySelectorAll('[data-analytics-metric]').forEach((btn) => btn.addEventListener('click', () => {
+                    analyticsMetric = btn.dataset.analyticsMetric;
+                    document.querySelectorAll('[data-analytics-metric]').forEach((b) => b.classList.toggle('active', b === btn));
+                    renderAnalytics();
+                }));
+                document.querySelectorAll('[data-analytics-range]').forEach((btn) => btn.addEventListener('click', () => {
+                    analyticsRange = btn.dataset.analyticsRange;
+                    document.querySelectorAll('[data-analytics-range]').forEach((b) => b.classList.toggle('active', b === btn));
+                    renderAnalytics();
+                }));
+            }
         }
         const bisnisEl = document.getElementById('ma-analytics-bisnis-data');
         const gmvCanvas = document.getElementById('ma-analytics-gmv-chart');
@@ -982,6 +1087,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     paygridPaginateAllTables();
+    paygridPaginateAllMiniLists();
 });
 </script>
 @endpush

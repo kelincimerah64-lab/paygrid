@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Concerns\ConvertsWibDateRange;
 use App\Models\Agent;
 use App\Models\AgentOnboardingLink;
 use App\Models\GatewaySyncLog;
@@ -23,6 +24,8 @@ use Illuminate\Support\Str;
 
 class DashboardController extends Controller
 {
+    use ConvertsWibDateRange;
+
     public function ma(MenuBuilder $menus, MetricsService $metrics): View
     {
         return view('paygrid.ma-overview', [
@@ -71,10 +74,10 @@ class DashboardController extends Controller
             ->when($filters['q'] !== '', fn ($items) => $items->filter(fn (Merchant $merchant) => str_contains(strtolower($merchant->name.' '.$merchant->merchant_id.' '.$merchant->slug), strtolower($filters['q']))))
             ->values();
         $merchantIds = $merchants->pluck('id')->all();
+        [$ticketRangeStart, $ticketRangeEnd] = $this->wibRangeToUtc($filters['from'] ?: null, $filters['to'] ?: null);
         $ticketBase = SupportTicket::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->when($filters['from'] !== '', fn ($query) => $query->whereDate('created_at', '>=', $filters['from']))
-            ->when($filters['to'] !== '', fn ($query) => $query->whereDate('created_at', '<=', $filters['to']));
+            ->when($ticketRangeStart && $ticketRangeEnd, fn ($query) => $query->whereBetween('created_at', [$ticketRangeStart, $ticketRangeEnd]));
         $ticketStats = [
             'total' => (clone $ticketBase)->count(),
             'open' => (clone $ticketBase)->whereIn('status', ['not_started', 'open', 'in_progress'])->count(),
@@ -232,6 +235,7 @@ class DashboardController extends Controller
             'from' => (string) request('from', ''),
             'to' => (string) request('to', ''),
         ];
+        [$registrationRangeStart, $registrationRangeEnd] = $this->wibRangeToUtc($requestFilters['from'] ?: null, $requestFilters['to'] ?: null);
         $registrations = MerchantRegistration::query()
             ->where('agent_id', $agent->id)
             ->with(['agent', 'merchant'])
@@ -240,8 +244,7 @@ class DashboardController extends Controller
                 ->orWhere('token', 'like', $requestFilters['q'].'%')
                 ->orWhereRelation('merchant', 'merchant_id', 'like', $requestFilters['q'].'%')))
             ->when($requestFilters['status'] !== 'all', fn ($query) => $query->where('status', $requestFilters['status']))
-            ->when($requestFilters['from'] !== '', fn ($query) => $query->whereDate('created_at', '>=', $requestFilters['from']))
-            ->when($requestFilters['to'] !== '', fn ($query) => $query->whereDate('created_at', '<=', $requestFilters['to']))
+            ->when($registrationRangeStart && $registrationRangeEnd, fn ($query) => $query->whereBetween('created_at', [$registrationRangeStart, $registrationRangeEnd]))
             ->latest()
             ->get();
 
@@ -250,12 +253,10 @@ class DashboardController extends Controller
             'menus' => $menus->agent(),
             'active' => $page,
             'title' => match ($page) {
-                'create-store', 'new-store' => 'Create Toko',
                 'status-request' => 'Status Request Toko',
                 default => 'Agen',
             },
             'subtitle' => match ($page) {
-                'create-store', 'new-store' => 'Buat link onboarding unik untuk merchant. Setiap link hanya berlaku satu kali submit.',
                 'status-request' => 'Pantau progres onboarding toko, filter request, dan kirim data terpilih ke MA.',
                 default => 'Ringkasan toko, transaksi, dan aktivitas onboarding agen.',
             },
@@ -263,7 +264,6 @@ class DashboardController extends Controller
             'merchants' => $metrics->agentMerchants($agent),
             'requestFilters' => $requestFilters,
             'registrations' => $registrations,
-            'onboardingLinks' => AgentOnboardingLink::query()->where('agent_id', $agent->id)->with('registration')->latest()->limit(10)->get(),
         ]);
     }
 
@@ -339,7 +339,7 @@ class DashboardController extends Controller
             'detailRows' => $registration->detailRows(),
         ]);
 
-        return $pdf->download('request-toko-'.Str::slug($registration->store_name).'-'.$registration->id.'.pdf');
+        return $pdf->download('merchant-reg-'.Str::slug($registration->store_name).'-'.$registration->id.'.pdf');
     }
 
     public function bulkAgentOnboardingLinks(Request $request, AuditLogService $audit): RedirectResponse
@@ -479,7 +479,7 @@ class DashboardController extends Controller
         $requests = TopupRequest::query()
             ->with('ticket')
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('submitted_at', [$rangeStart, $rangeEnd]))
             ->when($page === 'checklist', fn ($query) => $query->where('status', 'success'))
             ->when(request('status') && request('status') !== 'all', fn ($query) => request('status') === 'expired' ? $query->whereIn('status', ['expired', 'failed', 'rejected']) : $query->where('status', request('status')))
             ->when(request('processed') === 'checked', fn ($query) => $query->where('is_processed', true))
@@ -545,9 +545,17 @@ class DashboardController extends Controller
 
     private function transactionBaseQuery(Merchant $merchant, ?string $from, ?string $to, string $search): \Illuminate\Database\Eloquent\Builder
     {
+        // submitted_at is stored in UTC - comparing it against raw WIB
+        // calendar-date strings via whereDate() silently drops transactions
+        // submitted between 00:00-06:59 WIB (their UTC date is still the
+        // previous day), so they only show up when filtering the day before.
+        // Convert the WIB calendar range to a UTC datetime range instead.
+        $rangeStart = $from ? CarbonImmutable::parse($from, 'Asia/Jakarta')->startOfDay()->utc() : null;
+        $rangeEnd = $to ? CarbonImmutable::parse($to, 'Asia/Jakarta')->endOfDay()->utc() : null;
+
         return TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('submitted_at', [$rangeStart, $rangeEnd]))
             ->when($search !== '', fn ($query) => $this->applyTransactionSearch($query, $search));
     }
 
@@ -636,13 +644,14 @@ class DashboardController extends Controller
         }
         $rangeStart = $from ? CarbonImmutable::parse($from, 'Asia/Jakarta')->startOfDay() : null;
         $rangeEnd = $to ? CarbonImmutable::parse($to, 'Asia/Jakarta')->endOfDay() : null;
+        [$submittedRangeStart, $submittedRangeEnd] = $this->wibRangeToUtc($from, $to);
         $search = trim((string) request('q', ''));
         $status = request('status', 'success');
         $settlementStatus = request('settlement_status', 'all');
 
         $transactions = TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($submittedRangeStart && $submittedRangeEnd, fn ($query) => $query->whereBetween('submitted_at', [$submittedRangeStart, $submittedRangeEnd]))
             ->when($status !== 'all', fn ($query) => $status === 'expired' ? $query->whereIn('status', ['expired', 'failed', 'rejected']) : $query->where('status', $status))
             ->when($search !== '', fn ($query) => $this->applyTransactionSearch($query, $search))
             ->latest('submitted_at')

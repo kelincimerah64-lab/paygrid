@@ -13,7 +13,7 @@
 </div>
 
 @if(session('status'))
-    <section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>
+    <div class="status-banner"><span class="badge ok">{{ session('status') }}</span></div>
 @endif
 
 <form class="card filters" method="get">

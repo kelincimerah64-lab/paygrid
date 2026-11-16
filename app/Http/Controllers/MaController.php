@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\AgentOnboardingLink;
+use App\Models\CommissionConfig;
 use App\Models\GatewaySyncLog;
 use App\Models\Merchant;
+use App\Models\MerchantCommissionReport;
+use App\Models\MerchantDailyMetric;
 use App\Models\MerchantGatewayBalance;
 use App\Models\MerchantRegistration;
 use App\Models\MerchantSettlement;
@@ -56,6 +59,11 @@ class MaController extends Controller
         $feeMenus = app(FeeMenuCatalog::class);
         abort_unless(in_array($page, ['overview', 'report', 'fee', 'approval', 'mapping', 'stores', 'agents', 'create-store', 'bot-monitoring', 'analytics'], true), 404);
 
+        if ($page === 'approval') {
+            app(\App\Services\NotificationReadService::class)->markSeen(auth()->user(), 'ma-approvals');
+            Cache::forget('ma:sidebar-badges:'.auth()->id());
+        }
+
         $filters = $this->filters();
         $dataFilters = in_array($page, ['overview', 'report', 'fee', 'analytics'], true) ? $this->periodFilters($filters) : $filters;
 
@@ -92,11 +100,17 @@ class MaController extends Controller
         }
 
         $overviewMerchants = $page === 'overview' ? $this->merchants($dataFilters)->get() : null;
+        // This query scans most of topup_requests (60 days, needed for the
+        // Transaction Flow chart's Month-vs-previous-Month comparison) - on
+        // a large merchant portfolio it's the single most expensive query on
+        // this page (full scan, not index-fixable: see the commit message
+        // for the EXPLAIN that ruled out FORCE INDEX). A longer TTL than the
+        // 180s default cuts how often that cost gets paid; a real fix needs
+        // a pre-aggregated daily-stats table, which is a bigger project.
         $overviewDailySeries = $page === 'overview'
-            ? $this->cachedAnalytics('overview-daily-series', $dataFilters, fn () => $this->dailyMetricSeries($overviewMerchants->pluck('id'), 60))
+            ? $this->cachedAnalytics('overview-daily-series', $dataFilters, fn () => $this->dailyMetricSeries($overviewMerchants->pluck('id'), 60), 300)
             : null;
         $overviewQuickStats = $overviewDailySeries ? $this->overviewQuickStats($overviewDailySeries) : null;
-        $overviewDisbursement = $overviewDailySeries ? $this->overviewDisbursement($overviewDailySeries) : null;
 
         if ($page === 'overview') {
             $overviewTopMerchants = $this->topMerchants($this->todayFilters(), $overviewMerchants, collect($this->cachedAnalytics('overview-top-merchants-today', $this->todayFilters(), fn () => $this->merchantSuccessTotals($this->todayFilters(), $overviewMerchants->pluck('id')))));
@@ -104,8 +118,10 @@ class MaController extends Controller
             $overviewTopMerchants->each(function ($row) use ($withdrawals) {
                 $row->withdrawal = $withdrawals[$row->merchant_id] ?? 0;
             });
+            $topPaymentSources = collect($this->cachedAnalytics('overview-top-payment-sources', $this->todayFilters(), fn () => $this->topPaymentSources($overviewMerchants->pluck('id'))));
         } else {
             $overviewTopMerchants = collect();
+            $topPaymentSources = collect();
         }
 
         return view('paygrid.ma', [
@@ -126,6 +142,7 @@ class MaController extends Controller
             'selectedAgentStores' => $selectedAgent ? $this->selectedAgentStores($dataFilters) : collect(),
             'merchants' => $merchants,
             'registrations' => $page === 'approval' ? $this->registrations($filters)->get() : collect(),
+            'approvalCounts' => $page === 'approval' ? $this->approvalCounts() : [],
             'transactions' => $page === 'report' && $filters['report_view'] !== 'withdrawal' ? $this->transactions($dataFilters)->simplePaginate(25)->withQueryString() : null,
             'selectedStoreStats' => $page === 'report' && $filters['report_view'] !== 'withdrawal' ? $this->cachedAnalytics('report-store-stats', $dataFilters, fn () => $this->selectedStoreStats($dataFilters), 15) : null,
             'withdrawals' => $page === 'report' && $filters['report_view'] === 'withdrawal' ? $this->withdrawals($dataFilters)->simplePaginate(25)->withQueryString() : null,
@@ -141,9 +158,7 @@ class MaController extends Controller
                     : $this->cachedAnalytics('report-agents', $dataFilters, fn () => $this->reportAgents($dataFilters), 15))
                 : collect(),
             'topMerchants' => $overviewTopMerchants,
-            'topPaymentSources' => $page === 'overview'
-                ? collect($this->cachedAnalytics('overview-top-payment-sources', $this->todayFilters(), fn () => $this->topPaymentSources($overviewMerchants->pluck('id'))))
-                : collect(),
+            'topPaymentSources' => $topPaymentSources,
             'withdrawalsCompletedByBank' => $page === 'overview'
                 ? collect($this->cachedAnalytics('overview-withdrawals-completed-by-bank', $this->todayFilters(), fn () => $this->withdrawalsByBank($overviewMerchants->pluck('id'), 'COMPLETED')))
                 : collect(),
@@ -152,10 +167,25 @@ class MaController extends Controller
                 : collect(),
             'overviewDailySeries' => $overviewDailySeries ?? [],
             'overviewHourlyFlow' => $page === 'overview'
-                ? $this->cachedAnalytics('overview-hourly-flow', $dataFilters, fn () => $this->overviewHourlyFlow($overviewMerchants->pluck('id')))
+                ? array_merge(
+                    $this->cachedAnalytics('overview-hourly-flow', $dataFilters, fn () => $this->overviewHourlyFlow(
+                        $overviewMerchants->pluck('id'),
+                        $topPaymentSources->take(10)->pluck('channel')->all(),
+                        $overviewTopMerchants->pluck('merchant_id')->all(),
+                    )),
+                    // Longer TTL (10 min vs the default 3 min) - this is the
+                    // most expensive query on the page (30-day GROUP BY per
+                    // channel/merchant) and users rarely touch the 7D/Month
+                    // toggle, so there's no need to keep it as fresh as the
+                    // hourly data above.
+                    $this->cachedAnalytics('overview-daily-breakdown', $dataFilters, fn () => $this->overviewDailyBreakdown(
+                        $overviewMerchants->pluck('id'),
+                        $topPaymentSources->take(10)->pluck('channel')->all(),
+                        $overviewTopMerchants->pluck('merchant_id')->all(),
+                    ), 600)
+                )
                 : [],
             'overviewQuickStats' => $overviewQuickStats ?? [],
-            'overviewDisbursement' => $overviewDisbursement ?? [],
             'maNotifications' => request()->user()?->unreadNotifications()->latest()->limit(5)->get() ?? collect(),
             'botMonitoring' => $page === 'bot-monitoring'
                 ? app(TelegramBotMonitoringService::class)->data($this->botMonitoringFilters(), request()->boolean('refresh'))
@@ -178,9 +208,6 @@ class MaController extends Controller
                 : collect(),
             'adminUsersByMerchant' => $adminUsersByMerchant,
             'feeMenus' => $feeMenus,
-            'onboardingLinks' => $page === 'create-store'
-                ? AgentOnboardingLink::query()->when($this->currentMaId() !== null, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $this->currentMaId()))->with('agent', 'registration')->latest()->limit(20)->get()
-                : collect(),
         ]);
     }
 
@@ -266,6 +293,46 @@ class MaController extends Controller
         ]);
     }
 
+    public function feeSplitExport(FeeMenuCatalog $feeMenus): Response
+    {
+        $filters = $this->filters();
+        $dataFilters = $this->periodFilters($filters);
+        $merchants = $this->merchants($filters)->get();
+        $feeAmounts = $this->feeAmountsByMerchant($dataFilters);
+        $feeMenuOptions = $feeMenus->optionsFor('merchant');
+
+        $csv = "Toko,Menu Fee,MDR Toko (%),Based Fee Agent (%),Based Fee MA (%),Volume Trx,Margin Agent (%),Margin MA (%),Estimasi Fee Agen (Rp),Estimasi Fee MA (Rp),Status\n";
+        foreach ($merchants as $m) {
+            $amounts = $feeAmounts->get($m->id);
+            $basedFeeAgent = (float) $m->agent_fee_percent;
+            $basedFeeMa = (float) $m->ma_fee_percent;
+            $mdrToko = (float) $m->merchant_mdr_percent;
+            $marginAgent = $mdrToko - $basedFeeAgent;
+            $marginMa = $basedFeeAgent - $basedFeeMa;
+            $isValidFloor = $marginAgent >= -0.001 && $marginMa >= -0.001;
+            $menuLabel = $m->fee_menu ? ($feeMenuOptions[$m->fee_menu]['label'] ?? $m->fee_menu) : '-';
+
+            $csv .= implode(',', array_map(fn ($value) => '"'.str_replace('"', '""', (string) $value).'"', [
+                $m->name,
+                $menuLabel,
+                number_format($mdrToko, 3, '.', ''),
+                number_format($basedFeeAgent, 3, '.', ''),
+                number_format($basedFeeMa, 3, '.', ''),
+                (int) ($amounts->volume ?? 0),
+                number_format($marginAgent, 3, '.', ''),
+                number_format($marginMa, 3, '.', ''),
+                (int) round((float) ($amounts->agent_fee ?? 0)),
+                (int) round((float) ($amounts->ma_fee ?? 0)),
+                $isValidFloor ? 'Valid' : 'Gak Sinkron',
+            ]))."\n";
+        }
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="ma-fee-split.csv"',
+        ]);
+    }
+
     public function storeAgent(Request $request, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
     {
         $request->merge(['connection_type' => $request->input('connection_type', 'cm')]);
@@ -323,7 +390,7 @@ class MaController extends Controller
         ]);
         $audit->record('ma.cs_agent_created', $csUser, null, $csUser->only(['email', 'username', 'role']));
 
-        return back()->with('status', 'Agen lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG. Akun CS Agent — Username: '.$csUser->username.', Password: '.$password.'.');
+        return back()->with('status', 'Agen lokal berhasil dibuat. Kode login: '.$agent->code.'. Password: '.$password.'. Belum dikirim ke HG. Akun CS Agent — Username: '.$csUser->username.', Password: '.$password.'.')->with('new_agent_id', $agent->id);
     }
 
     public function mapAgent(Request $request, Merchant $merchant, AuditLogService $audit, FeeSyncService $feeSync): RedirectResponse
@@ -350,6 +417,10 @@ class MaController extends Controller
 
     public function storeMerchant(Request $request, AuditLogService $audit, FeeMenuCatalog $feeMenus, FeeSyncService $feeSync): RedirectResponse
     {
+        if ($request->user()->is_demo) {
+            return back()->with('status', 'Toko "'.$request->input('name', 'Demo').'" berhasil dibuat. (Mode demo — data tidak benar-benar disimpan.)');
+        }
+
         $typeCategory = $feeMenus->typeCategory((string) $request->input('merchant_type'));
         $rates = $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant');
         $request->merge(['fee_menu_rates' => $rates]);
@@ -424,6 +495,257 @@ class MaController extends Controller
         return back()->with('status', 'Toko berhasil dibuat. Admin default: '.$admins->pluck('email')->implode(', ').' / '.config('paygrid.demo_password').'.');
     }
 
+    public function createStoreMagnetopayForm(FeeMenuCatalog $feeMenus): View
+    {
+        return view('paygrid.ma-create-store-magnetopay', [
+            'roleLabel' => request()->user()?->role === 'magneto_ops' ? 'Magneto Ops' : 'MA',
+            'menus' => app(\App\Services\Navigation\MenuBuilder::class)->ma(),
+            'active' => 'create-store-magnetopay',
+            'feeMenus' => $feeMenus,
+            'allAgents' => $this->agents($this->blankFilters())->get(),
+            'onboardingLinks' => AgentOnboardingLink::query()
+                ->where('kind', 'magnetopay')
+                ->when($this->currentMaId() !== null, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $this->currentMaId()))
+                ->with('agent', 'registration')
+                ->latest()
+                ->limit(20)
+                ->get(),
+        ]);
+    }
+
+    public function storeMagnetopayMerchant(Request $request, AuditLogService $audit): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'agent_id' => ['required', 'exists:agents,id'],
+            'admin_email' => ['required', 'array', 'min:1'],
+            'admin_email.*' => ['required', 'email', 'max:160', 'distinct', 'unique:users,email'],
+            'merchant_id' => ['nullable', 'string', 'max:160'],
+            'merchant_key' => ['nullable', 'string', 'max:255'],
+            'merchant_group_name' => ['nullable', 'string', 'max:160'],
+            'transaction_callback_url' => ['nullable', 'url', 'max:255'],
+            'withdrawal_callback_url' => ['nullable', 'url', 'max:255'],
+            'va_callback_url' => ['nullable', 'url', 'max:255'],
+            'qris_settlement_type' => ['nullable', 'string', 'max:80'],
+            'va_settlement_type' => ['nullable', 'string', 'max:80'],
+            'ip_whitelist_enabled' => ['nullable', 'boolean'],
+            'dashboard_ip_whitelist' => ['nullable', 'array', 'max:5'],
+            'dashboard_ip_whitelist.*' => ['nullable', 'string', 'max:45'],
+            'api_ip_whitelist' => ['nullable', 'array', 'max:5'],
+            'api_ip_whitelist.*' => ['nullable', 'string', 'max:45'],
+            'transaction_payment_gateway' => ['nullable', 'string', 'max:160'],
+            'withdrawal_payment_gateway' => ['nullable', 'string', 'max:160'],
+            'va_payment_gateway' => ['nullable', 'string', 'max:160'],
+            'magnetopay_fee_1_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'magnetopay_fee_2_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'magnetopay_fee_3_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'magnetopay_fee_va_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'magnetopay_fee_withdrawal_fixed' => ['nullable', 'integer'],
+            'magnetopay_fee_withdrawal_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ]);
+
+        $slug = $this->uniqueMerchantSlug($data['name']);
+        $agent = Agent::query()->with('ma')->findOrFail($data['agent_id']);
+        abort_unless($this->canUseAgent($agent), 403);
+
+        $merchant = Merchant::query()->create([
+            'agent_id' => $agent->id,
+            'slug' => $slug,
+            'name' => $data['name'],
+            'merchant_id' => $data['merchant_id'] ?? null,
+            'merchant_key' => $data['merchant_key'] ?? null,
+            'merchant_group_name' => $data['merchant_group_name'] ?? null,
+            'merchant_type' => 'cm',
+            'gateway' => 'magnetopay',
+            'approval_status' => 'approved',
+            'topup_enabled' => true,
+            'topup_url' => route('topup', ['merchant' => $slug]),
+            'transaction_callback_url' => $data['transaction_callback_url'] ?? url('/api/callbacks/hilogate/transaction'),
+            'withdrawal_callback_url' => $data['withdrawal_callback_url'] ?? url('/api/callbacks/hilogate/withdrawal'),
+            'va_callback_url' => $data['va_callback_url'] ?? null,
+            'qris_settlement_type' => $data['qris_settlement_type'] ?? null,
+            'va_settlement_type' => $data['va_settlement_type'] ?? null,
+            'ip_whitelist_enabled' => (bool) ($data['ip_whitelist_enabled'] ?? false),
+            'dashboard_ip_whitelist' => array_values(array_filter($data['dashboard_ip_whitelist'] ?? [])),
+            'api_ip_whitelist' => array_values(array_filter($data['api_ip_whitelist'] ?? [])),
+            'magnetopay_fee_1_percent' => $data['magnetopay_fee_1_percent'] ?? 0,
+            'magnetopay_fee_2_percent' => $data['magnetopay_fee_2_percent'] ?? 0,
+            'magnetopay_fee_3_percent' => $data['magnetopay_fee_3_percent'] ?? 0,
+            'magnetopay_fee_va_percent' => $data['magnetopay_fee_va_percent'] ?? 0,
+            'magnetopay_fee_withdrawal_fixed' => $data['magnetopay_fee_withdrawal_fixed'] ?? null,
+            'magnetopay_fee_withdrawal_percent' => $data['magnetopay_fee_withdrawal_percent'] ?? 0,
+            'onboarding_payload' => [
+                'transaction_payment_gateway' => $data['transaction_payment_gateway'] ?? null,
+                'withdrawal_payment_gateway' => $data['withdrawal_payment_gateway'] ?? null,
+                'va_payment_gateway' => $data['va_payment_gateway'] ?? null,
+            ],
+            'approved_at' => now(),
+        ]);
+
+        $admins = collect($data['admin_email'])->map(fn (string $email) => User::query()->create([
+            'name' => str($email)->before('@')->replace(['.', '_', '-'], ' ')->title()->toString(),
+            'email' => $email,
+            'role' => 'admin',
+            'merchant_id' => $merchant->id,
+            'password' => Hash::make(config('paygrid.demo_password')),
+            'plain_password' => config('paygrid.demo_password'),
+        ]));
+        $audit->record('ma.merchant_created', $merchant, null, $merchant->only(['slug', 'name', 'agent_id', 'gateway', 'merchant_type']));
+        $admins->each(fn ($admin) => $audit->record('ma.merchant_admin_created', $admin, null, $admin->only(['email', 'role', 'merchant_id'])));
+
+        return back()->with('status', 'Toko Magnetopay berhasil dibuat. Admin default: '.$admins->pluck('email')->implode(', ').' / '.config('paygrid.demo_password').'.');
+    }
+
+    /**
+     * Report Day/Settlement Day are deliberately not stored - they're always
+     * "day_of_week + 1" and computed here for display, matching the mockup
+     * (those two cells are read-only badges, never inputs).
+     */
+    public function commissionForm(): View
+    {
+        $maId = $this->currentMaId();
+        $agents = Agent::query()
+            ->when($maId, fn ($query) => $query->where('ma_user_id', $maId))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $merchants = Merchant::query()
+            ->when($maId, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $maId))
+            ->orderBy('name')
+            ->get(['id', 'name', 'merchant_id', 'approval_status', 'agent_id']);
+
+        $configs = CommissionConfig::query()
+            ->when($maId, fn ($query) => $query->where('ma_user_id', $maId))
+            ->with(['days', 'merchants:id,name', 'agent:id,name'])
+            ->withCount('reports')
+            ->latest('id')
+            ->get();
+
+        return view('paygrid.ma-commission', [
+            'roleLabel' => 'MA',
+            'menus' => app(\App\Services\Navigation\MenuBuilder::class)->ma(),
+            'active' => 'commission',
+            'agents' => $agents,
+            'merchants' => $merchants,
+            'templates' => $configs->map(fn ($c) => [
+                'id' => $c->id,
+                'label' => $c->name ?: $c->created_at->timezone('Asia/Jakarta')->format('d M Y H:i').' ('.($c->status === 'active' ? 'Aktif' : 'Draft').')',
+                'name' => $c->name,
+                'agent_id' => $c->agent_id,
+                'merchant_id' => $c->merchants->first()?->id,
+                'days' => $c->days->map(fn ($d) => [
+                    'day_of_week' => $d->day_of_week,
+                    'enabled' => $d->enabled,
+                    'rate_percent' => (float) $d->rate_percent,
+                    'wd_fee_fixed' => (int) $d->wd_fee_fixed,
+                    'notes' => $d->notes,
+                ]),
+            ]),
+            'configList' => $configs->map(fn ($c) => [
+                'id' => $c->id,
+                'name' => $c->name ?: '(Tanpa nama)',
+                'agent_name' => $c->agent?->name ?: '-',
+                'scope_label' => $c->apply_scope === 'specific'
+                    ? ($c->merchants->pluck('name')->implode(', ') ?: 'Tidak ada toko')
+                    : 'Semua toko di group',
+                'status' => $c->status,
+                'report_count' => $c->reports_count,
+            ]),
+        ]);
+    }
+
+    public function commissionStore(Request $request): RedirectResponse
+    {
+        $maId = $this->currentMaId();
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'agent_id' => ['required', Rule::exists('agents', 'id')->where('ma_user_id', $maId)],
+            'merchant_id' => ['nullable', Rule::exists('merchants', 'id')->where('agent_id', $request->input('agent_id'))],
+            'days' => ['required', 'array', 'size:7'],
+            'days.*.day_of_week' => ['required', 'integer', 'between:0,6'],
+            'days.*.enabled' => ['nullable', 'boolean'],
+            'days.*.rate_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'days.*.wd_fee_fixed' => ['nullable', 'integer', 'min:0'],
+            'days.*.notes' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $applyScope = $data['merchant_id'] ?? null ? 'specific' : 'all';
+
+        DB::transaction(function () use ($data, $maId, $applyScope, $request) {
+            $config = CommissionConfig::query()->create([
+                'ma_user_id' => $maId ?? $request->user()->id,
+                'name' => $data['name'],
+                'agent_id' => $data['agent_id'],
+                'status' => 'active',
+                'apply_scope' => $applyScope,
+            ]);
+
+            foreach ($data['days'] as $day) {
+                $config->days()->create([
+                    'day_of_week' => $day['day_of_week'],
+                    'enabled' => (bool) ($day['enabled'] ?? false),
+                    'rate_percent' => $day['rate_percent'],
+                    'wd_fee_fixed' => $day['wd_fee_fixed'] ?? 0,
+                    'notes' => $day['notes'] ?? null,
+                ]);
+            }
+
+            if ($applyScope === 'specific') {
+                $config->merchants()->sync([$data['merchant_id']]);
+            }
+        });
+
+        \App\Jobs\BackfillCommissionReportsThisMonth::dispatch()->onQueue('backfill');
+
+        return back()->with('status', 'Konfigurasi komisi tersimpan dan aktif.');
+    }
+
+    /**
+     * "Copot" - toggles active/inactive rather than deleting. Deactivating
+     * just stops future commission:generate-reports runs from using this
+     * config (it's filtered out by status='active' there) - the config, its
+     * days, and all historical merchant_commission_reports rows stay intact,
+     * so it can be reactivated later with zero data loss.
+     */
+    public function commissionToggleStatus(Request $request, CommissionConfig $config, AuditLogService $audit): RedirectResponse
+    {
+        $maId = $this->currentMaId();
+        abort_unless($request->user()?->role === 'superadmin' || ($maId && $config->ma_user_id === $maId), 403);
+
+        $newStatus = $config->status === 'active' ? 'inactive' : 'active';
+        $before = $config->only(['status']);
+        $config->update(['status' => $newStatus]);
+        $audit->record('ma.commission_config_status_toggled', $config, $before, $config->only(['status']));
+
+        return back()->with('status', $newStatus === 'active'
+            ? 'Komisi diaktifkan kembali.'
+            : 'Komisi dicopot - toko ini tidak lagi dapat komisi baru, tapi history laporan lama tetap aman.');
+    }
+
+    /**
+     * Permanent delete - commission_config_days and commission_config_merchants
+     * cascade automatically (foreign key ->cascadeOnDelete()), and critically
+     * so does merchant_commission_reports.commission_config_id, so this also
+     * wipes every historical commission report row this config ever produced.
+     * The report_count warning in the view exists specifically so an MA isn't
+     * surprised by that - "Copot" (deactivate) is the non-destructive choice
+     * when history matters.
+     */
+    public function commissionDestroy(Request $request, CommissionConfig $config, AuditLogService $audit): RedirectResponse
+    {
+        $maId = $this->currentMaId();
+        abort_unless($request->user()?->role === 'superadmin' || ($maId && $config->ma_user_id === $maId), 403);
+
+        $reportCount = $config->reports()->count();
+        $audit->record('ma.commission_config_deleted', $config, $config->only(['name', 'status', 'apply_scope']), ['report_rows_deleted' => $reportCount]);
+        $config->delete();
+
+        return back()->with('status', $reportCount > 0
+            ? "Template komisi dihapus, termasuk {$reportCount} baris history laporan yang nempel ke config ini."
+            : 'Template komisi dihapus.');
+    }
+
     public function insentifForm(): View
     {
         $maId = $this->currentMaId();
@@ -442,9 +764,16 @@ class MaController extends Controller
     }
 
     /**
-     * Reuses feeAmountsByMerchant()'s exact fee_ma formula (already the
-     * source of the Overview "Fee MA" KPI) so the PDF recap can never drift
-     * from what the dashboard already shows for the same stores/period.
+     * Reuses feeAmountsByMerchant()'s exact merchant/agent/ma fee formula
+     * (already the source of the Overview "Fee MA" KPI) for the "Fee
+     * Distribution" columns, so the PDF recap can never drift from what the
+     * dashboard already shows for the same stores/period. Combined and
+     * Merchant both show the full extracted MDR (volume x merchant_mdr%) -
+     * confirmed as intentional with the business, not a typo/duplicate.
+     * "Cash Back & Incentives" columns are separate, non-MDR line items:
+     * Cashback = volume x cashback_agent_percent (excluded from the MDR
+     * waterfall on purpose), Marketing/Disbursement = trx count x their own
+     * fixed per-trx rate from the merchant's fee settings.
      */
     public function insentifPdf(Request $request): Response
     {
@@ -470,21 +799,165 @@ class MaController extends Controller
         ]);
 
         $feeRows = $this->feeAmountsByMerchant($filters)->keyBy('merchant_id');
-        $rows = $merchants->map(fn ($m) => [
-            'name' => $m->name,
-            'volume' => (int) ($feeRows->get($m->id)->volume ?? 0),
-            'fee' => (int) round((float) ($feeRows->get($m->id)->ma_fee ?? 0)),
-        ]);
+        $extras = $this->insentifExtrasByMerchant($merchants->pluck('id')->all(), $filters);
 
-        $pdf = Pdf::loadView('paygrid.insentif-pdf', [
+        $rows = $merchants->map(function ($m) use ($feeRows, $extras) {
+            $fee = $feeRows->get($m->id);
+            $extra = $extras->get($m->id);
+
+            return [
+                'name' => $m->name,
+                'volume' => (int) ($fee->volume ?? 0),
+                'combined' => (int) round((float) ($fee->merchant_fee ?? 0)),
+                'ma' => (int) round((float) ($fee->ma_fee ?? 0)),
+                'agent' => (int) round((float) ($fee->agent_fee ?? 0)),
+                'merchant' => (int) round((float) ($fee->merchant_fee ?? 0)),
+                'cashback' => (int) round((float) ($extra->cashback ?? 0)),
+                'marketing' => (int) ($extra->marketing ?? 0),
+                'disbursement' => (int) ($extra->disbursement ?? 0),
+            ];
+        });
+
+        $pdf = Pdf::loadView('paygrid.insentif-pdf-ma', [
             'roleLabel' => 'MA',
             'recipientName' => $request->user()->name ?? 'MA',
             'monthLabel' => $month->format('F Y'),
             'rows' => $rows,
-            'total' => $rows->sum('fee'),
+            'totals' => [
+                'volume' => $rows->sum('volume'),
+                'combined' => $rows->sum('combined'),
+                'ma' => $rows->sum('ma'),
+                'agent' => $rows->sum('agent'),
+                'merchant' => $rows->sum('merchant'),
+                'cashback' => $rows->sum('cashback'),
+                'marketing' => $rows->sum('marketing'),
+                'disbursement' => $rows->sum('disbursement'),
+            ],
         ]);
 
         return $pdf->download('insentif-ma-'.$month->format('Y-m').'.pdf');
+    }
+
+    public function commissionReport(Request $request): View
+    {
+        $maId = $this->currentMaId();
+        $monthParam = $request->query('month');
+        $month = is_string($monthParam) && preg_match('/^\d{4}-\d{2}$/', $monthParam)
+            ? CarbonImmutable::createFromFormat('Y-m', $monthParam, 'Asia/Jakarta')
+            : now('Asia/Jakarta');
+        $from = $month->startOfMonth()->toDateString();
+        $to = $month->endOfMonth()->toDateString();
+
+        $agents = Agent::query()
+            ->when($maId, fn ($query) => $query->where('ma_user_id', $maId))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $agentId = $request->query('agent_id');
+        $agentId = $agentId !== null && $agentId !== '' && $agents->contains('id', (int) $agentId) ? (int) $agentId : null;
+
+        $merchants = Merchant::query()
+            ->when($maId, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $maId))
+            ->when($agentId, fn ($query) => $query->where('agent_id', $agentId))
+            ->with('agent:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'agent_id']);
+
+        $reportTotals = MerchantCommissionReport::query()
+            ->whereIn('merchant_id', $merchants->pluck('id'))
+            ->whereBetween('transaction_date', [$from, $to])
+            ->selectRaw('merchant_id, SUM(volume) as total_volume, SUM(commission_amount) as total_commission, SUM(wd_volume) as total_wd_volume, SUM(wd_commission_amount) as total_wd_commission, COUNT(*) as days_counted')
+            ->groupBy('merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
+
+        $monthFilters = array_merge($this->blankFilters(), ['from' => $from, 'to' => $to]);
+        $extras = $this->insentifExtrasByMerchant($merchants->pluck('id')->all(), $monthFilters);
+
+        $rows = $merchants->map(function ($m) use ($reportTotals, $extras) {
+            $totals = $reportTotals->get($m->id);
+            $extra = $extras->get($m->id);
+
+            return [
+                'id' => $m->id,
+                'name' => $m->name,
+                'group' => $m->agent?->name,
+                'revenue' => (int) round((float) ($extra->volume ?? 0)),
+                'trx' => (int) ($extra->trx_count ?? 0),
+                'cashback' => (int) round((float) ($extra->cashback ?? 0)),
+                'volume' => (int) ($totals->total_volume ?? 0),
+                'days_counted' => (int) ($totals->days_counted ?? 0),
+                'commission' => (int) ($totals->total_commission ?? 0),
+                'wd_volume' => (int) ($totals->total_wd_volume ?? 0),
+                'wd_commission' => (int) ($totals->total_wd_commission ?? 0),
+            ];
+        })->map(fn ($row) => $row + ['total_commission' => $row['commission'] + $row['wd_commission']])
+            ->sortByDesc('total_commission')->values();
+
+        return view('paygrid.ma-commission-report', [
+            'roleLabel' => 'MA',
+            'menus' => app(\App\Services\Navigation\MenuBuilder::class)->ma(),
+            'active' => 'commission-report',
+            'rows' => $rows,
+            'agents' => $agents,
+            'selectedAgentId' => $agentId,
+            'totals' => [
+                'volume' => $rows->sum('volume'),
+                'commission' => $rows->sum('commission'),
+                'wd_volume' => $rows->sum('wd_volume'),
+                'wd_commission' => $rows->sum('wd_commission'),
+                'total_commission' => $rows->sum('total_commission'),
+                'active_stores' => $rows->filter(fn ($r) => $r['days_counted'] > 0)->count(),
+                'revenue' => $rows->sum('revenue'),
+                'trx' => $rows->sum('trx'),
+                'cashback' => $rows->sum('cashback'),
+            ],
+            'month' => $month->format('Y-m'),
+            'monthLabel' => $month->translatedFormat('F Y'),
+        ]);
+    }
+
+    /**
+     * The "Cash Back & Incentives" side of the insentif report - kept
+     * separate from feeAmountsByMerchant() since that method is shared with
+     * the Overview "Fee MA" KPI and these columns are specific to this PDF.
+     */
+    private function insentifExtrasByMerchant(array $merchantIds, array $filters)
+    {
+        $rates = Merchant::query()
+            ->whereIn('id', $merchantIds)
+            ->get(['id', 'cashback_agent_percent', 'marketing_fee_fixed', 'disbursement_fee_fixed'])
+            ->keyBy('id');
+
+        $trxCounts = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
+            ->selectRaw('topup_requests.merchant_id as merchant_id')
+            ->selectRaw('COUNT(*) as trx_count')
+            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
+            ->groupBy('topup_requests.merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
+
+        $disbursementCounts = $this->withdrawalsQuery(array_merge($filters, ['report_view' => 'withdrawal', 'status' => 'COMPLETED']))
+            ->selectRaw('merchant_withdrawals.merchant_id as merchant_id')
+            ->selectRaw('COUNT(*) as trx_count')
+            ->groupBy('merchant_withdrawals.merchant_id')
+            ->get()
+            ->keyBy('merchant_id');
+
+        return collect($merchantIds)->mapWithKeys(function ($merchantId) use ($rates, $trxCounts, $disbursementCounts) {
+            $rate = $rates->get($merchantId);
+            $volume = (float) ($trxCounts->get($merchantId)->volume ?? 0);
+            $collectionTrx = (int) ($trxCounts->get($merchantId)->trx_count ?? 0);
+            $disbursementTrx = (int) ($disbursementCounts->get($merchantId)->trx_count ?? 0);
+
+            return [$merchantId => (object) [
+                'volume' => $volume,
+                'trx_count' => $collectionTrx,
+                'cashback' => $rate ? $volume * $rate->cashback_agent_percent / 100 : 0,
+                'marketing' => $rate ? $collectionTrx * $rate->marketing_fee_fixed : 0,
+                'disbursement' => $rate ? $disbursementTrx * $rate->disbursement_fee_fixed : 0,
+            ]];
+        });
     }
 
     /**
@@ -512,6 +985,7 @@ class MaController extends Controller
 
         $existing = AgentOnboardingLink::query()
             ->where('agent_id', $agent->id)
+            ->where('kind', 'generic')
             ->where('status', 'active')
             ->where('reusable', true)
             ->first();
@@ -522,11 +996,13 @@ class MaController extends Controller
         $link = DB::transaction(function () use ($agent, $data) {
             AgentOnboardingLink::query()
                 ->where('agent_id', $agent->id)
+                ->where('kind', 'generic')
                 ->where('status', 'active')
                 ->update(['status' => 'expired', 'expires_at' => now()]);
 
             return AgentOnboardingLink::query()->create([
                 'agent_id' => $agent->id,
+                'kind' => 'generic',
                 'token' => Str::random(48),
                 'recipient_email' => $data['recipient_email'] ?? null,
                 'recipient_telegram' => $data['recipient_telegram'] ?? null,
@@ -538,6 +1014,63 @@ class MaController extends Controller
         $audit->record('ma.onboarding_link_created', $link, null, $link->only(['agent_id', 'recipient_email', 'recipient_telegram', 'status', 'reusable']));
 
         return back()->with('status', 'Link permanen berhasil dibuat.')->with('onboarding_link', route('merchant-registration.token-form', $link));
+    }
+
+    /**
+     * Settlement Type + MDR are chosen here (not just at approval) so every
+     * submission through this specific link already carries agreed terms -
+     * that means each "Generate Link" click now always produces a fresh link
+     * (no more "return the existing one unchanged"), since the whole point is
+     * to let a new generate carry different terms than the last one.
+     */
+    public function storeOnboardingLinkMagnetopay(Request $request, AuditLogService $audit, FeeMenuCatalog $feeMenus): RedirectResponse
+    {
+        $request->merge(['fee_menu_rates' => $feeMenus->normalizeRates((array) $request->input('fee_menu_rates', []), 'merchant')]);
+        $data = $request->validate([
+            'agent_id' => ['required', 'exists:agents,id'],
+            'recipient_email' => ['nullable', 'email', 'max:160'],
+            'recipient_telegram' => ['nullable', 'string', 'max:80'],
+            'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled()],
+            'disbursement_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'disbursement_fee_fixed' => ['nullable', 'integer'],
+        ]);
+        $agent = Agent::query()->findOrFail($data['agent_id']);
+        abort_unless($this->canUseAgent($agent), 403);
+
+        $activeMenu = array_key_first(array_filter($data['fee_menu_rates']));
+
+        $link = DB::transaction(function () use ($agent, $data, $activeMenu) {
+            AgentOnboardingLink::query()
+                ->where('agent_id', $agent->id)
+                ->where('kind', 'magnetopay')
+                ->where('status', 'active')
+                ->update(['status' => 'expired', 'expires_at' => now()]);
+
+            return AgentOnboardingLink::query()->create([
+                'agent_id' => $agent->id,
+                'kind' => 'magnetopay',
+                'token' => Str::random(48),
+                'form_number' => $this->nextOnboardingLinkFormNumber(),
+                'created_by_user_id' => auth()->id(),
+                'fee_menu' => $activeMenu,
+                'fee_menu_rates' => $data['fee_menu_rates'],
+                'disbursement_fee_percent' => $data['disbursement_fee_percent'] ?? 0,
+                'disbursement_fee_fixed' => $data['disbursement_fee_fixed'] ?? null,
+                'recipient_email' => $data['recipient_email'] ?? null,
+                'recipient_telegram' => $data['recipient_telegram'] ?? null,
+                'status' => 'active',
+                'reusable' => true,
+                'expires_at' => null,
+            ]);
+        });
+        $audit->record('ma.onboarding_link_created', $link, null, $link->only(['agent_id', 'kind', 'form_number', 'fee_menu', 'disbursement_fee_percent', 'disbursement_fee_fixed', 'recipient_email', 'recipient_telegram', 'status', 'reusable']));
+
+        return back()->with('status', 'Link Magnetopay berhasil dibuat ('.$link->form_number.').')->with('onboarding_link_magnetopay', route('merchant-registration.magnetopay.token-form', $link));
+    }
+
+    private function nextOnboardingLinkFormNumber(): string
+    {
+        return 'REG-'.str_pad((string) (((int) AgentOnboardingLink::query()->max('id')) + 1), 6, '0', STR_PAD_LEFT);
     }
 
     public function expireOnboardingLink(AgentOnboardingLink $link, AuditLogService $audit): RedirectResponse
@@ -600,17 +1133,24 @@ class MaController extends Controller
         $request->merge(['fee_menu_rates' => $rates]);
         $agent = $merchant->agent()->with('ma')->firstOrFail();
         $agentRates = (array) ($agent->fee_menu_rates ?? []);
+        $this->normalizePercentInputs($request, ['disbursement_fee_percent', 'marketing_fee_percent']);
         $data = $request->validate([
             'payin_fee_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'cashback_agent_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'cashback_trx_toko_amount' => ['required', 'integer', 'min:0'],
             'cashback_trx_agent_amount' => ['required', 'integer', 'min:0'],
+            'disbursement_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'disbursement_fee_fixed' => ['nullable', 'integer', 'min:0'],
+            'marketing_fee_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'marketing_fee_fixed' => ['nullable', 'integer', 'min:0'],
             'fee_menu_rates' => [new FeeMenuRatesAboveFloor('merchant', null), new ExactlyOneFeeMenuFilled(), new FeeMenuRatesAboveReference('merchant', $agentRates, 'Based Fee Agent')],
         ]);
         $data['fee_menu'] = array_key_first(array_filter($rates));
         $data['settlement_method'] = $feeMenus->settlementMethod($data['fee_menu']);
         $data = array_merge($data, $feeSync->snapshotFor($agent, $data['fee_menu'], $rates[$data['fee_menu']]));
-        $before = $merchant->only(['merchant_mdr_percent', 'payin_fee_percent', 'cashback_agent_percent', 'cashback_trx_toko_amount', 'cashback_trx_agent_amount', 'fee_menu', 'fee_menu_rates', 'settlement_method']);
+        $data['disbursement_fee_percent'] = $data['disbursement_fee_percent'] ?? 0;
+        $data['marketing_fee_percent'] = $data['marketing_fee_percent'] ?? 0;
+        $before = $merchant->only(['merchant_mdr_percent', 'payin_fee_percent', 'cashback_agent_percent', 'cashback_trx_toko_amount', 'cashback_trx_agent_amount', 'fee_menu', 'fee_menu_rates', 'settlement_method', 'disbursement_fee_percent', 'disbursement_fee_fixed', 'marketing_fee_percent', 'marketing_fee_fixed']);
         $merchant->forceFill($data)->save();
         $audit->record('ma.merchant_fee_updated', $merchant, $before, $merchant->only(array_keys($before)));
 
@@ -647,6 +1187,14 @@ class MaController extends Controller
         ];
     }
 
+    public function botMonitoringExport(TelegramBotMonitoringService $service): Response
+    {
+        return response($service->toCsv($this->botMonitoringFilters()), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="bot-monitoring-tickets.csv"',
+        ]);
+    }
+
     private function blankFilters(): array
     {
         return ['q' => '', 'status' => 'all', 'agent_id' => 'all', 'store_id' => 'all', 'agents_view' => 'top', 'period' => 'this_month', 'type' => 'all', 'report_view' => 'transaksi', 'from' => null, 'to' => null, 'store_ids' => [], 'statuses' => []];
@@ -676,7 +1224,12 @@ class MaController extends Controller
             default => [$now->copy()->startOfMonth()->addSecond(), $now],
         };
 
-        if ($filters['from'] || $filters['to']) {
+        // Only 'custom' lets the raw from/to inputs win - for every other
+        // period the Dari/Sampai date fields keep whatever value was last
+        // typed (browsers don't clear them on their own), so honoring those
+        // unconditionally here silently overrode presets like "Bulan Lalu"
+        // with whatever stale dates happened to still be in the inputs.
+        if ($filters['period'] === 'custom' && ($filters['from'] || $filters['to'])) {
             $from = $filters['from'] ? CarbonImmutable::parse($filters['from'], 'Asia/Jakarta')->startOfDay() : $from;
             $to = $filters['to'] ? CarbonImmutable::parse($filters['to'], 'Asia/Jakarta')->endOfDay() : $to;
         }
@@ -721,14 +1274,119 @@ class MaController extends Controller
             ->orderBy('name');
     }
 
+    public function magnetopaySubmissions(Request $request): View
+    {
+        $maId = $this->currentMaId();
+        $filters = $this->filters();
+
+        $registrations = MerchantRegistration::query()
+            ->with(['agent', 'merchant'])
+            ->where('gateway', 'magnetopay')
+            ->when($maId, fn ($query) => $query->where(
+                fn ($nested) => $nested->whereRelation('agent', 'ma_user_id', $maId)->when(! $this->isDemoUser(), fn ($n) => $n->orWhereNull('agent_id'))
+            ))
+            ->when($filters['q'] !== '', fn ($query) => $query->where('store_name', 'like', $filters['q'].'%'))
+            ->when($filters['status'] !== 'all', fn ($query) => $query->where('status', $filters['status']))
+            ->when($filters['agent_id'] !== 'all', fn ($query) => $query->where('agent_id', $filters['agent_id']))
+            ->latest()
+            ->get();
+
+        $agents = Agent::query()
+            ->when($maId, fn ($query) => $query->where('ma_user_id', $maId))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return view('paygrid.ma-magnetopay-submissions', [
+            'roleLabel' => $request->user()?->role === 'magneto_ops' ? 'Magneto Ops' : 'MA',
+            'menus' => app(\App\Services\Navigation\MenuBuilder::class)->ma(),
+            'active' => 'magnetopay-submissions',
+            'registrations' => $registrations,
+            'agents' => $agents,
+            'filters' => $filters,
+        ]);
+    }
+
+    public function updateMagnetopaySubmission(Request $request, MerchantRegistration $registration, AuditLogService $audit): RedirectResponse
+    {
+        $maId = $this->currentMaId();
+        // magneto_ops (e.g. Yesika) handles Magnetopay intake for every MA, not
+        // just one - same unrestricted treatment as superadmin here, scoped
+        // down everywhere else only by which routes/menu items that role has.
+        if (! in_array($request->user()?->role, ['superadmin', 'magneto_ops'], true)) {
+            $registration->loadMissing('agent');
+            $ownedByThisMa = $registration->agent_id === null || (int) $registration->agent?->ma_user_id === $maId;
+            abort_unless($request->user()?->role === 'ma' && $ownedByThisMa, 403);
+        }
+
+        $data = $request->validate([
+            'agent_id' => ['nullable', Rule::exists('agents', 'id')->when($maId, fn ($rule) => $rule->where('ma_user_id', $maId))],
+            'merchant_key' => ['nullable', 'string', 'max:255'],
+            // Named gateway_merchant_id (not merchant_id) to avoid colliding with
+            // $registration->merchant_id below, which is the FK to the approved
+            // Merchant row - a completely different thing from the gateway's own
+            // merchant identifier string stored on that Merchant.
+            'gateway_merchant_id' => ['nullable', 'string', 'max:160'],
+        ]);
+
+        $before = $registration->only(['agent_id']);
+        $payload = (array) ($registration->payload ?? []);
+        if (array_key_exists('merchant_key', $data)) {
+            $payload['merchant_key'] = $data['merchant_key'];
+        }
+        if (array_key_exists('gateway_merchant_id', $data)) {
+            $payload['merchant_id'] = $data['gateway_merchant_id'];
+        }
+        $registration->update([
+            'agent_id' => $data['agent_id'] ?? null,
+            'payload' => $payload,
+        ]);
+
+        if ($registration->merchant_id) {
+            // merchant_key is cast 'encrypted' on the model - a query-builder
+            // ->update() bypasses casts entirely and would write the plain
+            // secret key unencrypted, so this goes through a real model
+            // instance instead.
+            Merchant::query()->find($registration->merchant_id)?->update([
+                'agent_id' => $data['agent_id'] ?? null,
+                'merchant_key' => $data['merchant_key'] ?? null,
+                'merchant_id' => $data['gateway_merchant_id'] ?? null,
+            ]);
+        }
+
+        $audit->record('ma.magnetopay_submission_updated', $registration, $before, $registration->only(['agent_id']));
+
+        return back()->with('status', 'Submission berhasil diupdate.');
+    }
+
     private function registrations(array $filters)
     {
         return MerchantRegistration::query()->with('agent')
-            ->when($this->currentMaId(), fn ($query, $maId) => $query->whereRelation('agent', 'ma_user_id', $maId))
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->where(
+                fn ($nested) => $nested->whereRelation('agent', 'ma_user_id', $maId)->when(! $this->isDemoUser(), fn ($n) => $n->orWhereNull('agent_id'))
+            ))
             ->when($filters['q'] !== '', fn ($query) => $query->where(fn ($nested) => $nested->where('store_name', 'like', $filters['q'].'%')->orWhere('engine_name', 'like', $filters['q'].'%')->orWhereRelation('agent', 'name', 'like', $filters['q'].'%')))
             ->when($filters['status'] !== 'all', fn ($query) => $query->where('status', $filters['status']))
             ->orderByRaw("CASE WHEN status IN ('pending', 'pending_agent', 'pending_ma') THEN 0 WHEN status = 'approved' THEN 1 WHEN status = 'rejected' THEN 2 ELSE 3 END")
             ->latest();
+    }
+
+    /**
+     * Unfiltered counts for the three status pills on the approval page
+     * header - independent of whatever status/q filter is currently applied
+     * to the table below them.
+     */
+    private function approvalCounts(): array
+    {
+        $base = MerchantRegistration::query()
+            ->when($this->currentMaId(), fn ($query, $maId) => $query->where(
+                fn ($nested) => $nested->whereRelation('agent', 'ma_user_id', $maId)->when(! $this->isDemoUser(), fn ($n) => $n->orWhereNull('agent_id'))
+            ));
+
+        return [
+            'pending' => (clone $base)->whereIn('status', ['pending', 'pending_agent', 'pending_ma'])->count(),
+            'approved' => (clone $base)->where('status', 'approved')->count(),
+            'rejected' => (clone $base)->where('status', 'rejected')->count(),
+        ];
     }
 
     /**
@@ -766,6 +1424,55 @@ class MaController extends Controller
             ->when(! empty($filters['statuses']), fn ($query) => $query->whereIn('topup_requests.status', $filters['statuses']))
             ->when($filters['store_id'] !== 'all', fn ($query) => $query->where('topup_requests.merchant_id', $filters['store_id']))
             ->when(! empty($filters['store_ids']), fn ($query) => $query->whereIn('topup_requests.merchant_id', $filters['store_ids']));
+    }
+
+    /**
+     * merchant_daily_metrics only tracks 3 coarse status buckets (success /
+     * pending / expired+failed+rejected combined) and has no payment_id/rrn/
+     * customer_reference columns to search - so the rollup fast path is only
+     * correct when the caller isn't narrowing by free-text search or by a
+     * specific status finer than those buckets. agent_id/store_id/store_ids
+     * narrowing is fine (the rollup is keyed by merchant_id).
+     */
+    private function canUseMetricRollup(array $filters): bool
+    {
+        return $filters['q'] === '' && $filters['status'] === 'all' && empty($filters['statuses']);
+    }
+
+    private function rollupScopedMerchantIds(array $filters)
+    {
+        $maId = $this->currentMaId();
+
+        $scopedMerchantIds = ($maId || $filters['agent_id'] !== 'all')
+            ? Merchant::query()
+                ->when($maId, fn ($query) => $query->whereRelation('agent', 'ma_user_id', $maId))
+                ->when($filters['agent_id'] !== 'all', fn ($query) => $query->where('agent_id', $filters['agent_id']))
+                ->pluck('id')
+            : null;
+
+        if ($filters['store_id'] !== 'all') {
+            $scopedMerchantIds = $scopedMerchantIds !== null
+                ? $scopedMerchantIds->intersect([(int) $filters['store_id']])->values()
+                : collect([(int) $filters['store_id']]);
+        }
+
+        if (! empty($filters['store_ids'])) {
+            $scopedMerchantIds = $scopedMerchantIds !== null
+                ? $scopedMerchantIds->intersect($filters['store_ids'])->values()
+                : collect($filters['store_ids']);
+        }
+
+        return $scopedMerchantIds;
+    }
+
+    private function metricRollupQuery(array $filters)
+    {
+        $merchantIds = $this->rollupScopedMerchantIds($filters);
+
+        return MerchantDailyMetric::query()
+            ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds))
+            ->when($filters['from'], fn ($query) => $query->whereDate('metric_date', '>=', $this->wibDate($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->whereDate('metric_date', '<=', $this->wibDate($filters['to'])));
     }
 
     private function transactions(array $filters)
@@ -918,14 +1625,23 @@ class MaController extends Controller
 
     private function summary(array $filters): array
     {
-        $totals = (clone $this->transactionsQuery($filters))
-            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_total")
-            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as volume_success")
-            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.net_amount ELSE 0 END), 0) as total_settlement")
-            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'pending' THEN topup_requests.amount ELSE 0 END), 0) as pending_transaction_amount")
-            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
-            ->selectRaw("SUM(CASE WHEN topup_requests.status IN ('expired', 'failed', 'rejected') THEN 1 ELSE 0 END) as trx_expired")
-            ->first();
+        $totals = $this->canUseMetricRollup($filters)
+            ? $this->metricRollupQuery($filters)
+                ->selectRaw('COALESCE(SUM(trx_success), 0) as trx_total')
+                ->selectRaw('COALESCE(SUM(amount_success), 0) as volume_success')
+                ->selectRaw('COALESCE(SUM(net_success), 0) as total_settlement')
+                ->selectRaw('COALESCE(SUM(amount_pending), 0) as pending_transaction_amount')
+                ->selectRaw('COALESCE(SUM(trx_pending), 0) as trx_pending')
+                ->selectRaw('COALESCE(SUM(trx_expired), 0) as trx_expired')
+                ->first()
+            : (clone $this->transactionsQuery($filters))
+                ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_total")
+                ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as volume_success")
+                ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.net_amount ELSE 0 END), 0) as total_settlement")
+                ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'pending' THEN topup_requests.amount ELSE 0 END), 0) as pending_transaction_amount")
+                ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
+                ->selectRaw("SUM(CASE WHEN topup_requests.status IN ('expired', 'failed', 'rejected') THEN 1 ELSE 0 END) as trx_expired")
+                ->first();
         $fee = $this->feeTotalsForFilters($filters);
         $hgSettlement = $this->hgSettlements($filters)->sum('net_amount');
         $balances = MerchantGatewayBalance::query()
@@ -953,6 +1669,7 @@ class MaController extends Controller
             'unassigned' => $this->merchants($filters)->whereNull('agent_id')->count(),
             'fee_ma' => $fee['ma'],
             'fee_agent' => $fee['agent'],
+            'fee_merchant' => $fee['merchant'],
             'available_balance' => (int) ($balances->active ?? 0),
             'pending_settlement' => (int) ($balances->pending ?? 0),
         ];
@@ -960,17 +1677,21 @@ class MaController extends Controller
 
     private function reportAgents(array $filters)
     {
-        $metrics = TopupRequest::query()
-            ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
-            ->join('agents', 'agents.id', '=', 'merchants.agent_id')
+        // agent_id is denormalized directly onto merchant_daily_metrics at
+        // write time, so this reads from the ~5k-row rollup instead of
+        // joining+scanning the 1M+-row topup_requests table - no merchant/
+        // status/text filters are accepted by this method, so there's no
+        // rollup-coverage gap to guard against here.
+        $metrics = MerchantDailyMetric::query()
+            ->join('agents', 'agents.id', '=', 'merchant_daily_metrics.agent_id')
             ->when($this->currentMaId(), fn ($query, $maId) => $query->where('agents.ma_user_id', $maId))
-            ->when($filters['from'], fn ($query) => $query->where('topup_requests.submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('topup_requests.submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw("merchants.agent_id, COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as volume")
-            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as pending")
-            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as settled")
-            ->whereNotNull('merchants.agent_id')
-            ->groupBy('merchants.agent_id')
+            ->when($filters['from'], fn ($query) => $query->whereDate('merchant_daily_metrics.metric_date', '>=', $this->wibDate($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->whereDate('merchant_daily_metrics.metric_date', '<=', $this->wibDate($filters['to'])))
+            ->selectRaw('merchant_daily_metrics.agent_id, COALESCE(SUM(merchant_daily_metrics.amount_success), 0) as volume')
+            ->selectRaw('COALESCE(SUM(merchant_daily_metrics.trx_pending), 0) as pending')
+            ->selectRaw('COALESCE(SUM(merchant_daily_metrics.trx_success), 0) as settled')
+            ->whereNotNull('merchant_daily_metrics.agent_id')
+            ->groupBy('merchant_daily_metrics.agent_id')
             ->get()
             ->keyBy('agent_id');
 
@@ -1032,13 +1753,25 @@ class MaController extends Controller
 
     private function selectedStoreStats(array $filters): array
     {
-        $row = (clone $this->transactionsQuery($filters))
-            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_total")
-            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_success")
-            ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
-            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as amount_success")
-            ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.net_amount ELSE 0 END), 0) as settlement")
-            ->first();
+        // trx_total here means every attempted transaction regardless of
+        // status, not just successes - trx_success + trx_pending + trx_expired
+        // covers the whole enum (success/pending/expired/failed/rejected), so
+        // summing those 3 rollup buckets reproduces COUNT(*) exactly.
+        $row = $this->canUseMetricRollup($filters)
+            ? $this->metricRollupQuery($filters)
+                ->selectRaw('COALESCE(SUM(trx_success + trx_pending + trx_expired), 0) as trx_total')
+                ->selectRaw('COALESCE(SUM(trx_success), 0) as trx_success')
+                ->selectRaw('COALESCE(SUM(trx_pending), 0) as trx_pending')
+                ->selectRaw('COALESCE(SUM(amount_success), 0) as amount_success')
+                ->selectRaw('COALESCE(SUM(net_success), 0) as settlement')
+                ->first()
+            : (clone $this->transactionsQuery($filters))
+                ->selectRaw('COUNT(*) as trx_total')
+                ->selectRaw("SUM(CASE WHEN topup_requests.status = 'success' THEN 1 ELSE 0 END) as trx_success")
+                ->selectRaw("SUM(CASE WHEN topup_requests.status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
+                ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.amount ELSE 0 END), 0) as amount_success")
+                ->selectRaw("COALESCE(SUM(CASE WHEN topup_requests.status = 'success' THEN topup_requests.net_amount ELSE 0 END), 0) as settlement")
+                ->first();
 
         return [
             'trx_total' => (int) ($row->trx_total ?? 0),
@@ -1051,11 +1784,20 @@ class MaController extends Controller
 
     private function feeTotalsForFilters(array $filters): array
     {
-        $volumesByMerchant = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
-            ->selectRaw('topup_requests.merchant_id as merchant_id')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
-            ->groupBy('topup_requests.merchant_id')
-            ->get();
+        // status is forced to 'success' either way, so only the free-text
+        // search and the extra statuses[] filter (which transactionsQuery
+        // would stack on top of the forced 'success', not replace) need to
+        // be absent for the rollup path to reproduce the same result.
+        $volumesByMerchant = ($filters['q'] === '' && empty($filters['statuses']))
+            ? $this->metricRollupQuery($filters)
+                ->selectRaw('merchant_id, COALESCE(SUM(amount_success), 0) as volume')
+                ->groupBy('merchant_id')
+                ->get()
+            : (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
+                ->selectRaw('topup_requests.merchant_id as merchant_id')
+                ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
+                ->groupBy('topup_requests.merchant_id')
+                ->get();
 
         $percents = Merchant::query()
             ->whereIn('id', $volumesByMerchant->pluck('merchant_id'))
@@ -1082,12 +1824,18 @@ class MaController extends Controller
 
     private function feeAmountsByMerchant(array $filters)
     {
-        $volumesByMerchant = (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
-            ->selectRaw('topup_requests.merchant_id as merchant_id')
-            ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
-            ->groupBy('topup_requests.merchant_id')
-            ->get()
-            ->keyBy('merchant_id');
+        $volumesByMerchant = ($filters['q'] === '' && empty($filters['statuses']))
+            ? $this->metricRollupQuery($filters)
+                ->selectRaw('merchant_id, COALESCE(SUM(amount_success), 0) as volume')
+                ->groupBy('merchant_id')
+                ->get()
+                ->keyBy('merchant_id')
+            : (clone $this->transactionsQuery(array_merge($filters, ['status' => 'success'])))
+                ->selectRaw('topup_requests.merchant_id as merchant_id')
+                ->selectRaw('COALESCE(SUM(topup_requests.amount), 0) as volume')
+                ->groupBy('topup_requests.merchant_id')
+                ->get()
+                ->keyBy('merchant_id');
 
         $percents = Merchant::query()
             ->whereIn('id', $volumesByMerchant->keys())
@@ -1184,8 +1932,16 @@ class MaController extends Controller
      * (null = no scoping). analyticsAgentLeaderboard()'s current-window figures
      * and analyticsRevenueConcentration() group the exact same merchant set
      * over the exact same window - memoized per request so that when both run
-     * in the same Analytics page load (both cache misses), the ~130k-row scan
-     * only happens once instead of twice.
+     * in the same Analytics page load (both cache misses), the scan only
+     * happens once instead of twice.
+     *
+     * Reads from the merchant_daily_metrics rollup (keyed by WIB calendar day,
+     * not exact timestamp) rather than raw topup_requests - callers only use
+     * this for trend/growth comparisons (leaderboard, revenue concentration),
+     * never exact settlement totals, so rounding $from/$to to their WIB day
+     * is an acceptable tradeoff for scanning ~227x fewer rows. $from/$to can
+     * fall mid-day (e.g. the "previous period" window is "now minus N
+     * seconds", not midnight-aligned) - this widens that window to whole days.
      */
     private function merchantVolumeForWindow($merchantIds, ?CarbonImmutable $from, CarbonImmutable $to)
     {
@@ -1195,12 +1951,11 @@ class MaController extends Controller
             return $this->merchantVolumeForWindowCache;
         }
 
-        $rows = TopupRequest::query()
+        $rows = MerchantDailyMetric::query()
             ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds))
-            ->where('status', 'success')
-            ->when($from, fn ($query) => $query->where('submitted_at', '>=', $from))
-            ->where('submitted_at', '<=', $to)
-            ->selectRaw('merchant_id, SUM(amount) as volume')
+            ->when($from, fn ($query) => $query->whereDate('metric_date', '>=', $from->copy()->setTimezone('Asia/Jakarta')->toDateString()))
+            ->whereDate('metric_date', '<=', $to->copy()->setTimezone('Asia/Jakarta')->toDateString())
+            ->selectRaw('merchant_id, COALESCE(SUM(amount_success), 0) as volume')
             ->groupBy('merchant_id')
             ->get();
 
@@ -1212,18 +1967,17 @@ class MaController extends Controller
 
     private function analyticsBisnis(array $filters): array
     {
+        // metric_date is already a WIB calendar day (MetricRollupService
+        // computes it that way), so no CONVERT_TZ expression needed here.
         $merchantIds = $this->maScopedMerchantIds();
-        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
-        $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
 
-        $rows = TopupRequest::query()
-            ->where('status', 'success')
+        $rows = MerchantDailyMetric::query()
             ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds))
-            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw("{$dateExpr} as d")
-            ->selectRaw('COALESCE(SUM(amount), 0) as gmv')
-            ->selectRaw('COALESCE(SUM(fee_amount), 0) as fee')
+            ->when($filters['from'], fn ($query) => $query->whereDate('metric_date', '>=', $this->wibDate($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->whereDate('metric_date', '<=', $this->wibDate($filters['to'])))
+            ->selectRaw('DATE(metric_date) as d')
+            ->selectRaw('COALESCE(SUM(amount_success), 0) as gmv')
+            ->selectRaw('COALESCE(SUM(fee_total), 0) as fee')
             ->groupBy('d')
             ->orderBy('d')
             ->get();
@@ -1456,19 +2210,15 @@ class MaController extends Controller
 
     private function analyticsVolumeProjection(): array
     {
-        $from = now('Asia/Jakarta')->subDays(29)->startOfDay()->utc();
-        $to = now();
+        $from = now('Asia/Jakarta')->subDays(29)->toDateString();
+        $to = now('Asia/Jakarta')->toDateString();
         $merchantIds = $this->maScopedMerchantIds();
 
-        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
-        $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
-
-        $rows = TopupRequest::query()
-            ->where('status', 'success')
+        $rows = MerchantDailyMetric::query()
             ->when($merchantIds !== null, fn ($query) => $query->whereIn('merchant_id', $merchantIds))
-            ->where('submitted_at', '>=', $from)
-            ->where('submitted_at', '<=', $to)
-            ->selectRaw("{$dateExpr} as d, COALESCE(SUM(amount), 0) as volume")
+            ->whereDate('metric_date', '>=', $from)
+            ->whereDate('metric_date', '<=', $to)
+            ->selectRaw('DATE(metric_date) as d, COALESCE(SUM(amount_success), 0) as volume')
             ->groupBy('d')
             ->orderBy('d')
             ->get()
@@ -1963,14 +2713,13 @@ class MaController extends Controller
      */
     private function merchantSuccessTotals(array $filters, $merchantIds)
     {
-        return TopupRequest::query()
+        return MerchantDailyMetric::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->where('status', 'success')
-            ->when($filters['from'], fn ($query) => $query->where('submitted_at', '>=', $this->rangeStart($filters['from'])))
-            ->when($filters['to'], fn ($query) => $query->where('submitted_at', '<=', $this->rangeEnd($filters['to'])))
-            ->selectRaw('merchant_id, COUNT(*) as trx_total')
-            ->selectRaw('COALESCE(SUM(amount), 0) as volume_success')
-            ->selectRaw('COALESCE(SUM(net_amount), 0) as settlement')
+            ->when($filters['from'], fn ($query) => $query->whereDate('metric_date', '>=', $this->wibDate($filters['from'])))
+            ->when($filters['to'], fn ($query) => $query->whereDate('metric_date', '<=', $this->wibDate($filters['to'])))
+            ->selectRaw('merchant_id, COALESCE(SUM(trx_success), 0) as trx_total')
+            ->selectRaw('COALESCE(SUM(amount_success), 0) as volume_success')
+            ->selectRaw('COALESCE(SUM(net_success), 0) as settlement')
             ->groupBy('merchant_id')
             ->get()
             ->keyBy('merchant_id');
@@ -1986,20 +2735,24 @@ class MaController extends Controller
     private function dailyMetricSeries($merchantIds, int $days = 14): array
     {
         $isSqlite = DB::connection()->getDriverName() === 'sqlite';
-        $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
-        $since = now('Asia/Jakarta')->subDays($days - 1)->startOfDay()->utc();
+        $since = now('Asia/Jakarta')->subDays($days - 1)->toDateString();
 
-        $rows = TopupRequest::query()
+        // merchant_daily_metrics already stores these exact buckets per WIB
+        // day (see MetricRollupService) - reading the ~5k-row rollup here
+        // instead of scanning raw topup_requests is the single biggest win
+        // of this change, since this powers the Overview page's hero tiles
+        // and sparkline on every load.
+        $rows = MerchantDailyMetric::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->where('submitted_at', '>=', $since)
-            ->selectRaw("{$dateExpr} as d")
-            ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as trx_success")
-            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as volume_success")
-            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN fee_amount ELSE 0 END), 0) as fee")
-            ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as trx_pending")
-            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as pending_amount")
-            ->selectRaw("SUM(CASE WHEN status IN ('expired', 'failed', 'rejected') THEN 1 ELSE 0 END) as trx_risk")
-            ->selectRaw("COALESCE(SUM(CASE WHEN status IN ('expired', 'failed', 'rejected') THEN amount ELSE 0 END), 0) as risk_amount")
+            ->whereDate('metric_date', '>=', $since)
+            ->selectRaw('DATE(metric_date) as d')
+            ->selectRaw('COALESCE(SUM(trx_success), 0) as trx_success')
+            ->selectRaw('COALESCE(SUM(amount_success), 0) as volume_success')
+            ->selectRaw('COALESCE(SUM(fee_total), 0) as fee')
+            ->selectRaw('COALESCE(SUM(trx_pending), 0) as trx_pending')
+            ->selectRaw('COALESCE(SUM(amount_pending), 0) as pending_amount')
+            ->selectRaw('COALESCE(SUM(trx_expired), 0) as trx_risk')
+            ->selectRaw('COALESCE(SUM(amount_expired), 0) as risk_amount')
             ->groupBy('d')
             ->get()
             ->keyBy('d');
@@ -2007,10 +2760,12 @@ class MaController extends Controller
         $withdrawalDateExpr = $isSqlite ? "date(gateway_created_at, '+7 hours')" : "DATE(CONVERT_TZ(gateway_created_at, '+00:00', '+07:00'))";
         $withdrawalRows = MerchantWithdrawal::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->where('status', 'COMPLETED')
             ->where('gateway_created_at', '>=', $since)
             ->selectRaw("{$withdrawalDateExpr} as d")
-            ->selectRaw('COALESCE(SUM(amount), 0) as withdrawal')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN amount ELSE 0 END), 0) as withdrawal")
+            ->selectRaw("SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as withdrawal_trx")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'PENDING' THEN amount ELSE 0 END), 0) as withdrawal_pending_amount")
+            ->selectRaw("SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) as withdrawal_pending_trx")
             ->groupBy('d')
             ->get()
             ->keyBy('d');
@@ -2033,6 +2788,9 @@ class MaController extends Controller
                 'risk_amount' => (int) ($row->risk_amount ?? 0),
                 'success_rate' => $attempted > 0 ? round($trxSuccess / $attempted * 100, 2) : 0,
                 'withdrawal' => (int) ($withdrawalRows->get($date)->withdrawal ?? 0),
+                'withdrawal_trx' => (int) ($withdrawalRows->get($date)->withdrawal_trx ?? 0),
+                'withdrawal_pending_amount' => (int) ($withdrawalRows->get($date)->withdrawal_pending_amount ?? 0),
+                'withdrawal_pending_trx' => (int) ($withdrawalRows->get($date)->withdrawal_pending_trx ?? 0),
             ];
         }
 
@@ -2044,7 +2802,7 @@ class MaController extends Controller
      * "Transaction Flow" chart's default hourly view (1H/6H/24H are all just
      * PHP-side slices of this same 24-bucket array, no extra queries).
      */
-    private function overviewHourlyFlow($merchantIds): array
+    private function overviewHourlyFlow($merchantIds, array $topChannels = [], array $topMerchantIds = []): array
     {
         $isSqlite = DB::connection()->getDriverName() === 'sqlite';
         $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
@@ -2072,14 +2830,42 @@ class MaController extends Controller
         $withdrawalHourExpr = $isSqlite ? "CAST(strftime('%H', gateway_created_at, '+7 hours') AS INTEGER)" : "HOUR(CONVERT_TZ(gateway_created_at, '+00:00', '+07:00'))";
         $withdrawalRows = MerchantWithdrawal::query()
             ->whereIn('merchant_id', $merchantIds)
-            ->where('status', 'COMPLETED')
             ->where('gateway_created_at', '>=', $yesterdayStart->utc())
             ->where('gateway_created_at', '<', $todayStart->copy()->addDay()->utc())
             ->selectRaw("{$withdrawalDateExpr} as d, {$withdrawalHourExpr} as h")
-            ->selectRaw('COALESCE(SUM(amount), 0) as withdrawal')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN amount ELSE 0 END), 0) as withdrawal")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'PENDING' THEN amount ELSE 0 END), 0) as withdrawal_pending")
             ->groupBy('d', 'h')
             ->get()
             ->groupBy('d');
+
+        // QRIS Source / Top Merchant breakdown: hourly (today only) for the
+        // 1D range, plus a daily version (last 30 days) so the 7D/Month range
+        // toggle on the Analytics card has something to slice from.
+        $sourceRows = empty($topChannels) ? collect() : TopupRequest::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->whereIn('channel', $topChannels)
+            ->where('status', 'success')
+            ->where('submitted_at', '>=', $todayStart->copy()->utc())
+            ->where('submitted_at', '<', $todayStart->copy()->addDay()->utc())
+            ->selectRaw("{$hourExpr} as h, channel")
+            ->selectRaw('COALESCE(SUM(amount), 0) as volume')
+            ->groupBy('h', 'channel')
+            ->get()
+            ->groupBy('channel');
+
+        $merchantRows = empty($topMerchantIds) ? collect() : TopupRequest::query()
+            ->whereIn('merchant_id', $topMerchantIds)
+            ->where('status', 'success')
+            ->where('submitted_at', '>=', $todayStart->copy()->utc())
+            ->where('submitted_at', '<', $todayStart->copy()->addDay()->utc())
+            ->selectRaw("{$hourExpr} as h, merchant_id")
+            ->selectRaw('COALESCE(SUM(amount), 0) as volume')
+            ->groupBy('h', 'merchant_id')
+            ->get()
+            ->groupBy('merchant_id');
+
+        $merchantNames = empty($topMerchantIds) ? collect() : Merchant::query()->whereIn('id', $topMerchantIds)->pluck('name', 'id');
 
         $extract = function ($dateKey, string $field) use ($rows) {
             $byHour = ($rows->get($dateKey) ?? collect())->keyBy('h');
@@ -2091,14 +2877,28 @@ class MaController extends Controller
             return $out;
         };
 
-        $extractWithdrawal = function ($dateKey) use ($withdrawalRows) {
+        $extractWithdrawal = function ($dateKey, string $field = 'withdrawal') use ($withdrawalRows) {
             $byHour = ($withdrawalRows->get($dateKey) ?? collect())->keyBy('h');
             $out = [];
             for ($h = 0; $h < 24; $h++) {
-                $out[] = (int) ($byHour->get($h)->withdrawal ?? 0);
+                $out[] = (int) ($byHour->get($h)->{$field} ?? 0);
             }
 
             return $out;
+        };
+
+        $extractSeries = function ($groupedRows, $keys) {
+            $series = [];
+            foreach ($keys as $key => $name) {
+                $byHour = ($groupedRows->get($key) ?? collect())->keyBy('h');
+                $data = [];
+                for ($h = 0; $h < 24; $h++) {
+                    $data[] = (int) ($byHour->get($h)->volume ?? 0);
+                }
+                $series[] = ['name' => $name, 'data' => $data];
+            }
+
+            return $series;
         };
 
         $labels = [];
@@ -2118,7 +2918,77 @@ class MaController extends Controller
             'yesterdayPendingTrx' => $extract($yesterday, 'pending_trx'),
             'todayWithdrawal' => $extractWithdrawal($today),
             'yesterdayWithdrawal' => $extractWithdrawal($yesterday),
+            'todayWithdrawalPending' => $extractWithdrawal($today, 'withdrawal_pending'),
+            'qrisSourceSeries' => $extractSeries($sourceRows, array_combine($topChannels, $topChannels)),
+            'topMerchantSeries' => $extractSeries($merchantRows, $merchantNames->all()),
             'currentHour' => (int) now('Asia/Jakarta')->format('G'),
+        ];
+    }
+
+    /**
+     * 30-day daily breakdown per channel/merchant, for the Analytics card's
+     * 7D/Month range toggle. Split out from overviewHourlyFlow() (and cached
+     * separately with a longer TTL, see page()) because this GROUP BY over
+     * 30 days x channel/merchant is the most expensive query on the Overview
+     * page on a large merchant portfolio - no need to re-pay that cost every
+     * time the cheap, fast-changing hourly cache expires.
+     */
+    private function overviewDailyBreakdown($merchantIds, array $topChannels = [], array $topMerchantIds = []): array
+    {
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $dateExpr = $isSqlite ? "date(submitted_at, '+7 hours')" : "DATE(CONVERT_TZ(submitted_at, '+00:00', '+07:00'))";
+
+        $todayStart = now('Asia/Jakarta')->startOfDay();
+        $since30 = $todayStart->copy()->subDays(29);
+
+        $dailySourceRows = empty($topChannels) ? collect() : TopupRequest::query()
+            ->whereIn('merchant_id', $merchantIds)
+            ->whereIn('channel', $topChannels)
+            ->where('status', 'success')
+            ->where('submitted_at', '>=', $since30->copy()->utc())
+            ->where('submitted_at', '<', $todayStart->copy()->addDay()->utc())
+            ->selectRaw("{$dateExpr} as d, channel")
+            ->selectRaw('COALESCE(SUM(amount), 0) as volume')
+            ->groupBy('d', 'channel')
+            ->get()
+            ->groupBy('channel');
+
+        $dailyMerchantRows = empty($topMerchantIds) ? collect() : TopupRequest::query()
+            ->whereIn('merchant_id', $topMerchantIds)
+            ->where('status', 'success')
+            ->where('submitted_at', '>=', $since30->copy()->utc())
+            ->where('submitted_at', '<', $todayStart->copy()->addDay()->utc())
+            ->selectRaw("{$dateExpr} as d, merchant_id")
+            ->selectRaw('COALESCE(SUM(amount), 0) as volume')
+            ->groupBy('d', 'merchant_id')
+            ->get()
+            ->groupBy('merchant_id');
+
+        $merchantNames = empty($topMerchantIds) ? collect() : Merchant::query()->whereIn('id', $topMerchantIds)->pluck('name', 'id');
+
+        $dailyLabels = [];
+        for ($i = 29; $i >= 0; $i--) {
+            $dailyLabels[] = $todayStart->copy()->subDays($i)->toDateString();
+        }
+
+        $extractDailySeries = function ($groupedRows, $keys) use ($dailyLabels) {
+            $series = [];
+            foreach ($keys as $key => $name) {
+                $byDate = ($groupedRows->get($key) ?? collect())->keyBy('d');
+                $data = [];
+                foreach ($dailyLabels as $d) {
+                    $data[] = (int) ($byDate->get($d)->volume ?? 0);
+                }
+                $series[] = ['name' => $name, 'data' => $data];
+            }
+
+            return $series;
+        };
+
+        return [
+            'dailyLabels' => $dailyLabels,
+            'qrisSourceDailySeries' => $extractDailySeries($dailySourceRows, array_combine($topChannels, $topChannels)),
+            'topMerchantDailySeries' => $extractDailySeries($dailyMerchantRows, $merchantNames->all()),
         ];
     }
 
@@ -2135,35 +3005,26 @@ class MaController extends Controller
         $spark = fn (string $field) => collect($dailySeries)->pluck($field)->slice(-7)->values()->all();
 
         $metrics = [
-            'revenue_today' => 'fee',
-            'successful_volume' => 'volume_success',
+            'revenue_today' => 'volume_success',
+            'successful_volume' => 'withdrawal',
             'success_rate' => 'success_rate',
             'pending' => 'pending_amount',
             'at_risk' => 'risk_amount',
         ];
+        // Only the two stat tiles ('revenue_today'/Collection, 'successful_volume'/
+        // Disbursement) show a transaction count, each from its own domain -
+        // collection trx from TopupRequest, disbursement trx from MerchantWithdrawal.
+        $trxFields = [
+            'revenue_today' => 'trx_success',
+            'successful_volume' => 'withdrawal_trx',
+        ];
 
-        return collect($metrics)->map(fn ($field) => [
+        return collect($metrics)->map(fn ($field, $key) => [
             'value' => $today[$field],
             'change' => $pctChange($today[$field], $yesterday[$field] ?? 0),
             'spark' => $spark($field),
+            'trx' => isset($trxFields[$key]) ? ($today[$trxFields[$key]] ?? 0) : 0,
         ])->all();
-    }
-
-    /**
-     * Today's (WIB, 00:00 - now) disbursement totals for the Overview page's
-     * "Row 2" panel - reshapes the same dailyMetricSeries() bucket already
-     * fetched for the quick-stat tiles, no extra queries.
-     */
-    private function overviewDisbursement(array $dailySeries): array
-    {
-        $today = end($dailySeries);
-
-        return [
-            'total' => $today['volume_success'],
-            'total_trx' => $today['trx_success'],
-            'pending' => $today['pending_amount'],
-            'pending_trx' => $today['trx_pending'],
-        ];
     }
 
     /**
@@ -2216,9 +3077,11 @@ class MaController extends Controller
     }
 
     /**
-     * Top 10 QRIS payment sources (bank/channel) by today's successful TRX
+     * All QRIS payment sources (bank/channel) by today's successful TRX
      * count and amount, for the Overview "QRIS Source" panel - replaces the
      * old per-transaction live ticker with an aggregated daily ranking.
+     * Unlimited (the view paginates client-side) so every channel shows up,
+     * not just the top performers.
      */
     private function topPaymentSources($merchantIds): \Illuminate\Support\Collection
     {
@@ -2235,35 +3098,31 @@ class MaController extends Controller
             ->selectRaw('COALESCE(SUM(amount), 0) as volume')
             ->groupBy('channel')
             ->orderByDesc('volume')
-            ->limit(10)
             ->get();
     }
 
     /**
-     * Top 10 banks by withdrawal amount, for the Overview "Withdrawal by Bank"
-     * panels - completed is today-scoped (matches the rest of this page's
-     * daily framing); pending has no date filter since a stuck withdrawal
-     * from days ago is exactly what this panel exists to surface.
+     * All banks by withdrawal amount today, for the Overview "Withdrawal by
+     * Bank" panels - both completed and pending are today-scoped (matches
+     * the rest of this page's daily framing). Unlimited (the view paginates
+     * client-side) so every bank shows up, not just the top performers.
      */
     private function withdrawalsByBank($merchantIds, string $status): \Illuminate\Support\Collection
     {
+        $todayStart = now('Asia/Jakarta')->startOfDay();
+
         $query = MerchantWithdrawal::query()
             ->whereIn('merchant_id', $merchantIds)
             ->where('status', $status)
             ->whereNotNull('bank_name')
-            ->where('bank_name', '!=', '');
-
-        if ($status === 'COMPLETED') {
-            $todayStart = now('Asia/Jakarta')->startOfDay();
-            $query->where('gateway_created_at', '>=', $todayStart->utc())
-                ->where('gateway_created_at', '<', $todayStart->copy()->addDay()->utc());
-        }
+            ->where('bank_name', '!=', '')
+            ->where('gateway_created_at', '>=', $todayStart->copy()->utc())
+            ->where('gateway_created_at', '<', $todayStart->copy()->addDay()->utc());
 
         return $query->selectRaw('bank_name, COUNT(*) as trx_total')
             ->selectRaw('COALESCE(SUM(amount), 0) as volume')
             ->groupBy('bank_name')
             ->orderByDesc('volume')
-            ->limit(10)
             ->get();
     }
 
@@ -2318,6 +3177,16 @@ class MaController extends Controller
         $user = request()->user();
 
         return $user?->role === 'ma' ? (int) $user->id : null;
+    }
+
+    /**
+     * Demo accounts must never see real, unassigned (agent_id-null)
+     * registrations or other MAs' data that the normal "any MA can claim
+     * an unassigned registration" business rule would otherwise expose.
+     */
+    private function isDemoUser(): bool
+    {
+        return (bool) request()->user()?->is_demo;
     }
 
     private function canUseAgent(Agent $agent): bool

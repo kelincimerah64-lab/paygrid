@@ -256,7 +256,7 @@ PROMPT;
 
         $stats = TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->whereDate('submitted_at', '>=', now('Asia/Jakarta')->subDays(6)->startOfDay()->utc())
+            ->where('submitted_at', '>=', now('Asia/Jakarta')->subDays(6)->startOfDay()->utc())
             ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as trx_success_7d")
             ->selectRaw("COALESCE(SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END), 0) as volume_7d")
             ->first();

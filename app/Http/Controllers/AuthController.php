@@ -84,6 +84,14 @@ class AuthController extends Controller
             return back()->withErrors(['email' => 'Akun belum terhubung ke agent. Hubungi admin.'])->onlyInput('email');
         }
 
+        if ($request->user()->is_demo && $request->getHost() !== config('paygrid.demo_host')) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()->withErrors(['email' => 'Akun demo ini hanya bisa diakses lewat URL demo.'])->onlyInput('email');
+        }
+
         $this->auditAuth('auth.login_success', $request->user(), $request);
 
         // Deliberately not redirect()->intended(): this app's live-polling JS
@@ -119,17 +127,18 @@ class AuthController extends Controller
             'superadmin' => route('superadmin.overview'),
             'cs_pusat' => route('center-support.tickets'),
             'cs_monitor' => route('cs-monitor.index'),
-            'approver' => route('wa-tickets.pending'),
             'agent' => route('agent.overview'),
             'admin' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),
             'readonly_admin' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),
             'boss' => $user?->merchant ? route('merchant.admin.users', $user->merchant) : route('login'),
             'ma' => route('ma.overview'),
+            'magneto_ops' => route('ma.create-store-magnetopay'),
             'cs' => $user?->merchant ? route('merchant.cs.tickets', $user->merchant) : route('login'),
             'readonly_cs' => $user?->merchant ? route('merchant.cs.tickets', $user->merchant) : route('login'),
             'cs_ma' => route('cs-scope.index'),
             'cs_agent' => route('cs-scope.index'),
             'finance' => $user?->merchant ? route('merchant.finance.overview', $user->merchant) : route('login'),
+            'dept_cs', 'dept_dev', 'dept_tech_supp', 'dept_finance', 'dept_settlement', 'dept_fraud', 'dept_dispute' => route('dept-tickets.index'),
             default => route('login'),
         };
     }

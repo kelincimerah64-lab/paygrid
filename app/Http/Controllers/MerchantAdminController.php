@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Concerns\ConvertsWibDateRange;
 use App\Models\AuditLog;
 use App\Models\GatewaySyncLog;
 use App\Models\Merchant;
@@ -18,6 +19,8 @@ use Illuminate\View\View;
 
 class MerchantAdminController extends Controller
 {
+    use ConvertsWibDateRange;
+
     public function page(Merchant $merchant, string $page, MenuBuilder $menus): View
     {
         $menu = $menus->merchantAdmin($merchant);
@@ -45,10 +48,11 @@ class MerchantAdminController extends Controller
         // full-history query + aggregate stats entirely rather than paying for
         // an unbounded scan/sort on every load of pages that don't need it.
         $needsTransactionData = in_array($page, ['qris', 'checklist', 'history'], true);
+        [$submittedRangeStart, $submittedRangeEnd] = $this->wibRangeToUtc($from, $to);
         $requests = $needsTransactionData ? TopupRequest::query()
             ->with('ticket')
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($submittedRangeStart && $submittedRangeEnd, fn ($query) => $query->whereBetween('submitted_at', [$submittedRangeStart, $submittedRangeEnd]))
             ->when($page === 'checklist', fn ($query) => $query->where('status', 'success'))
             ->when($status !== 'all' && $page !== 'checklist', fn ($query) => $status === 'expired' ? $query->whereIn('status', ['expired', 'failed', 'rejected']) : $query->where('status', $status))
             ->when($processed === 'checked', fn ($query) => $query->where('is_processed', true))
@@ -181,9 +185,10 @@ class MerchantAdminController extends Controller
 
     private function transactionStats(Merchant $merchant, ?string $from, ?string $to, string $search): array
     {
+        [$rangeStart, $rangeEnd] = $this->wibRangeToUtc($from, $to);
         $row = TopupRequest::query()
             ->where('merchant_id', $merchant->id)
-            ->when($from && $to, fn ($query) => $query->whereDate('submitted_at', '>=', $from)->whereDate('submitted_at', '<=', $to))
+            ->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('submitted_at', [$rangeStart, $rangeEnd]))
             ->when($search !== '', fn ($query) => $query->where(function ($nested) use ($search) {
                 $nested->where('payment_id', 'like', "{$search}%")
                     ->orWhere('gateway_ref_id', 'like', "{$search}%")

@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\SupportTicket;
 use App\Services\AuditLogService;
 use App\Services\Navigation\MenuBuilder;
+use App\Services\NotificationReadService;
 use App\Services\TelegramBotMonitoringService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -47,9 +50,11 @@ class CenterSupportController extends Controller
             ->simplePaginate(config('paygrid.reports.default_page_size', 50))
             ->withQueryString();
 
+        app(NotificationReadService::class)->markSeen($request->user(), 'center-support-tickets');
+
         return view('paygrid.center-support', [
             'roleLabel' => 'CS Pusat',
-            'menus' => app(MenuBuilder::class)->centerSupport(),
+            'menus' => app(MenuBuilder::class)->centerSupport($request->user()),
             'active' => 'tickets',
             'tickets' => $tickets,
             'statuses' => self::STATUSES,
@@ -64,12 +69,44 @@ class CenterSupportController extends Controller
     {
         return view('paygrid.cs-pusat-bot-monitoring', [
             'roleLabel' => 'CS Pusat',
-            'menus' => app(MenuBuilder::class)->centerSupport(),
+            'menus' => app(MenuBuilder::class)->centerSupport($request->user()),
             'active' => 'bot-monitoring',
             'botMonitoring' => $service->data($this->botMonitoringFilters(), $request->boolean('refresh')),
             'pendingIpWhitelist' => $service->pendingIpWhitelist(),
             'maNotifications' => $this->botReminders($service),
+            'botCanReject' => in_array($request->user()->role, ['cs_pusat', 'superadmin'], true),
         ]);
+    }
+
+    public function botMonitoringReject(Request $request, TelegramBotMonitoringService $service, string $ticketId): RedirectResponse
+    {
+        try {
+            $result = $service->reject($ticketId);
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['bot_reject' => $e->getMessage()]);
+        }
+
+        if ($result['cs_group_message_id']) {
+            $service->deleteTelegramMessage(config('paygrid.telegram_bot_monitoring.cs_group_chat_id'), $result['cs_group_message_id']);
+        }
+        if ($result['merchant_message_id'] && $result['source_chat_id']) {
+            $service->deleteTelegramMessage($result['source_chat_id'], $result['merchant_message_id']);
+        }
+
+        AuditLog::query()->create([
+            'actor_user_id' => $request->user()->id,
+            'actor_role' => $request->user()->role,
+            'action' => 'center_support.bot_ticket_rejected',
+            'target_type' => 'telegram_ticket',
+            'target_id' => $ticketId,
+            'before_payload' => ['status' => $result['previous_status']],
+            'after_payload' => ['status' => 'REJECTED'],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'created_at' => now(),
+        ]);
+
+        return back()->with('status', "Ticket {$ticketId} berhasil direject.");
     }
 
     private function botReminders(TelegramBotMonitoringService $service): Collection
@@ -93,6 +130,14 @@ class CenterSupportController extends Controller
             'to' => request('bot_to'),
             'q' => trim((string) request('bot_q', '')),
         ];
+    }
+
+    public function botMonitoringExport(TelegramBotMonitoringService $service): Response
+    {
+        return response($service->toCsv($this->botMonitoringFilters()), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="bot-monitoring-tickets.csv"',
+        ]);
     }
 
     public function update(Request $request, SupportTicket $ticket, AuditLogService $audit): RedirectResponse

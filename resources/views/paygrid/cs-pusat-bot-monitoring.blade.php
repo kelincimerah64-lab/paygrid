@@ -8,5 +8,8 @@
     </div>
 </div>
 
-@include('paygrid.partials.bot-monitoring-panel', ['botRouteName' => 'center-support.bot-monitoring'])
+@if(session('status'))<div class="status-banner"><span class="badge ok">{{ session('status') }}</span></div>@endif
+@if($errors->any())<div class="status-banner"><span class="badge danger">{{ $errors->first() }}</span></div>@endif
+
+@include('paygrid.partials.bot-monitoring-panel', ['botRouteName' => 'center-support.bot-monitoring', 'botExportRouteName' => 'center-support.bot-monitoring.export', 'botRejectRouteName' => ($botCanReject ?? false) ? 'center-support.bot-monitoring.reject' : null])
 @endsection

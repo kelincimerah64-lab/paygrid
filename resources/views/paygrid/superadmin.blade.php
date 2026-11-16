@@ -341,6 +341,61 @@
 @endpush
 @endif
 
+@if($active === 'system-configuration')
+    <section class="card pad section" style="max-width:520px">
+        <h2>Interval Polling Gateway</h2>
+        <div class="sub">Jeda minimum antar tarikan data dari Hilogate/Magnetopay/Artageto. Scheduler tetap jalan tiap 5 detik, tapi dispatch nyata di-skip sampai jeda ini lewat - jadi efeknya bisa diatur tanpa deploy.</div>
+        <form method="post" action="{{ route('superadmin.system-configuration.update') }}" class="admin-minimum-form section">
+            @csrf
+            <label>Detik<input name="gateway_sync_min_interval_seconds" type="number" min="5" max="3600" value="{{ $gatewaySyncIntervalSeconds }}" required></label>
+            <button class="btn primary">Simpan</button>
+        </form>
+    </section>
+
+    <section class="card pad section" style="max-width:520px">
+        <h2>Jalankan Reconciliation Sekarang</h2>
+        <div class="sub">Normalnya jalan otomatis tanggal 3 tiap bulan (jam 02:00 WIB) untuk bulan sebelumnya. Bisa dipicu manual di sini kalau perlu.</div>
+        <form method="post" action="{{ route('superadmin.system-configuration.reconcile') }}" class="admin-minimum-form section">
+            @csrf
+            <label>Bulan<input name="month" type="month" value="{{ now('Asia/Jakarta')->subMonthNoOverflow()->format('Y-m') }}" required></label>
+            <button class="btn primary">Jalankan</button>
+        </form>
+    </section>
+
+    <div data-live-root data-live-interval="4000">
+    <section class="card qris-panel section" data-live-region="reconciliation-runs">
+        <div class="qris-toolbar">
+            <h2>Hasil Reconciliation</h2>
+            @php($runningCount = $reconciliationRuns->where('status', 'running')->count())
+            <span class="badge {{ $runningCount > 0 ? 'warn' : 'ok' }}">{{ $runningCount > 0 ? $runningCount.' sedang berjalan' : $reconciliationRuns->count().' run terakhir' }}</span>
+        </div>
+        <div class="table-wrap">
+            <table class="table qris-table">
+                <thead><tr><th>Toko</th><th>Tipe</th><th>Bulan</th><th>Status</th><th>Halaman</th><th>Dilihat</th><th>Baru</th><th>Diupdate</th><th>Selesai</th><th>Log</th></tr></thead>
+                <tbody>
+                @forelse($reconciliationRuns as $run)
+                    <tr>
+                        <td>{{ $run->merchant?->name ?: '-' }}</td>
+                        <td>{{ $run->type === 'withdrawal' ? 'Withdrawal' : 'Collection' }}</td>
+                        <td>{{ $run->month }}</td>
+                        <td><span class="badge {{ $run->status === 'completed' ? 'ok' : ($run->status === 'failed' ? 'danger' : 'warn') }}">{{ ucfirst($run->status) }}</span></td>
+                        <td>{{ $run->pages_walked }}</td>
+                        <td>{{ $run->records_seen }}</td>
+                        <td><strong>{{ $run->records_added }}</strong></td>
+                        <td>{{ $run->records_updated }}</td>
+                        <td>{{ $run->completed_at?->timezone('Asia/Jakarta')->format('d M Y H:i') ?: '-' }}</td>
+                        <td>@if($run->last_error)<span class="muted" style="font-size:12px" title="{{ $run->last_error }}">{{ \Illuminate\Support\Str::limit($run->last_error, 60) }}</span>@else-@endif</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="10" class="empty">Belum ada reconciliation run.</td></tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
+    </section>
+    </div>
+@endif
+
 @if(in_array($active, ['add-fee', 'ma', 'merchant-group'], true))
 @push('scripts')
 <script>

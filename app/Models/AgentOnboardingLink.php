@@ -9,8 +9,15 @@ class AgentOnboardingLink extends Model
 {
     protected $fillable = [
         'agent_id',
+        'kind',
         'merchant_registration_id',
         'token',
+        'form_number',
+        'created_by_user_id',
+        'fee_menu',
+        'fee_menu_rates',
+        'disbursement_fee_percent',
+        'disbursement_fee_fixed',
         'recipient_email',
         'recipient_telegram',
         'status',
@@ -21,6 +28,7 @@ class AgentOnboardingLink extends Model
 
     protected $casts = [
         'reusable' => 'boolean',
+        'fee_menu_rates' => 'array',
         'expires_at' => 'datetime',
         'used_at' => 'datetime',
     ];
@@ -28,6 +36,11 @@ class AgentOnboardingLink extends Model
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
     }
 
     public function registration(): BelongsTo

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Concerns\ConvertsWibDateRange;
 use App\Models\AuditLog;
 use App\Models\GatewaySyncLog;
 use Illuminate\Contracts\View\View;
@@ -9,14 +10,16 @@ use Illuminate\Support\Facades\DB;
 
 class MonitoringController extends Controller
 {
+    use ConvertsWibDateRange;
+
     public function logs(): View
     {
         $search = trim((string) request('q', ''));
         $action = (string) request('action', '');
+        [$rangeStart, $rangeEnd] = $this->wibRangeToUtc(request('from') ?: null, request('to') ?: null);
         $base = AuditLog::query()
             ->when($action !== '', fn ($query) => $query->where('action', $action))
-            ->when(request('from'), fn ($query, $from) => $query->whereDate('created_at', '>=', $from))
-            ->when(request('to'), fn ($query, $to) => $query->whereDate('created_at', '<=', $to))
+            ->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('created_at', [$rangeStart, $rangeEnd]))
             ->when($search !== '', fn ($query) => $query->where(function ($nested) use ($search) {
                 $nested->where('action', 'like', "%{$search}%")
                     ->orWhere('target_type', 'like', "%{$search}%")
@@ -33,11 +36,11 @@ class MonitoringController extends Controller
 
     public function index(): View
     {
+        [$rangeStart, $rangeEnd] = $this->wibRangeToUtc(request('from') ?: null, request('to') ?: null);
         $base = GatewaySyncLog::query()
             ->when(request('gateway'), fn ($query, $gateway) => $query->where('gateway', $gateway))
             ->when(request('status'), fn ($query, $status) => $query->where('status', $status))
-            ->when(request('from'), fn ($query, $from) => $query->whereDate('created_at', '>=', $from))
-            ->when(request('to'), fn ($query, $to) => $query->whereDate('created_at', '<=', $to));
+            ->when($rangeStart && $rangeEnd, fn ($query) => $query->whereBetween('created_at', [$rangeStart, $rangeEnd]));
 
         $logs = (clone $base)->with('merchant:id,slug,name')->latest()->paginate(config('paygrid.reports.default_page_size', 50))->withQueryString();
 

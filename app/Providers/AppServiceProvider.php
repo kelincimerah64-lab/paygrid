@@ -56,7 +56,7 @@ class AppServiceProvider extends ServiceProvider
         $merchant = $viewData['merchant'] ?? null;
         $merchantId = $merchant?->id ?: $user?->merchant_id;
         $globalRoles = ['ma', 'superadmin', 'cs_pusat'];
-        $canSeeGlobal = $user && in_array($user->role, $globalRoles, true);
+        $canSeeGlobal = $user && ! $user->is_demo && in_array($user->role, $globalRoles, true);
         $scopeKey = $canSeeGlobal ? 'global' : ($merchantId ? 'merchant-'.$merchantId : 'health-only');
 
         return Cache::remember('paygrid:ops-strip:'.$scopeKey, now()->addSeconds(5), function () use ($canSeeGlobal, $merchantId): array {

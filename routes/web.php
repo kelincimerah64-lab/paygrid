@@ -7,7 +7,6 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentTicketController;
 use App\Http\Controllers\MaTicketController;
-use App\Http\Controllers\MaWaTicketController;
 use App\Http\Controllers\MerchantTicketController;
 use App\Http\Controllers\MobileAppController;
 use App\Http\Controllers\GatewayCallbackController;
@@ -21,6 +20,7 @@ use App\Http\Controllers\MaController;
 use App\Http\Controllers\MaAssistantController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\SuperadminController;
+use App\Http\Controllers\TelegramBroadcastController;
 use App\Http\Controllers\TelegramCsMonitorController;
 use Illuminate\Support\Facades\Route;
 
@@ -42,15 +42,20 @@ Route::get('/ma', [MaController::class, 'page'])->name('ma.overview');
 Route::get('/ma/report', fn (MaController $controller) => $controller->page('report'))->name('ma.report');
 Route::get('/ma/report/export', [MaController::class, 'export'])->name('ma.report.export');
 Route::get('/ma/fee', fn (MaController $controller) => $controller->page('fee'))->name('ma.fee');
+Route::get('/ma/fee/export', [MaController::class, 'feeSplitExport'])->name('ma.fee.export');
 Route::get('/ma/approvals', fn (MaController $controller) => $controller->page('approval'))->name('ma.approvals');
 Route::get('/ma/mapping', fn (MaController $controller) => $controller->page('mapping'))->name('ma.mapping');
 Route::get('/ma/insentif', [MaController::class, 'insentifForm'])->name('ma.insentif');
 Route::post('/ma/insentif/pdf', [MaController::class, 'insentifPdf'])->middleware('throttle:dashboard-writes')->name('ma.insentif.pdf');
+Route::get('/ma/commission', [MaController::class, 'commissionForm'])->name('ma.commission');
+Route::post('/ma/commission', [MaController::class, 'commissionStore'])->middleware('throttle:dashboard-writes')->name('ma.commission.store');
+Route::get('/ma/commission/report', [MaController::class, 'commissionReport'])->name('ma.commission.report');
+Route::patch('/ma/commission/{config}/toggle-status', [MaController::class, 'commissionToggleStatus'])->middleware('throttle:dashboard-writes')->name('ma.commission.toggle-status');
+Route::delete('/ma/commission/{config}', [MaController::class, 'commissionDestroy'])->middleware('throttle:dashboard-writes')->name('ma.commission.destroy');
 Route::post('/ma/mapping/{merchant}', [MaController::class, 'mapAgent'])->middleware('throttle:dashboard-writes')->name('ma.mapping.update');
 Route::get('/ma/stores', fn (MaController $controller) => $controller->page('stores'))->name('ma.stores');
 Route::post('/ma/stores/{merchant}/fee', [MaController::class, 'updateStoreFee'])->middleware('throttle:dashboard-writes')->name('ma.stores.fee.update');
 Route::get('/ma/agents', fn (MaController $controller) => $controller->page('agents'))->name('ma.agents');
-Route::post('/ma/agents', [MaController::class, 'storeAgent'])->middleware('throttle:dashboard-writes')->name('ma.agents.store');
 Route::post('/ma/agents/{agent}/fee', [MaController::class, 'updateAgentFee'])->middleware('throttle:dashboard-writes')->name('ma.agents.fee.update');
 Route::get('/ma/create-store', fn (MaController $controller) => $controller->page('create-store'))->name('ma.create-store');
 Route::post('/ma/create-store', [MaController::class, 'storeMerchant'])->middleware('throttle:dashboard-writes')->name('ma.create-store.store');
@@ -58,9 +63,23 @@ Route::post('/ma/onboarding-links', [MaController::class, 'storeOnboardingLink']
 Route::post('/ma/onboarding-links/{link}/expire', [MaController::class, 'expireOnboardingLink'])->middleware('throttle:dashboard-writes')->name('ma.onboarding-links.expire');
 Route::post('/ma/onboarding-links/bulk', [MaController::class, 'bulkExpireOnboardingLinks'])->middleware('throttle:dashboard-writes')->name('ma.onboarding-links.bulk');
 Route::get('/ma/bot-monitoring', fn (MaController $controller) => $controller->page('bot-monitoring'))->name('ma.bot-monitoring');
+Route::get('/ma/bot-monitoring/export', [MaController::class, 'botMonitoringExport'])->name('ma.bot-monitoring.export');
 Route::get('/ma/analytics', fn (MaController $controller) => $controller->page('analytics'))->name('ma.analytics');
 Route::get('/ma/analytics/tab/{tab}', [MaController::class, 'analyticsTab'])->name('ma.analytics.tab');
 Route::post('/ma/assistant/ask', [MaAssistantController::class, 'ask'])->middleware('throttle:ma-assistant')->name('ma.assistant.ask');
+});
+
+// magneto_ops is a narrow role (see Yesika's account) that only gets these
+// Magnetopay onboarding routes - deliberately NOT part of the main
+// 'role:ma,superadmin' group above, which also covers unrelated MA pages
+// (reports, commissions, full agent list, etc.) this role must not reach.
+Route::middleware(['auth', 'role:ma,superadmin,magneto_ops'])->group(function () {
+Route::post('/ma/agents', [MaController::class, 'storeAgent'])->middleware('throttle:dashboard-writes')->name('ma.agents.store');
+Route::get('/ma/create-store-magnetopay', [MaController::class, 'createStoreMagnetopayForm'])->name('ma.create-store-magnetopay');
+Route::post('/ma/create-store-magnetopay', [MaController::class, 'storeMagnetopayMerchant'])->middleware('throttle:dashboard-writes')->name('ma.create-store-magnetopay.store');
+Route::get('/ma/magnetopay-submissions', [MaController::class, 'magnetopaySubmissions'])->name('ma.magnetopay-submissions');
+Route::post('/ma/magnetopay-submissions/{registration}', [MaController::class, 'updateMagnetopaySubmission'])->middleware('throttle:dashboard-writes')->name('ma.magnetopay-submissions.update');
+Route::post('/ma/onboarding-links/magnetopay', [MaController::class, 'storeOnboardingLinkMagnetopay'])->middleware('throttle:dashboard-writes')->name('ma.onboarding-links.magnetopay.store');
 });
 
 Route::middleware(['auth', 'role:ma,agent,superadmin'])->group(function () {
@@ -68,46 +87,9 @@ Route::get('/ma/tickets', [MaTicketController::class, 'index'])->name('ma.ticket
 Route::post('/ma/tickets', [MaTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('ma.tickets.store');
 });
 
-// MA-only admin surface for the pilot: monitoring dashboard + test-ticket form.
-Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
-Route::get('/ma/wa-tickets', [MaWaTicketController::class, 'index'])->name('ma.wa-tickets.index');
-Route::get('/ma/wa-tickets/create', [MaWaTicketController::class, 'create'])->name('ma.wa-tickets.create');
-Route::post('/ma/wa-tickets', [MaWaTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('ma.wa-tickets.store');
-});
-
-// Real entry point for everyone who reaches a ticket via its WA link - deliberately
-// NOT under /ma/* (that prefix implied MA-only, which was wrong once CS Pusat and
-// Approver also need to land here). Viewing is open to every role that can act on
-// a ticket in some way; approve/claim/etc below are gated more tightly per action.
-Route::middleware(['auth', 'role:ma,cs_pusat,approver,superadmin'])->group(function () {
-Route::get('/tickets/{ticket}', [MaWaTicketController::class, 'show'])->name('wa-tickets.show');
-});
-
-// Approver's landing page after login - the queue of tickets waiting on them.
-Route::middleware(['auth', 'role:approver,superadmin'])->group(function () {
-Route::get('/tickets', [MaWaTicketController::class, 'pendingApprovals'])->name('wa-tickets.pending');
-});
-
-// Separation of duties: only Approver (+ superadmin as a break-glass override)
-// can approve/reject - this used to be reachable by MA/CS Pusat too, including a
-// ticket's own creator, which was a self-approval hole.
-Route::middleware(['auth', 'role:approver,superadmin'])->group(function () {
-Route::post('/tickets/{ticket}/approve', [MaWaTicketController::class, 'approve'])->middleware('throttle:dashboard-writes')->name('wa-tickets.approve');
-Route::post('/tickets/{ticket}/reject', [MaWaTicketController::class, 'reject'])->middleware('throttle:dashboard-writes')->name('wa-tickets.reject');
-});
-
-// Handling actions stay with MA/CS Pusat (+ superadmin) - Approver's job ends at
-// the approval decision, they don't claim/work tickets.
-Route::middleware(['auth', 'role:ma,cs_pusat,superadmin'])->group(function () {
-Route::post('/tickets/{ticket}/claim', [MaWaTicketController::class, 'claim'])->middleware('throttle:dashboard-writes')->name('wa-tickets.claim');
-Route::post('/tickets/{ticket}/reply', [MaWaTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('wa-tickets.reply');
-Route::patch('/tickets/{ticket}/messages/{message}', [MaWaTicketController::class, 'updateMessage'])->middleware('throttle:dashboard-writes')->name('wa-tickets.messages.update');
-Route::post('/tickets/{ticket}/transfer', [MaWaTicketController::class, 'transfer'])->middleware('throttle:dashboard-writes')->name('wa-tickets.transfer');
-Route::post('/tickets/{ticket}/close', [MaWaTicketController::class, 'close'])->middleware('throttle:dashboard-writes')->name('wa-tickets.close');
-});
-
 Route::middleware(['auth', 'role:superadmin'])->group(function () {
 Route::get('/superadmin', [SuperadminController::class, 'page'])->name('superadmin.overview');
+Route::get('/superadmin/integrations/status', [SuperadminController::class, 'integrationStatus'])->name('superadmin.integrations.status');
 Route::get('/superadmin/{page}', [SuperadminController::class, 'page'])->name('superadmin.page');
 Route::post('/superadmin/ma', [SuperadminController::class, 'storeMa'])->middleware('throttle:dashboard-writes')->name('superadmin.ma.store');
 Route::post('/superadmin/ma/{user}', [SuperadminController::class, 'updateMa'])->middleware('throttle:dashboard-writes')->name('superadmin.ma.update');
@@ -119,6 +101,8 @@ Route::post('/superadmin/accounts/{user}/reset', [SuperadminController::class, '
 Route::post('/superadmin/fee-menus', [SuperadminController::class, 'storeFeeMenu'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.store');
 Route::post('/superadmin/fee-menus/settings', [SuperadminController::class, 'updateFeeMenuSettings'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.settings');
 Route::delete('/superadmin/fee-menus/{feeMenu}', [SuperadminController::class, 'destroyFeeMenu'])->middleware('throttle:dashboard-writes')->name('superadmin.fee-menus.destroy');
+Route::post('/superadmin/system-configuration', [SuperadminController::class, 'updateSystemConfiguration'])->middleware('throttle:dashboard-writes')->name('superadmin.system-configuration.update');
+Route::post('/superadmin/system-configuration/reconcile', [SuperadminController::class, 'runReconciliation'])->middleware('throttle:dashboard-writes')->name('superadmin.system-configuration.reconcile');
 });
 
 Route::middleware(['auth', 'role:cs_monitor,superadmin'])->group(function () {
@@ -131,8 +115,20 @@ Route::post('/cs-monitor/users/{telegramUser}/cs-flag', [TelegramCsMonitorContro
 Route::middleware(['auth', 'role:cs_pusat,ma,superadmin'])->group(function () {
 Route::get('/cs-pusat', [CenterSupportController::class, 'index'])->name('center-support.tickets');
 Route::get('/cs-pusat/bot-monitoring', [CenterSupportController::class, 'botMonitoring'])->name('center-support.bot-monitoring');
+Route::get('/cs-pusat/bot-monitoring/export', [CenterSupportController::class, 'botMonitoringExport'])->name('center-support.bot-monitoring.export');
 Route::get('/cs-pusat/tickets/{ticket}/attachments/{index}', [CenterSupportController::class, 'attachment'])->whereNumber('index')->name('center-support.tickets.attachment');
 Route::post('/cs-pusat/tickets/{ticket}', [CenterSupportController::class, 'update'])->middleware('throttle:dashboard-writes')->name('center-support.tickets.update');
+});
+
+Route::middleware(['auth', 'role:cs_pusat,superadmin'])->group(function () {
+Route::post('/cs-pusat/bot-monitoring/{ticketId}/reject', [CenterSupportController::class, 'botMonitoringReject'])->middleware('throttle:dashboard-writes')->name('center-support.bot-monitoring.reject');
+});
+
+Route::middleware(['auth', 'role:cs_pusat'])->group(function () {
+Route::get('/cs-pusat/broadcast-telegram', [TelegramBroadcastController::class, 'index'])->name('center-support.broadcast');
+Route::post('/cs-pusat/broadcast-telegram', [TelegramBroadcastController::class, 'send'])->middleware('throttle:dashboard-writes')->name('center-support.broadcast.send');
+Route::delete('/cs-pusat/broadcast-telegram/bulk', [TelegramBroadcastController::class, 'destroyMany'])->middleware('throttle:dashboard-writes')->name('center-support.broadcast.destroyMany');
+Route::delete('/cs-pusat/broadcast-telegram/{broadcastMessage}', [TelegramBroadcastController::class, 'destroy'])->middleware('throttle:dashboard-writes')->name('center-support.broadcast.destroy');
 });
 
 Route::middleware(['auth', 'role:superadmin'])->group(function () {
@@ -160,7 +156,7 @@ Route::get('/agent/fee', [DashboardController::class, 'agentFee'])->name('agent.
 Route::get('/agent/insentif', [DashboardController::class, 'agentInsentifForm'])->name('agent.insentif');
 Route::post('/agent/insentif/pdf', [DashboardController::class, 'agentInsentifPdf'])->middleware('throttle:dashboard-writes')->name('agent.insentif.pdf');
 Route::redirect('/agen', '/agent');
-Route::get('/agent/create-store', fn (DashboardController $controller) => $controller->agentSimple('create-store', app(\App\Services\Navigation\MenuBuilder::class)))->name('agent.create-store');
+Route::redirect('/agent/create-store', '/agent')->name('agent.create-store');
 Route::post('/agent/onboarding-links', [DashboardController::class, 'storeAgentOnboardingLink'])->middleware('throttle:dashboard-writes')->name('agent.onboarding-links.store');
 Route::post('/agent/onboarding-links/{link}/expire', [DashboardController::class, 'expireAgentOnboardingLink'])->middleware('throttle:dashboard-writes')->name('agent.onboarding-links.expire');
 Route::post('/agent/onboarding-links/bulk', [DashboardController::class, 'bulkAgentOnboardingLinks'])->middleware('throttle:dashboard-writes')->name('agent.onboarding-links.bulk');
@@ -175,6 +171,8 @@ Route::redirect('/agent/new-store', '/agent/create-store')->name('agent.new-stor
 Route::match(['get', 'post'], '/form', fn () => abort(404));
 Route::get('/onboarding/{link:token}', [MerchantRegistrationController::class, 'tokenForm'])->name('merchant-registration.token-form');
 Route::post('/onboarding/{link:token}', [MerchantRegistrationController::class, 'tokenStore'])->middleware('throttle:dashboard-writes')->name('merchant-registration.token-store');
+Route::get('/onboarding/magnetopay/{link:token}', [MerchantRegistrationController::class, 'tokenFormMagnetopay'])->name('merchant-registration.magnetopay.token-form');
+Route::post('/onboarding/magnetopay/{link:token}', [MerchantRegistrationController::class, 'tokenStoreMagnetopay'])->middleware('throttle:dashboard-writes')->name('merchant-registration.magnetopay.token-store');
 Route::middleware(['auth', 'role:agent,ma,superadmin'])->group(function () {
     Route::post('/api/merchant-registrations/{registration}/submit', [MerchantRegistrationWorkflowController::class, 'submit'])->name('api.merchant-registration.submit');
 });
@@ -182,6 +180,7 @@ Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {
     Route::post('/api/merchant-registrations/{registration}/approve', [MerchantRegistrationWorkflowController::class, 'approve'])->name('api.merchant-registration.approve');
     Route::post('/api/merchant-registrations/{registration}/reject', [MerchantRegistrationWorkflowController::class, 'reject'])->name('api.merchant-registration.reject');
     Route::get('/api/merchant-registrations/{registration}/pdf', [MerchantRegistrationWorkflowController::class, 'downloadPdf'])->name('ma.merchant-registration.pdf');
+    Route::get('/api/merchant-registrations/{registration}/export', [MerchantRegistrationWorkflowController::class, 'exportCsv'])->name('ma.merchant-registration.export');
     Route::post('/api/merchants/{merchant}/provision/retry', [MerchantProvisioningController::class, 'retry'])->name('api.merchant.provision.retry');
     Route::post('/api/merchants/{merchant}/sync/retry', [GatewaySyncRetryController::class, 'store'])->name('api.merchant.sync.retry');
 });
@@ -203,20 +202,20 @@ Route::get('/portal/{merchant}/cs/history', fn (\App\Models\Merchant $merchant, 
 Route::middleware(['auth', 'role:admin,readonly_admin,boss,cs,readonly_cs,ma,agent,superadmin', 'merchant.scope'])->group(function () {
 Route::get('/portal/{merchant}/tickets', [MerchantTicketController::class, 'index'])->name('merchant.tickets.index');
 Route::post('/portal/{merchant}/tickets', [MerchantTicketController::class, 'store'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.store');
-Route::get('/portal/{merchant}/tickets/simple/create', [MerchantTicketController::class, 'createSimple'])->name('merchant.tickets.simple.create');
-Route::post('/portal/{merchant}/tickets/simple', [MerchantTicketController::class, 'storeSimple'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.simple.store');
 Route::get('/portal/{merchant}/tickets/{ticket}', [MerchantTicketController::class, 'show'])->name('merchant.tickets.show');
 Route::post('/portal/{merchant}/tickets/{ticket}/reply', [MerchantTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.reply');
 Route::patch('/portal/{merchant}/tickets/{ticket}/messages/{message}', [MerchantTicketController::class, 'updateMessage'])->middleware('throttle:dashboard-writes')->name('merchant.tickets.messages.update');
 Route::get('/portal/{merchant}/tickets/{ticket}/attachment/{index}', [MerchantTicketController::class, 'attachment'])->whereNumber('index')->name('merchant.tickets.attachment');
 });
 
-Route::middleware(['auth', 'role:cs_pusat,superadmin'])->group(function () {
+Route::middleware(['auth', 'role:cs_pusat,dept_cs,dept_dev,dept_tech_supp,dept_finance,dept_settlement,dept_fraud,dept_dispute,superadmin'])->group(function () {
 Route::get('/dept-support/tickets', [DepartmentTicketController::class, 'index'])->name('dept-tickets.index');
 Route::get('/dept-support/tickets/{ticket}', [DepartmentTicketController::class, 'show'])->name('dept-tickets.show');
 Route::get('/dept-support/tickets/{ticket}/attachment/{index}', [DepartmentTicketController::class, 'attachment'])->whereNumber('index')->name('dept-tickets.attachment');
+Route::post('/dept-support/tickets/{ticket}/claim', [DepartmentTicketController::class, 'claim'])->middleware('throttle:dashboard-writes')->name('dept-tickets.claim');
 Route::post('/dept-support/tickets/{ticket}/reply', [DepartmentTicketController::class, 'reply'])->middleware('throttle:dashboard-writes')->name('dept-tickets.reply');
 Route::post('/dept-support/tickets/{ticket}/status', [DepartmentTicketController::class, 'updateStatus'])->middleware('throttle:dashboard-writes')->name('dept-tickets.status');
+Route::post('/dept-support/tickets/{ticket}/push', [DepartmentTicketController::class, 'pushDepartment'])->middleware('throttle:dashboard-writes')->name('dept-tickets.push');
 });
 
 Route::middleware(['auth', 'role:ma,superadmin'])->group(function () {

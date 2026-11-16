@@ -51,11 +51,14 @@ class WithdrawalsByBankTest extends TestCase
         $this->assertSame(200000, (int) $mandiri->volume);
     }
 
-    public function test_pending_withdrawals_are_not_date_scoped(): void
+    public function test_pending_withdrawals_are_also_scoped_to_today(): void
     {
         $merchant = $this->makeMerchant('wd-bank-pending');
 
-        MerchantWithdrawal::query()->create(['merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'gateway_withdrawal_id' => 'old-pending', 'status' => 'PENDING', 'amount' => 75000, 'bank_name' => 'SEABANK', 'gateway_created_at' => now()->subDays(10)]);
+        MerchantWithdrawal::query()->create(['merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'gateway_withdrawal_id' => 'today-pending', 'status' => 'PENDING', 'amount' => 75000, 'bank_name' => 'SEABANK', 'gateway_created_at' => now()]);
+        // 10 days ago must NOT count toward "today" - pending is date-scoped
+        // the same way completed is.
+        MerchantWithdrawal::query()->create(['merchant_id' => $merchant->id, 'gateway' => 'hilogate', 'gateway_withdrawal_id' => 'old-pending', 'status' => 'PENDING', 'amount' => 999999, 'bank_name' => 'SEABANK', 'gateway_created_at' => now()->subDays(10)]);
 
         $result = $this->invoke('PENDING', [$merchant->id]);
 

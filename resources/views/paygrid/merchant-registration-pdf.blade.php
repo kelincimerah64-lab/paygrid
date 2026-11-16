@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Request Toko - {{ $registration->store_name }}</title>
+    <title>Merchant Reg - {{ $registration->store_name }}</title>
     <style>
         @page { margin: 10mm 12mm; }
         body { font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #1a1a1a; }

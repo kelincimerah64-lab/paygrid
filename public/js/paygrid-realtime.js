@@ -92,5 +92,35 @@
         };
     }
 
-    window.PayGridRealtime = { connect };
+    /**
+     * Two-tone "ding" synthesized with the Web Audio API - no audio file to
+     * ship/fetch. Browsers block audio before any user gesture on the page,
+     * so this silently no-ops until the staff member has clicked something.
+     */
+    function playNotifySound() {
+        try {
+            var Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            var ctx = new Ctx();
+            var tone = function (freq, start, duration) {
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+                gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + start + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + start);
+                osc.stop(ctx.currentTime + start + duration);
+            };
+            tone(880, 0, 0.3);
+            tone(660, 0.15, 0.3);
+        } catch (e) {
+            // audio unsupported/blocked - not worth surfacing to the user
+        }
+    }
+
+    window.PayGridRealtime = { connect, playNotifySound };
 })();

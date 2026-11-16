@@ -201,56 +201,6 @@
         </div>
         </form>
     </section>
-@elseif(in_array($active, ['create-store', 'new-store']))
-    @php($latestLink = session('onboarding_link') ?: (($onboardingLinks ?? collect())->firstWhere('status', 'active') ? route('merchant-registration.token-form', ($onboardingLinks ?? collect())->firstWhere('status', 'active')) : ''))
-    <section class="card pad agent-onboarding-card">
-        <div class="qris-toolbar compact-toolbar"><div><h2>Generate Link Onboarding</h2><p class="muted">Buat link registrasi unik untuk merchant. Link otomatis expired setelah satu kali submit.</p></div></div>
-        <form method="post" action="{{ route('agent.onboarding-links.store') }}" class="form-grid pad">
-            @csrf
-            <label>Email Penerima<input name="recipient_email" type="email" placeholder="merchant@domain.com"></label>
-            <label>Username Telegram<input name="recipient_telegram" placeholder="@merchantusername"></label>
-            <div class="actions" style="align-self:end"><button class="btn primary">Generate Link</button><button class="btn" type="button" data-copy-onboarding-link>Copy Link</button></div>
-            <label style="grid-column:1 / -1">Link Form Unik<input data-onboarding-link readonly value="{{ $latestLink ?: 'Link akan muncul di sini.' }}"></label>
-        </form>
-    </section>
-    <section class="card section">
-        <div class="qris-toolbar"><h2>Link Terakhir</h2><span class="muted">{{ ($onboardingLinks ?? collect())->count() }} link</span></div>
-        <form method="post" action="{{ route('agent.onboarding-links.bulk') }}">@csrf<input type="hidden" name="action" value="expire"><div class="actions pad"><button class="btn danger">Expire Selected</button></div><div class="table-wrap"><table class="table qris-table agent-link-table"><thead><tr><th>Pilih</th><th>Dibuat</th><th>Penerima</th><th>Status</th><th>Link</th><th>Request</th><th>Aksi</th></tr></thead><tbody>@forelse(($onboardingLinks ?? collect()) as $row)@php($effectiveStatus = $row->isUsable() ? $row->status : 'expired')<tr><td class="checkbox-cell">@if($row->isUsable())<input type="checkbox" name="link_ids[]" value="{{ $row->id }}">@else<span class="muted">-</span>@endif</td><td class="time-cell">{{ $row->created_at->timezone('Asia/Jakarta')->format('d M y') }}<span>{{ $row->created_at->timezone('Asia/Jakarta')->format('H:i') }}</span></td><td><strong>{{ $row->recipient_email ?: '-' }}</strong><br><span class="muted">{{ $row->recipient_telegram ?: '-' }}</span></td><td><span class="badge {{ $effectiveStatus === 'active' ? 'ok' : 'warn' }}">{{ ucfirst($effectiveStatus) }}</span></td><td><button type="button" class="btn compact-btn" data-copy-row-link="{{ route('merchant-registration.token-form', $row) }}">Copy</button></td><td>{{ $row->registration?->store_name ?: '-' }}</td><td>@if($row->isUsable())<button class="btn danger" formaction="{{ route('agent.onboarding-links.expire', $row) }}" formmethod="post">Expire</button>@else<span class="muted">-</span>@endif</td></tr>@empty<tr><td colspan="7" class="empty">Belum ada link.</td></tr>@endforelse</tbody></table></div></form>
-    </section>
-    <script>
-    function paygridCopyText(text, btn) {
-        if (!text) return;
-        var original = btn.textContent;
-        var done = () => { btn.textContent = 'Tersalin!'; setTimeout(() => btn.textContent = original, 1500); };
-        var fallback = () => {
-            var tmp = document.createElement('textarea');
-            tmp.value = text;
-            tmp.style.position = 'fixed';
-            tmp.style.opacity = '0';
-            document.body.appendChild(tmp);
-            tmp.select();
-            tmp.setSelectionRange(0, 99999);
-            try { document.execCommand('copy'); done(); } catch (e) {}
-            document.body.removeChild(tmp);
-        };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(done).catch(fallback);
-        } else {
-            fallback();
-        }
-    }
-    document.addEventListener('DOMContentLoaded', () => {
-        var btn = document.querySelector('[data-copy-onboarding-link]');
-        var input = document.querySelector('[data-onboarding-link]');
-        if (btn && input) {
-            btn.addEventListener('click', () => paygridCopyText(input.value || '', btn));
-        }
-        document.addEventListener('click', (e) => {
-            var rowBtn = e.target.closest('[data-copy-row-link]');
-            if (rowBtn) paygridCopyText(rowBtn.getAttribute('data-copy-row-link'), rowBtn);
-        });
-    });
-    </script>
 @else
     <section class="card">
         <div class="filters"><input class="search" placeholder="Cari data..."><div class="actions"><input type="date"><input type="date"><button class="btn primary">Submit Filter</button></div></div>

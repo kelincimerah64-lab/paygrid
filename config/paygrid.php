@@ -2,6 +2,7 @@
 
 return [
     'demo_password' => env('PAYGRID_DEMO_PASSWORD', 'PayGridDemo!2026'),
+    'demo_host' => env('PAYGRID_DEMO_HOST'),
     'gateway' => [
         'hilogate' => [
             'base_url' => rtrim((string) env('HILOGATE_BASE_URL', 'https://app.hilogate.com/api'), '/'),
@@ -51,6 +52,8 @@ return [
         'window_hours' => (int) env('PAYGRID_GATEWAY_SYNC_WINDOW_HOURS', 24),
         'max_pages' => (int) env('PAYGRID_GATEWAY_SYNC_MAX_PAGES', 10),
         'backfill_pages_per_run' => (int) env('PAYGRID_GATEWAY_BACKFILL_PAGES_PER_RUN', 3),
+        'reconciliation_pages_per_run' => (int) env('PAYGRID_RECONCILIATION_PAGES_PER_RUN', 10),
+        'reconciliation_stop_after_pages' => (int) env('PAYGRID_RECONCILIATION_STOP_AFTER_PAGES', 5),
         'concurrency' => (int) env('PAYGRID_GATEWAY_SYNC_CONCURRENCY', 6),
         'success_log_retention_hours' => (int) env('PAYGRID_GATEWAY_SUCCESS_LOG_RETENTION_HOURS', 6),
         'failed_log_retention_days' => (int) env('PAYGRID_GATEWAY_FAILED_LOG_RETENTION_DAYS', 14),
@@ -78,6 +81,8 @@ return [
         'service_account_private_key' => env('GOOGLE_SHEETS_SERVICE_ACCOUNT_PRIVATE_KEY'),
         'cache_ttl_seconds' => (int) env('TELEGRAM_BOT_SHEET_CACHE_TTL', 45),
         'reminder_threshold_minutes' => (int) env('TELEGRAM_BOT_REMINDER_THRESHOLD_MINUTES', 15),
+        'ticket_bot_token' => env('TELEGRAM_TICKET_BOT_TOKEN'),
+        'cs_group_chat_id' => env('TELEGRAM_TICKET_CS_GROUP_CHAT_ID', '-1004445566939'),
     ],
 
     'jira_sync' => [
@@ -138,8 +143,25 @@ return [
         'api_url' => env('PAYGRID_WHATSAPP_API_URL'),
         'api_key' => env('PAYGRID_WHATSAPP_API_KEY'),
         'session' => env('PAYGRID_WHATSAPP_SESSION', 'default'),
-        'handling_group_id' => env('PAYGRID_WHATSAPP_HANDLING_GROUP_ID'),
-        'approval_group_id' => env('PAYGRID_WHATSAPP_APPROVAL_GROUP_ID'),
-        'reminder_minutes' => (int) env('PAYGRID_WHATSAPP_REMINDER_MINUTES', 10),
+    ],
+
+    // Kill switch for the WhatsApp -> Claude Code ops-assistant Q&A bridge
+    // (see App\Jobs\AnswerWhatsAppAssistantQuestion). Stays false until the
+    // WAHA webhook is deliberately pointed at /api/whatsapp/assistant-webhook
+    // AND this is flipped on - two independent switches, so neither alone
+    // makes the bot live.
+    'whatsapp_assistant_enabled' => (bool) env('PAYGRID_WHATSAPP_ASSISTANT_ENABLED', false),
+
+    // Where the restricted, read-only "ops-assistant" Claude Code project
+    // lives on this server (separate repo, see its own CLAUDE.md) and how to
+    // invoke it - used by App\Jobs\AnswerWhatsAppAssistantQuestion.
+    'ops_assistant_cli' => [
+        'working_directory' => env('PAYGRID_OPS_ASSISTANT_DIR', '/home/ec2-user/paygrid-ops-assistant'),
+        'path' => env('PAYGRID_OPS_ASSISTANT_PATH', '/home/ec2-user/.npm-global/bin:/usr/local/bin:/usr/bin:/bin'),
+    ],
+
+    'telegram_broadcast' => [
+        'bot_token' => env('TELEGRAM_BROADCAST_BOT_TOKEN'),
+        'groups' => env('TELEGRAM_BROADCAST_GROUPS'),
     ],
 ];

@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Services\FeeMenuCatalog;
 use App\Services\Gateway\GatewayClientInterface;
 use App\Services\Gateway\HilogateClient;
+use App\Services\MetricRollupService;
 use App\Services\TransactionIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -1720,6 +1721,10 @@ class PayGridRoutingTest extends TestCase
             'status' => 'failed', 'amount' => 30000, 'net_amount' => 30000, 'fee_amount' => 0,
             'submitted_at' => now()->subDay(),
         ]);
+        // Analytics now reads from the merchant_daily_metrics rollup, which
+        // only stays in sync via TransactionIngestionService - this test
+        // creates rows directly, so it must rebuild the rollup itself too.
+        app(MetricRollupService::class)->rebuildMerchantDay($merchant, now()->subDay());
 
         $expectedGmv = (int) TopupRequest::query()
             ->join('merchants', 'merchants.id', '=', 'topup_requests.merchant_id')
@@ -1881,6 +1886,9 @@ class PayGridRoutingTest extends TestCase
                 'submitted_at' => now('Asia/Jakarta')->subDays($i)->subHour()->utc(),
                 'succeeded_at' => now('Asia/Jakarta')->subDays($i)->subHour()->addSeconds(5)->utc(),
             ]);
+            // Rebuild the rollup for each day - this test creates rows
+            // directly, bypassing the ingestion path that normally keeps it in sync.
+            app(MetricRollupService::class)->rebuildMerchantDay($merchant, now('Asia/Jakarta')->subDays($i));
         }
 
         $last7DayAvg = TopupRequest::query()
@@ -2248,6 +2256,10 @@ class PayGridRoutingTest extends TestCase
             'ma_fee_percent' => $historicalMaRate,
             'agent_fee_percent' => $historicalAgentRate,
         ]);
+        // ma.fee's summary() now reads from the merchant_daily_metrics rollup -
+        // this test creates the topup directly, bypassing the ingestion path
+        // that normally keeps it in sync.
+        app(MetricRollupService::class)->rebuildMerchantDay($merchant, now());
 
         $agentResponse = $this->actingAs($agentUser)->get(route('agent.fee'))->assertOk();
         $agentRow = $agentResponse->viewData('rows')->firstWhere('merchant_id', $merchant->id);
@@ -2300,6 +2312,10 @@ class PayGridRoutingTest extends TestCase
             'amount' => 1000000,
             'submitted_at' => now(),
         ]);
+        // ma.fee's per-merchant fee amounts now read from the merchant_daily_metrics
+        // rollup - this test creates the topup directly, bypassing the ingestion
+        // path that normally keeps it in sync.
+        app(MetricRollupService::class)->rebuildMerchantDay($merchant, now());
 
         $row = $this->actingAs($maUser)->get(route('ma.fee'))->assertOk()->viewData('merchants')->firstWhere('id', $merchant->id);
         $this->assertNotNull($row);
@@ -2307,6 +2323,29 @@ class PayGridRoutingTest extends TestCase
         $this->assertSame((int) round($volume * 1.75 / 100), $row->merchant_fee_amount);
         $this->assertSame((int) round($volume * (1.75 - 1.00) / 100), $row->agent_fee_amount);
         $this->assertSame((int) round($volume * (1.00 - 0.50) / 100), $row->ma_fee_amount);
+    }
+
+    public function test_ma_fee_split_export_returns_one_row_per_store_as_plain_csv(): void
+    {
+        $this->seed();
+        $agent = Agent::query()->where('code', 'AG-EPC')->firstOrFail();
+        $maUser = User::query()->where('role', 'ma')->where('id', $agent->ma_user_id)->firstOrFail();
+        $merchant = Merchant::query()->where('agent_id', $agent->id)->where('merchant_type', 'cm')->firstOrFail();
+        $merchant->forceFill(['agent_fee_percent' => 1.00, 'ma_fee_percent' => 0.50, 'merchant_mdr_percent' => 1.75])->save();
+
+        $response = $this->actingAs($maUser)->get(route('ma.fee.export'));
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+
+        $csv = $response->getContent();
+        $lines = explode("\n", trim($csv));
+        $this->assertSame('Toko,Menu Fee,MDR Toko (%),Based Fee Agent (%),Based Fee MA (%),Volume Trx,Margin Agent (%),Margin MA (%),Estimasi Fee Agen (Rp),Estimasi Fee MA (Rp),Status', $lines[0]);
+        $this->assertStringContainsString('"'.$merchant->name.'"', $csv);
+        $this->assertStringContainsString('"1.750"', $csv);
+        $this->assertStringContainsString('"1.000"', $csv);
+        $this->assertStringContainsString('"0.500"', $csv);
+        // Every store is its own single CSV row - no nested table/multi-line cell like the on-screen Detail modal.
+        $this->assertSame(count($lines), Merchant::query()->whereRelation('agent', 'ma_user_id', $maUser->id)->count() + 1);
     }
 
     public function test_agent_onboarding_link_is_single_use_and_scoped_to_agent(): void
@@ -2431,7 +2470,11 @@ class PayGridRoutingTest extends TestCase
             ->assertDontSee('Payment Gateway')
             ->assertDontSee('ID Gateway dan Fee')
             ->assertDontSee('Cash Back Toko %')
-            ->assertSee('type="checkbox" name="merchant_type"', false);
+            // Tipe Merchant is two flat checkboxes (API / Script) with no
+            // hidden/conditional field revealed on click.
+            ->assertSee('data-engine-type="api"', false)
+            ->assertSee('data-engine-type="sc"', false)
+            ->assertDontSee('onboarding-engine-type-wrap');
     }
 
     public function test_onboarding_form_checkbox_submits_cm_when_unchecked_and_script_when_checked(): void
@@ -2529,14 +2572,14 @@ class PayGridRoutingTest extends TestCase
 
     public function test_ma_can_generate_onboarding_link_scoped_to_a_chosen_agent(): void
     {
+        // Generating a link via this backend route is still functional (kept
+        // intentionally after the "Generate Link Onboarding" UI was removed
+        // from both the MA and agent dashboards in favor of the single
+        // universal hidden onboarding link) - this test covers the backend
+        // behavior only, not any UI surface.
         $this->seed();
         $maUser = User::query()->where('email', 'michael@paygrid.local')->firstOrFail();
         $otherAgent = Agent::query()->where('code', 'AG-OTHER')->firstOrFail();
-
-        $this->actingAs($maUser)
-            ->get(route('ma.create-store'))
-            ->assertOk()
-            ->assertSee('Generate Link Onboarding');
 
         $this->actingAs($maUser)
             ->post(route('ma.onboarding-links.store'), [
@@ -2547,8 +2590,7 @@ class PayGridRoutingTest extends TestCase
 
         $link = AgentOnboardingLink::query()->where('recipient_email', 'ma-link-merchant@paygrid.local')->firstOrFail();
         $this->assertSame($otherAgent->id, $link->agent_id);
-
-        $this->actingAs($maUser)->get(route('ma.create-store'))->assertOk()->assertSee('ma-link-merchant@paygrid.local');
+        $this->assertSame('generic', $link->kind);
     }
 
     public function test_ma_generated_link_is_reusable_and_never_expires(): void

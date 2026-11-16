@@ -4,10 +4,10 @@ namespace Database\Seeders;
 
 use App\Models\Agent;
 use App\Models\Merchant;
-use App\Models\MerchantDailyMetric;
 use App\Models\SupportTicket;
 use App\Models\TopupRequest;
 use App\Models\User;
+use App\Services\MetricRollupService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -180,21 +180,7 @@ class PayGridDemoSeeder extends Seeder
         ]);
 
         foreach ([$bj, $bl77, $gate, $tiktok, $valo] as $merchant) {
-            MerchantDailyMetric::query()->create([
-                'merchant_id' => $merchant->id,
-                'agent_id' => $merchant->agent_id,
-                'metric_date' => now('Asia/Jakarta')->toDateString(),
-                'gateway' => $merchant->gateway,
-                'data_source' => $merchant->gateway === 'alpha' ? 'alpha_pull' : 'gateway_pull',
-                'trx_total' => $merchant->topupRequests()->count(),
-                'trx_success' => $merchant->topupRequests()->where('status', 'success')->count(),
-                'trx_pending' => $merchant->topupRequests()->where('status', 'pending')->count(),
-                'trx_expired' => $merchant->topupRequests()->where('status', 'expired')->count(),
-                'amount_success' => $merchant->topupRequests()->where('status', 'success')->sum('amount'),
-                'net_success' => $merchant->topupRequests()->where('status', 'success')->sum('net_amount'),
-                'settled_total' => $merchant->topupRequests()->where('status', 'success')->sum('net_amount'),
-                'ticket_total' => $merchant->tickets()->count(),
-            ]);
+            app(MetricRollupService::class)->rebuildMerchantDay($merchant, now());
         }
     }
 

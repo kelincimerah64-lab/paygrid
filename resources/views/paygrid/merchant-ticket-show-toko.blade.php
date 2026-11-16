@@ -10,10 +10,10 @@
 @endphp
 
 @section('content')
-<div class="ticket-detail-crumb"><a href="{{ route('merchant.tickets.simple.create', $merchant) }}">Semua Tiket</a> / <span>Detail Tiket</span></div>
+<div class="ticket-detail-crumb"><a href="{{ route('merchant.tickets.index', $merchant) }}">Semua Tiket</a> / <span>Detail Tiket</span></div>
 
 @if(session('status'))
-    <section class="card pad section"><span class="badge ok">{{ session('status') }}</span></section>
+    <div class="status-banner"><span class="badge ok">{{ session('status') }}</span></div>
 @endif
 
 <div class="ticket-detail-title-row">
